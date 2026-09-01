@@ -5,8 +5,8 @@ import { useSignup } from "@/components/SignupForm";
 import { useSyncedTick } from "@/lib/use-synced-tick";
 import { useTypewriter } from "@/lib/use-typewriter";
 
-const LOGO_TEXT = "kilowatt & banane";
-const LOGO_EMOJI = "🔌💡& 🍌🍌🍌";
+const LOGO_TEXT = "kilowatt e banane";
+const LOGO_EMOJI = "🔌💡e 🍌🍌🍌";
 
 export function Header() {
   const { openSignup } = useSignup();
@@ -21,7 +21,7 @@ export function Header() {
         <Link
           href="/"
           className="relative inline-grid min-w-0 font-medium tracking-tight text-foreground"
-          aria-label="kilowatt & banane"
+          aria-label="kilowatt e banane🍌🍌🍌"
         >
           <span className="invisible col-start-1 row-start-1 whitespace-nowrap text-sm sm:text-base">
             {LOGO_TEXT}

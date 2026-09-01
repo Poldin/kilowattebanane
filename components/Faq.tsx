@@ -52,7 +52,12 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Come leggo il grafico?",
     answer:
-      "L'asse verticale è in centesimi di euro per kilowattora (c€/kWh): è il prezzo all'ingrosso di un'ora di consumo, non la bolletta finale. L'asse orizzontale copre l'intera giornata, da mezzanotte a mezzanotte. La curva gialla segue l'andamento orario; le banane segnano i momenti più convenienti, le scimmie i picchi da evitare — se due valli o due picchi distano poco, li segnaliamo entrambi. Sotto, la tabella ripete gli stessi valori ogni quarto d'ora.",
+      "L'asse verticale è in centesimi di euro per kilowattora (c€/kWh): è il prezzo all'ingrosso di un'ora di consumo, non la bolletta finale. L'asse orizzontale copre l'intera giornata, da mezzanotte a mezzanotte. La curva gialla segue l'andamento orario; nella giornata di oggi la linea rossa verticale indica l'ora attuale. Le 🍌 segnano i momenti più convenienti, le 🐵 i picchi da evitare — se due valli o due picchi distano poco, li segnaliamo entrambi. Sotto, la tabella ripete gli stessi valori ogni quarto d'ora.",
+  },
+  {
+    question: "Come faccio a vedere il prezzo puntuale di un punto sul grafico?",
+    answer:
+      "Tocca o clicca un punto sulla curva: in alto a destra compare un riquadro con orario, prezzo e una percentuale. Lo 0% è il momento più conveniente della giornata (🍌), il 100% il più caro (🐵). Sotto il 50% vedi una 🍌, sopra una 🐵. Le linee tratteggiate ti mostrano dove sei; per chiudere tocca il riquadro o la ×. I prezzi puntuali ogni quarto d'ora restano comunque tutti visibili nella tabella sotto il grafico.",
   },
   {
     question: "Il prezzo all'ingrosso è quello che pago in bolletta?",

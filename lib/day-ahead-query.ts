@@ -15,23 +15,39 @@ export type ZoneDay = {
 
 const PAGE_SIZE = 1000;
 
-export function romeToday() {
-  return new Intl.DateTimeFormat("en-CA", {
+export type RomeNow = {
+  date: string;
+  hour: number;
+  minute: number;
+};
+
+export function romeNow(): RomeNow {
+  const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Rome",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+    hour: Number(value("hour")),
+    minute: Number(value("minute")),
+  };
+}
+
+export function romeToday() {
+  return romeNow().date;
 }
 
 export function romeNowHour() {
-  return Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Rome",
-      hour: "numeric",
-      hourCycle: "h23",
-    }).format(new Date()),
-  );
+  return romeNow().hour;
 }
 
 function romeHour(iso: string) {

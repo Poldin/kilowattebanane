@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type PointerEvent,
+} from "react";
 import { RegionSelect } from "@/components/RegionSelect";
 import {
   fetchZonePrices,
   groupZoneDays,
+  romeNow,
   romeNowHour,
   romeToday,
   type DayAheadRow,
+  type RomeNow,
   type ZoneDay,
 } from "@/lib/day-ahead-query";
 import { ShareButton } from "@/components/ShareButton";
@@ -72,6 +80,8 @@ function buildDayInsight(day: ZoneDay): DayInsight {
 
 const BANANA = "#F5D547";
 const PEAK = "#EF4444";
+const NOW = "#EF4444";
+const MID = "#A3A3A3";
 const MARKER_FONT_SIZE = 20;
 const CHART_W = 640;
 const CHART_W_MOBILE = 400;
@@ -366,6 +376,123 @@ function formatTipHour(hour: number) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+function formatClock(hour: number, minute: number) {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function useRomeNow() {
+  const [now, setNow] = useState<RomeNow | null>(null);
+
+  useEffect(() => {
+    const tick = () => setNow(romeNow());
+    tick();
+
+    let intervalId: number | undefined;
+    const msUntilNextMinute = 60_000 - (Date.now() % 60_000) + 50;
+    const timeoutId = window.setTimeout(() => {
+      tick();
+      intervalId = window.setInterval(tick, 60_000);
+    }, msUntilNextMinute);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
+  }, []);
+
+  return now;
+}
+
+function currentSlotIndex(hour: number, minute: number, slotCount: number) {
+  if (slotCount <= 0) return 0;
+  const slot = Math.floor((hour * 60 + minute) / 15);
+  return Math.max(0, Math.min(slotCount - 1, slot));
+}
+
+function expensivePercentile(prices: number[], current: number) {
+  if (prices.length === 0) return 0.5;
+  const cheaper = prices.filter((price) => price < current).length;
+  const ties = prices.filter((price) => price === current).length;
+  return (cheaper + ties * 0.5) / prices.length;
+}
+
+function nowMomentComment(percentile: number) {
+  if (percentile >= 0.95) {
+    return {
+      before: "tra i ",
+      mark: "5% più cari",
+      after: ": se puoi, non consumare",
+      color: PEAK,
+    };
+  }
+  if (percentile >= 0.9) {
+    return {
+      before: "tra i ",
+      mark: "10% più cari",
+      after: ": meglio evitare i consumi",
+      color: PEAK,
+    };
+  }
+  if (percentile >= 0.65) {
+    return {
+      before: "",
+      mark: "non è il momento più idilliaco",
+      after: " per consumare",
+      color: PEAK,
+    };
+  }
+  if (percentile >= 0.35) {
+    return {
+      before: "prezzi nella media, ",
+      mark: "il medione",
+      after: "",
+      color: MID,
+    };
+  }
+  if (percentile >= 0.1) {
+    return {
+      before: "",
+      mark: "momento discreto",
+      after: " per consumare",
+      color: BANANA,
+    };
+  }
+  if (percentile >= 0.05) {
+    return {
+      before: "tra i ",
+      mark: "10% più convenienti",
+      after: ": buon momento",
+      color: BANANA,
+    };
+  }
+  return {
+    before: "tra i ",
+    mark: "5% più convenienti",
+    after: ": se puoi, consuma ora",
+    color: BANANA,
+  };
+}
+
+type NowLine = {
+  hour: number;
+  time: string;
+  comment: ReturnType<typeof nowMomentComment>;
+};
+
+function nowLineForDay(day: DayInsight, now: RomeNow | null): NowLine | null {
+  if (!now || now.date !== day.deliveryDate || day.prices.length === 0) {
+    return null;
+  }
+
+  const slot = currentSlotIndex(now.hour, now.minute, day.prices.length);
+  const percentile = expensivePercentile(day.prices, day.prices[slot]);
+  return {
+    hour: now.hour + now.minute / 60,
+    time: formatClock(now.hour, now.minute),
+    comment: nowMomentComment(percentile),
+  };
+}
+
 function roundToQuarterHour(hour: number) {
   return Math.round(hour * 4) / 4;
 }
@@ -482,13 +609,40 @@ function computeRecommendations(prices: number[]) {
   };
 }
 
-function PriceTips({ best, worst }: { best: string; worst: string }) {
+function PriceTips({
+  best,
+  worst,
+  nowLine,
+}: {
+  best: string;
+  worst: string;
+  nowLine: NowLine | null;
+}) {
   return (
     <div
       className="mt-4 space-y-1 text-left text-sm sm:text-base"
       aria-live="polite"
       aria-label="Consigli su quando consumare o evitare"
     >
+      {nowLine ? (
+        <p className="font-medium text-foreground">
+          <span
+            aria-hidden
+            className="mr-2 inline-block h-[1em] w-[2px] translate-y-[0.12em] align-middle"
+            style={{ backgroundColor: NOW }}
+          />
+          Sono le {nowLine.time} {nowLine.comment.before}
+          {nowLine.comment.mark ? (
+            <span
+              className="underline decoration-2 underline-offset-2"
+              style={{ textDecorationColor: nowLine.comment.color ?? undefined }}
+            >
+              {nowLine.comment.mark}
+            </span>
+          ) : null}
+          {nowLine.comment.after}
+        </p>
+      ) : null}
       <p className="font-medium text-foreground">{best}</p>
       {worst ? (
         <p className="text-neutral-600 dark:text-neutral-400">{worst}</p>
@@ -508,8 +662,33 @@ function toSmoothPath(points: { x: number; y: number }[]) {
   return d;
 }
 
-function PriceChart({ day }: { day: DayInsight }) {
+function bananaToMonkeyPercent(price: number, min: number, max: number) {
+  const span = max - min;
+  if (span <= 0) return 50;
+  return Math.round(Math.min(100, Math.max(0, ((price - min) / span) * 100)));
+}
+
+function pointerToHour(
+  event: PointerEvent<SVGSVGElement>,
+  chartW: number,
+  pad: { t: number; r: number; b: number; l: number },
+) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  if (rect.width <= 0) return 0;
+  const x = ((event.clientX - rect.left) / rect.width) * chartW;
+  const innerW = chartW - pad.l - pad.r;
+  return Math.min(24, Math.max(0, ((x - pad.l) / innerW) * 24));
+}
+
+function PriceChart({
+  day,
+  nowHour,
+}: {
+  day: DayInsight;
+  nowHour?: number;
+}) {
   const { chartW, chartH, pad, axisFontSize, unitFontSize } = useChartLayout();
+  const [pickedHour, setPickedHour] = useState<number | null>(null);
   const hourly = useMemo(() => toHourlyAverages(day.prices), [day.prices]);
   const pricesCent = useMemo(
     () => hourly.map(toEurocentPerKwh),
@@ -554,13 +733,30 @@ function PriceChart({ day }: { day: DayInsight }) {
 
   const hourTicks = [0, 6, 12, 18, 24];
   const font = "var(--font-geist-sans), system-ui, sans-serif";
+  const picked =
+    pickedHour != null ? sampleNearestHour(samples, pickedHour) : null;
+  const dayMinCent = Math.min(...pricesCent);
+  const dayMaxCent = Math.max(...pricesCent);
+  const pickedRank =
+    picked != null
+      ? bananaToMonkeyPercent(picked.price, dayMinCent, dayMaxCent)
+      : null;
 
   return (
+    <div className="relative" data-price-chart>
     <svg
       viewBox={`0 0 ${chartW} ${chartH}`}
-      className="h-auto w-full"
+      className="h-auto w-full cursor-crosshair touch-manipulation"
       role="img"
-      aria-label={`Andamento orario del prezzo in centesimi di euro per kilowattora. Momenti più convenienti alle ${bananaHours || "n.d."}, picchi da evitare alle ${monkeyHours || "n.d."}.`}
+      aria-label={`Andamento orario del prezzo in centesimi di euro per kilowattora. Tocca o clicca un punto per vedere ora e prezzo.${
+        nowHour != null
+          ? ` L'ora attuale è alle ${formatTipHour(nowHour)}.`
+          : ""
+      } Momenti più convenienti alle ${bananaHours || "n.d."}, picchi da evitare alle ${monkeyHours || "n.d."}.`}
+      onPointerDown={(event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        setPickedHour(pointerToHour(event, chartW, pad));
+      }}
     >
       <rect width={chartW} height={chartH} fill="#111111" rx="8" />
 
@@ -692,7 +888,70 @@ function PriceChart({ day }: { day: DayInsight }) {
           🐵
         </text>
       ))}
+
+      {nowHour != null ? (
+        <line
+          x1={hourToX(nowHour, chartW, pad)}
+          x2={hourToX(nowHour, chartW, pad)}
+          y1={pad.t}
+          y2={chartH - pad.b}
+          stroke={NOW}
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      ) : null}
+
+      {picked ? (
+        <g pointerEvents="none">
+          <line
+            x1={picked.x}
+            x2={picked.x}
+            y1={pad.t}
+            y2={chartH - pad.b}
+            stroke="#f5f5f5"
+            strokeWidth="1.5"
+            strokeDasharray="4 4"
+            opacity="0.8"
+          />
+          <line
+            x1={pad.l}
+            x2={chartW - pad.r}
+            y1={picked.y}
+            y2={picked.y}
+            stroke="#f5f5f5"
+            strokeWidth="1.5"
+            strokeDasharray="4 4"
+            opacity="0.8"
+          />
+          <circle
+            cx={picked.x}
+            cy={picked.y}
+            r="5"
+            fill={BANANA}
+            stroke="#111111"
+            strokeWidth="2"
+          />
+        </g>
+      ) : null}
     </svg>
+      {picked && pickedRank != null ? (
+        <button
+          type="button"
+          className="absolute top-2.5 right-2.5 z-10 flex items-center gap-2 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-white shadow-sm"
+          aria-label={`Chiudi lettura delle ${formatTipHour(picked.hour)}, ${formatEurocent(picked.price)}, ${pickedRank}%`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => setPickedHour(null)}
+        >
+          <span className="text-xs font-semibold tabular-nums sm:text-sm">
+            {formatTipHour(picked.hour)} · {formatEurocent(picked.price)} ·{" "}
+            {pickedRank}% {pickedRank < 50 ? "🍌" : "🐵"}
+          </span>
+          <span aria-hidden className="text-sm leading-none text-white/70">
+            ×
+          </span>
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -981,6 +1240,8 @@ export function DailyInsight({
   const isOldest = dateIndex < 0 || dateIndex === days.length - 1;
   const isNewest = dateIndex <= 0;
   const today = romeToday();
+  const now = useRomeNow();
+  const nowLine = day ? nowLineForDay(day, now) : null;
   const showSkeleton = fetching || isRefreshing;
   const dateLabel = day
     ? formatDeliveryDate(day.deliveryDate, today)
@@ -1026,8 +1287,8 @@ export function DailyInsight({
         </h2>
         <ShareButton
           getUrl={() => pricesShareUrl(window.location.origin, region)}
-          title={`kilowatt & banane — prezzi in ${region}`}
-          text={`I prezzi dell'energia in ${region}. Guarda quando conviene consumare.`}
+          title={`kilowatt e banane🍌🍌🍌 — prezzi in ${region}`}
+          text={`I prezzi dell'energia all'ingrosso in ${region}. Guarda quando conviene consumare.`}
           ariaLabel={`Condividi i prezzi in ${region}`}
         />
       </div>
@@ -1110,9 +1371,9 @@ export function DailyInsight({
           className="insight-content-in"
         >
           <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
-            <PriceChart day={day} />
+            <PriceChart day={day} nowHour={nowLine?.hour} />
           </div>
-          <PriceTips best={day.bestTip} worst={day.worstTip} />
+          <PriceTips best={day.bestTip} worst={day.worstTip} nowLine={nowLine} />
           <QuarterPriceTable day={day} />
         </div>
       )}
