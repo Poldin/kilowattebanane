@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { RegionSelect } from "@/components/RegionSelect";
 import {
   fetchZonePrices,
   groupZoneDays,
+  romeNowHour,
   romeToday,
   type DayAheadRow,
   type ZoneDay,
@@ -32,6 +33,11 @@ type DayInsight = {
 
 function pickDefaultDate(days: ZoneDay[]) {
   const today = romeToday();
+  const tomorrow = addCalendarDays(today, 1);
+
+  if (romeNowHour() >= 22 && days.some((day) => day.deliveryDate === tomorrow)) {
+    return tomorrow;
+  }
   if (days.some((day) => day.deliveryDate === today)) return today;
   return days[0]?.deliveryDate ?? null;
 }
@@ -695,6 +701,78 @@ function QuarterPriceTable({ day }: { day: DayInsight }) {
   );
 }
 
+function SkeletonBone({
+  className,
+  chart = false,
+}: {
+  className: string;
+  chart?: boolean;
+}) {
+  return (
+    <div
+      aria-hidden
+      className={`insight-skeleton rounded-md ${chart ? "insight-skeleton-chart" : ""} ${className}`}
+    />
+  );
+}
+
+function InsightSkeleton() {
+  const tableRows = Array.from({ length: 12 }, (_, i) => i);
+
+  return (
+    <div className="mt-3" aria-hidden>
+      <div className="overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
+        <div className="relative h-90 w-full sm:h-65">
+          <SkeletonBone chart className="absolute inset-0 rounded-none" />
+          <div className="absolute inset-x-10 bottom-10 top-12 flex flex-col justify-between">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className="h-px w-full bg-white/6" />
+            ))}
+          </div>
+          <div className="absolute inset-x-[12%] top-[30%] h-[32%] overflow-hidden rounded-full opacity-40">
+            <SkeletonBone chart className="h-full w-full rounded-full" />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        <SkeletonBone className="h-4 w-[min(100%,20rem)]" />
+        <SkeletonBone className="h-4 w-[min(88%,16rem)]" />
+      </div>
+
+      <div className="mt-6">
+        <SkeletonBone className="h-4 w-44" />
+        <div className="mt-2 overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+          <div className="grid grid-cols-2">
+            {["00–12", "12–24"].map((label, column) => (
+              <div
+                key={label}
+                className={
+                  column === 1
+                    ? "border-l border-neutral-200 dark:border-neutral-800"
+                    : undefined
+                }
+              >
+                <p className="border-b border-neutral-200 bg-neutral-50 px-2 py-1.5 text-center text-[11px] font-medium tabular-nums text-neutral-400 sm:text-xs dark:border-neutral-800 dark:bg-neutral-900">
+                  {label}
+                </p>
+                <div className="space-y-2 px-2 py-2">
+                  {tableRows.map((row) => (
+                    <div key={row} className="flex items-center justify-between gap-3">
+                      <SkeletonBone className="h-3 w-16" />
+                      <SkeletonBone className="h-3 w-10" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DailyInsight({
   initialZone = "IT-North",
   initialRows,
@@ -709,18 +787,19 @@ export function DailyInsight({
   const [rowsByZone, setRowsByZone] = useState<
     Partial<Record<MarketZoneId, DayAheadRow[]>>
   >(() => (initialRows?.length ? { [initialZone]: initialRows } : {}));
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [, startTransition] = useTransition();
 
   const zone = zoneForRegion(region);
   const zoneName = zoneNameForRegion(region);
   const cached = zone ? rowsByZone[zone] : undefined;
+  const fetching = Boolean(zone) && cached === undefined && !error;
 
   useEffect(() => {
     if (!zone || cached) return;
 
     let cancelled = false;
-    setLoading(true);
     setError(null);
 
     fetchZonePrices(zone)
@@ -731,15 +810,19 @@ export function DailyInsight({
       .catch((err: unknown) => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Caricamento fallito");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
   }, [zone, cached]);
+
+  useEffect(() => {
+    if (!isRefreshing) return;
+    if (fetching) return;
+    const id = window.setTimeout(() => setIsRefreshing(false), 180);
+    return () => window.clearTimeout(id);
+  }, [isRefreshing, fetching, selectedDate, region]);
 
   const days = useMemo(() => groupZoneDays(cached ?? []), [cached]);
 
@@ -749,9 +832,7 @@ export function DailyInsight({
       if (current && days.some((day) => day.deliveryDate === current)) {
         return current;
       }
-      const today = romeToday();
-      if (days.some((day) => day.deliveryDate === today)) return today;
-      return days[0].deliveryDate;
+      return pickDefaultDate(days);
     });
   }, [days]);
 
@@ -766,9 +847,30 @@ export function DailyInsight({
   const isOldest = dateIndex < 0 || dateIndex === days.length - 1;
   const isNewest = dateIndex <= 0;
   const today = romeToday();
+  const showSkeleton = fetching || isRefreshing;
+  const dateLabel = day
+    ? formatDeliveryDate(day.deliveryDate, today)
+    : selectedDate
+      ? formatDeliveryDate(selectedDate, today)
+      : "Prezzi";
+
+  function goToDate(date: string) {
+    setIsRefreshing(true);
+    startTransition(() => setSelectedDate(date));
+  }
+
+  function handleRegionChange(next: string) {
+    if (next === region) return;
+    if (zoneForRegion(next) !== zone) setIsRefreshing(true);
+    startTransition(() => setRegion(next));
+  }
 
   return (
-    <section aria-labelledby="daily-insight-heading" className="w-full">
+    <section
+      aria-labelledby="daily-insight-heading"
+      aria-busy={showSkeleton}
+      className="w-full"
+    >
       <h2
         id="daily-insight-heading"
         className="text-lg font-medium tracking-tight text-foreground sm:text-xl"
@@ -786,9 +888,9 @@ export function DailyInsight({
             type="button"
             onClick={() => {
               const next = days[dateIndex + 1];
-              if (next) setSelectedDate(next.deliveryDate);
+              if (next) goToDate(next.deliveryDate);
             }}
-            disabled={isOldest || days.length === 0}
+            disabled={isOldest || days.length === 0 || fetching}
             aria-label="Giorno precedente"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-lg leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
           >
@@ -798,9 +900,9 @@ export function DailyInsight({
             type="button"
             onClick={() => {
               const next = days[dateIndex - 1];
-              if (next) setSelectedDate(next.deliveryDate);
+              if (next) goToDate(next.deliveryDate);
             }}
-            disabled={isNewest || days.length === 0}
+            disabled={isNewest || days.length === 0 || fetching}
             aria-label="Giorno successivo"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-lg leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
           >
@@ -810,14 +912,14 @@ export function DailyInsight({
             className="min-w-0 truncate text-sm font-medium capitalize tracking-tight text-foreground sm:text-base"
             aria-live="polite"
           >
-            {day ? formatDeliveryDate(day.deliveryDate, today) : "Prezzi"}
+            {dateLabel}
           </p>
         </div>
 
         <div className="w-full sm:w-auto sm:shrink-0">
           <RegionSelect
             value={region}
-            onChange={setRegion}
+            onChange={handleRegionChange}
             variant="banana"
             compact
             hideLabel
@@ -839,22 +941,26 @@ export function DailyInsight({
         <p className="mt-4 text-sm text-red-600 dark:text-red-400">
           Non riesco a caricare i prezzi. Riprova tra poco.
         </p>
-      ) : loading && !day ? (
-        <p className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
-          Carico i prezzi della zona…
-        </p>
+      ) : showSkeleton ? (
+        <>
+          <span className="sr-only">Carico i prezzi della zona…</span>
+          <InsightSkeleton />
+        </>
       ) : !day || day.prices.length === 0 ? (
         <p className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
           Ancora nessun prezzo per questa zona.
         </p>
       ) : (
-        <>
+        <div
+          key={`${zone}-${day.deliveryDate}`}
+          className="insight-content-in"
+        >
           <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
             <PriceChart day={day} />
           </div>
           <PriceTips best={day.bestTip} worst={day.worstTip} />
           <QuarterPriceTable day={day} />
-        </>
+        </div>
       )}
     </section>
   );

@@ -24,6 +24,16 @@ export function romeToday() {
   }).format(new Date());
 }
 
+export function romeNowHour() {
+  return Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Rome",
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(new Date()),
+  );
+}
+
 function romeHour(iso: string) {
   return Number(
     new Intl.DateTimeFormat("en-US", {

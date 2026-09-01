@@ -54,6 +54,11 @@ const FAQ_ITEMS: FaqItem[] = [
     answer:
       "L'asse verticale è in centesimi di euro per kilowattora (c€/kWh): è il prezzo all'ingrosso di un'ora di consumo, non la bolletta finale. L'asse orizzontale copre l'intera giornata, da mezzanotte a mezzanotte. La curva gialla segue l'andamento orario; la banana segna il momento più conveniente, la scimmia il picco da evitare. Sotto, la tabella ripete gli stessi valori ogni quarto d'ora.",
   },
+  {
+    question: "Il prezzo all'ingrosso è quello che pago in bolletta?",
+    answer:
+      "No. Quello che mostriamo è il prezzo all'ingrosso: quanto costa l'energia sul mercato, ora per ora. Quello che paghi tu dipende dal contratto. Con un piano a prezzo fisso il kWh resta uguale tutto il giorno — le oscillazioni del grafico non ti riguardano. Con un piano a fasce orarie o variabile, invece, la bolletta segue (in misura diversa) proprio questi movimenti: lì sapere quando consumare può fare la differenza.",
+  },
 ];
 
 export function Faq() {

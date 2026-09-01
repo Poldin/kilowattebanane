@@ -77,3 +77,57 @@ body {
   border: 2px solid transparent;
   background-clip: content-box;
 }
+
+@keyframes insight-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes insight-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.insight-skeleton {
+  --skeleton-from: #e5e5e5;
+  --skeleton-via: #f4f4f4;
+  background-image: linear-gradient(
+    90deg,
+    var(--skeleton-from) 0%,
+    var(--skeleton-via) 45%,
+    var(--skeleton-from) 90%
+  );
+  background-size: 200% 100%;
+  animation: insight-shimmer 1.35s ease-in-out infinite;
+}
+
+.insight-skeleton-chart {
+  --skeleton-from: #191919;
+  --skeleton-via: #2e2e2e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .insight-skeleton:not(.insight-skeleton-chart) {
+    --skeleton-from: #262626;
+    --skeleton-via: #404040;
+  }
+}
+
+.insight-content-in {
+  animation: insight-fade-in 280ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insight-skeleton,
+  .insight-content-in {
+    animation: none;
+  }
+}
