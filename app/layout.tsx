@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "kilowatt & banane",
+  title: "kilowatt e banane🍌🍌🍌",
   description:
     "Ricevi ogni giorno una mail con il costo dell'energia nella tua zona. Sai già al mattino quando consumare per risparmiare sulla bolletta. Gratis.",
 };
