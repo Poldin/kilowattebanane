@@ -10,7 +10,17 @@ import {
   type DayAheadRow,
   type ZoneDay,
 } from "@/lib/day-ahead-query";
-import { zoneForRegion, zoneNameForRegion, type MarketZoneId } from "@/lib/market-zones";
+import { ShareButton } from "@/components/ShareButton";
+import {
+  DEFAULT_REGION,
+  PRICES_SECTION_ID,
+  REGION_QUERY_PARAM,
+  pricesShareUrl,
+  zoneForRegion,
+  zoneNameForRegion,
+  type ItalianRegion,
+  type MarketZoneId,
+} from "@/lib/market-zones";
 import {
   QUARTERS_PER_HOUR,
   formatQuarterSlot,
@@ -885,13 +895,15 @@ function InsightSkeleton() {
 }
 
 export function DailyInsight({
+  initialRegion = DEFAULT_REGION,
   initialZone = "IT-North",
   initialRows,
 }: {
+  initialRegion?: ItalianRegion;
   initialZone?: MarketZoneId;
   initialRows?: DayAheadRow[];
 } = {}) {
-  const [region, setRegion] = useState("Lombardia");
+  const [region, setRegion] = useState(initialRegion);
   const [selectedDate, setSelectedDate] = useState<string | null>(() =>
     pickDefaultDate(initialRows?.length ? groupZoneDays(initialRows) : []),
   );
@@ -973,21 +985,39 @@ export function DailyInsight({
   function handleRegionChange(next: string) {
     if (next === region) return;
     if (zoneForRegion(next) !== zone) setIsRefreshing(true);
-    startTransition(() => setRegion(next));
+    startTransition(() => setRegion(next as ItalianRegion));
   }
+
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    const hasRegionParam = new URLSearchParams(window.location.search).has(
+      REGION_QUERY_PARAM,
+    );
+    if (hash !== PRICES_SECTION_ID && !hasRegionParam) return;
+    document.getElementById(PRICES_SECTION_ID)?.scrollIntoView();
+  }, []);
 
   return (
     <section
+      id={PRICES_SECTION_ID}
       aria-labelledby="daily-insight-heading"
       aria-busy={showSkeleton}
-      className="w-full"
+      className="w-full scroll-mt-20"
     >
-      <h2
-        id="daily-insight-heading"
-        className="text-lg font-medium tracking-tight text-foreground sm:text-xl"
-      >
-        I prezzi nella tua zona
-      </h2>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h2
+          id="daily-insight-heading"
+          className="text-lg font-medium tracking-tight text-foreground sm:text-xl"
+        >
+          I prezzi all&apos;ingrosso nella tua zona
+        </h2>
+        <ShareButton
+          getUrl={() => pricesShareUrl(window.location.origin, region)}
+          title={`kilowatt & banane — prezzi in ${region}`}
+          text={`I prezzi dell'energia in ${region}. Guarda quando conviene consumare.`}
+          ariaLabel={`Condividi i prezzi in ${region}`}
+        />
+      </div>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Scegli il giorno e la regione: grafico e tabella ti dicono quando
         conviene consumare.

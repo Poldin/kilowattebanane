@@ -57,6 +57,48 @@ export const REGION_TO_ZONE = {
 export type ItalianRegion = keyof typeof REGION_TO_ZONE;
 
 export const ITALIAN_REGIONS = Object.keys(REGION_TO_ZONE) as ItalianRegion[];
+export const DEFAULT_REGION: ItalianRegion = "Lombardia";
+export const PRICES_SECTION_ID = "prezzi";
+export const REGION_QUERY_PARAM = "regione";
+
+function slugifyRegion(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const REGION_BY_SLUG = Object.fromEntries(
+  ITALIAN_REGIONS.map((region) => [slugifyRegion(region), region]),
+) as Record<string, ItalianRegion>;
+
+export function regionToSlug(region: string) {
+  return slugifyRegion(region);
+}
+
+export function regionFromParam(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return undefined;
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+  const trimmed = decoded.trim();
+  if (trimmed in REGION_TO_ZONE) return trimmed as ItalianRegion;
+  return REGION_BY_SLUG[slugifyRegion(trimmed)];
+}
+
+export function pricesShareUrl(origin: string, region: string) {
+  const url = new URL("/", origin);
+  url.searchParams.set(REGION_QUERY_PARAM, regionToSlug(region));
+  url.hash = PRICES_SECTION_ID;
+  return url.toString();
+}
 
 export function zoneForRegion(region: string) {
   return REGION_TO_ZONE[region as ItalianRegion];

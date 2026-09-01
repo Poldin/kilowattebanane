@@ -5,11 +5,19 @@ import { DailyInsight } from "@/components/DailyInsight";
 import { Faq } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
 import { fetchZonePrices } from "@/lib/day-ahead-query";
+import {
+  DEFAULT_REGION,
+  regionFromParam,
+  zoneForRegion,
+} from "@/lib/market-zones";
 
-export default async function Home() {
+export default async function Home({ searchParams }: PageProps<"/">) {
+  const params = await searchParams;
+  const initialRegion = regionFromParam(params.regione) ?? DEFAULT_REGION;
+  const initialZone = zoneForRegion(initialRegion) ?? "IT-North";
   let initialRows;
   try {
-    initialRows = await fetchZonePrices("IT-North");
+    initialRows = await fetchZonePrices(initialZone);
   } catch {
     initialRows = undefined;
   }
@@ -42,7 +50,11 @@ export default async function Home() {
           <SignupSlot />
 
           <div className="mx-auto mt-10 w-full max-w-xl sm:mt-12">
-            <DailyInsight initialZone="IT-North" initialRows={initialRows} />
+            <DailyInsight
+              initialRegion={initialRegion}
+              initialZone={initialZone}
+              initialRows={initialRows}
+            />
           </div>
 
           <div className="mt-16 sm:mt-20">

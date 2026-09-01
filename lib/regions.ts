@@ -1,7 +1,13 @@
 export {
+  DEFAULT_REGION,
   ITALIAN_REGIONS,
   MARKET_ZONES,
+  PRICES_SECTION_ID,
+  REGION_QUERY_PARAM,
   REGION_TO_ZONE,
+  pricesShareUrl,
+  regionFromParam,
+  regionToSlug,
   zoneForRegion,
   zoneNameForRegion,
   type ItalianRegion,
