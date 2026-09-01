@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type PointerEvent,
@@ -24,6 +25,7 @@ import {
   DEFAULT_REGION,
   PRICES_SECTION_ID,
   REGION_QUERY_PARAM,
+  SHOW_TODAY_PRICES_EVENT,
   pricesShareUrl,
   regionFromParam,
   zoneForRegion,
@@ -1297,6 +1299,23 @@ export function DailyInsight({
     startTransition(() => setRegion(next as ItalianRegion));
     persistRegionPref(next);
   }
+
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
+
+  useEffect(() => {
+    function onShowTodayPrices() {
+      const today = romeToday();
+      if (selectedDateRef.current === today) return;
+      setIsRefreshing(true);
+      startTransition(() => setSelectedDate(today));
+    }
+
+    window.addEventListener(SHOW_TODAY_PRICES_EVENT, onShowTodayPrices);
+    return () => {
+      window.removeEventListener(SHOW_TODAY_PRICES_EVENT, onShowTodayPrices);
+    };
+  }, []);
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);

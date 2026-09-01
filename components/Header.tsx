@@ -48,7 +48,7 @@ export function Header() {
           onClick={openSignup}
           className="shrink-0 rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
         >
-          Iscriviti
+          Iscriviti gratis
         </button>
       </div>
     </header>

@@ -38,7 +38,7 @@ export function useSignup() {
 
 export function SignupSlot() {
   return (
-    <div id="iscriviti" className="mx-auto mt-10 w-full max-w-md sm:mt-12">
+    <div id="iscriviti" className="mx-auto mt-10 w-full max-w-md scroll-mt-20 sm:mt-12">
       <SignupForm />
     </div>
   );
@@ -77,7 +77,7 @@ export function SignupForm() {
         id="signup-heading"
         className="text-base font-medium tracking-tight text-foreground sm:text-lg"
       >
-        Ricevi i prezzi dell'energia ogni giorno
+        Ricevi i prezzi dell'energia ogni giorno. Gratis.
       </h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Scegli la tua regione e inserisci l&apos;email.

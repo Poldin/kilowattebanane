@@ -59,6 +59,7 @@ export type ItalianRegion = keyof typeof REGION_TO_ZONE;
 export const ITALIAN_REGIONS = Object.keys(REGION_TO_ZONE) as ItalianRegion[];
 export const DEFAULT_REGION: ItalianRegion = "Lombardia";
 export const PRICES_SECTION_ID = "prezzi";
+export const SHOW_TODAY_PRICES_EVENT = "show-today-prices";
 export const REGION_QUERY_PARAM = "regione";
 export const DATE_QUERY_PARAM = "giorno";
 const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/;
