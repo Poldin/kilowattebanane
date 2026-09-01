@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { ITALIAN_REGIONS } from "@/lib/regions";
+import { ITALIAN_REGIONS, zoneNameForRegion } from "@/lib/regions";
 
 type RegionSelectProps = {
   value: string;
@@ -154,7 +154,7 @@ export function RegionSelect({
           isBanana
             ? `flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-[#111111] text-left text-neutral-100 outline-none transition-colors hover:bg-neutral-900 ${
                 compact
-                  ? "h-8 w-full px-2.5 text-xs sm:min-w-[11rem] sm:w-auto sm:text-sm"
+                  ? "h-10 w-full px-2.5 text-sm sm:h-8 sm:min-w-[11rem] sm:w-auto"
                   : "h-10 w-full px-3 text-sm"
               }`
             : `flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-left text-sm outline-none transition-colors ${
@@ -195,7 +195,7 @@ export function RegionSelect({
             align === "right" ? "right-0" : "left-0"
           } ${
             isBanana
-              ? "w-[min(18rem,calc(100vw-2rem))] border border-neutral-800 bg-[#111111]"
+              ? "w-[min(22rem,calc(100vw-2rem))] border border-neutral-800 bg-[#111111]"
               : "w-full border border-neutral-200 bg-background dark:border-neutral-800"
           }`}
         >
@@ -231,6 +231,7 @@ export function RegionSelect({
             {ITALIAN_REGIONS.map((name, index) => {
               const selected = name === value;
               const active = index === activeIndex;
+              const zoneName = zoneNameForRegion(name);
               return (
                 <li
                   key={name}
@@ -243,7 +244,7 @@ export function RegionSelect({
                     type="button"
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectRegion(name)}
-                    className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
                       isBanana
                         ? active
                           ? "bg-neutral-800 text-neutral-100"
@@ -253,27 +254,41 @@ export function RegionSelect({
                           : "text-neutral-700 dark:text-neutral-300"
                     }`}
                   >
-                    <span className={selected ? "font-medium" : undefined}>
+                    <span
+                      className={`min-w-0 flex-1 truncate ${
+                        selected ? "font-medium" : ""
+                      }`}
+                    >
                       {name}
                     </span>
-                    {selected ? (
-                      <svg
-                        aria-hidden
-                        viewBox="0 0 16 16"
-                        className={`h-3.5 w-3.5 shrink-0 ${
-                          isBanana ? "text-neutral-100" : "text-foreground"
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.75"
+                    {zoneName && zoneName !== name ? (
+                      <span
+                        className={
+                          isBanana
+                            ? "shrink-0 text-[11px] font-medium text-[#F5D547]"
+                            : "shrink-0 text-[11px] font-medium text-neutral-400 dark:text-neutral-500"
+                        }
                       >
-                        <path
-                          d="M3.5 8.5l3 3 6-6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                        <span className="sr-only">zona </span>
+                        {zoneName}
+                      </span>
                     ) : null}
+                    <svg
+                      aria-hidden
+                      viewBox="0 0 16 16"
+                      className={`h-3.5 w-3.5 shrink-0 ${
+                        selected ? "opacity-100" : "opacity-0"
+                      } ${isBanana ? "text-neutral-100" : "text-foreground"}`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                    >
+                      <path
+                        d="M3.5 8.5l3 3 6-6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   </button>
                 </li>
               );
