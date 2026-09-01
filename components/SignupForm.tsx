@@ -1,7 +1,57 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { RegionSelect } from "@/components/RegionSelect";
+
+type SignupContextValue = {
+  show: boolean;
+  openSignup: () => void;
+};
+
+const SignupContext = createContext<SignupContextValue | null>(null);
+
+export function SignupProvider({ children }: { children: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  const openSignup = useCallback(() => setShow(true), []);
+
+  return (
+    <SignupContext.Provider value={{ show, openSignup }}>
+      {children}
+    </SignupContext.Provider>
+  );
+}
+
+export function useSignup() {
+  const context = useContext(SignupContext);
+  if (!context) {
+    throw new Error("useSignup must be used within SignupProvider");
+  }
+  return context;
+}
+
+export function SignupSlot() {
+  const { show } = useSignup();
+
+  useEffect(() => {
+    if (!show) return;
+    document.getElementById("iscriviti")?.scrollIntoView({ behavior: "smooth" });
+  }, [show]);
+
+  if (!show) return null;
+
+  return (
+    <div id="iscriviti" className="mx-auto mt-10 w-full max-w-md sm:mt-12">
+      <SignupForm />
+    </div>
+  );
+}
 
 export function SignupForm() {
   const [region, setRegion] = useState("");
@@ -36,7 +86,7 @@ export function SignupForm() {
         id="signup-heading"
         className="text-base font-medium tracking-tight text-foreground sm:text-lg"
       >
-        Ricevi la mail ogni giorno
+        Ricevi i prezzi dell'energia ogni giorno
       </h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Scegli la tua regione e inserisci l&apos;email.

@@ -13,9 +13,10 @@ const FAQ_ITEMS: FaqItem[] = [
         Usiamo i prezzi di mercato dell&apos;energia elettrica pubblicati ogni
         giorno per zona. Li traduciamo in una mail chiara: ore più convenienti,
         ore da evitare, senza jargon. In Italia il mercato è{" "}
-        <em>zonale</em>: Nord, Centro-Nord, Centro-Sud, Sud, Sicilia e Sardegna
-        possono avere prezzi diversi nella stessa ora — per questo chiediamo la
-        regione: così ti mostriamo i dati della zona in cui consumi.
+        <em>zonale</em>: Nord, Centro-Nord, Centro-Sud, Sud, Calabria, Sicilia e
+        Sardegna possono avere prezzi diversi nella stessa ora — per questo
+        chiediamo la regione: così ti mostriamo i dati della zona in cui
+        consumi.
       </>
     ),
   },
