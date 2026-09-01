@@ -7,14 +7,19 @@ import {
   isCompleteDay,
   toEurocentPerKwh,
 } from "@/lib/insights";
-import { pricesShareUrl, zoneNameForRegion, type ItalianRegion, type MarketZoneId } from "@/lib/market-zones";
+import {
+  MARKET_ZONES,
+  pricesShareUrl,
+  type ItalianRegion,
+  type MarketZoneId,
+} from "@/lib/market-zones";
 import { toHourlyAverages } from "@/lib/prices";
 import { mailChartUrl, publicSiteUrl } from "@/lib/app-url";
 
-export type PriceMailModel = {
+export type ZoneMailContent = {
   deliveryDate: string;
   dateLabel: string;
-  region: ItalianRegion;
+  zone: MarketZoneId;
   zoneName: string;
   bestTip: string;
   worstTip: string;
@@ -22,8 +27,12 @@ export type PriceMailModel = {
   avgLabel: string;
   maxLabel: string;
   hourly: { hour: number; label: string; priceLabel: string }[];
-  ctaUrl: string;
   chartUrl: string;
+};
+
+export type PriceMailModel = ZoneMailContent & {
+  region: ItalianRegion;
+  ctaUrl: string;
 };
 
 export function formatMailDate(ymd: string, today = romeToday()) {
@@ -37,11 +46,10 @@ export function formatMailDate(ymd: string, today = romeToday()) {
   return formatted;
 }
 
-export async function buildPriceMailModel(
-  region: ItalianRegion,
+export async function buildZoneMailContent(
   zone: MarketZoneId,
   deliveryDate: string,
-): Promise<PriceMailModel | null> {
+): Promise<ZoneMailContent | null> {
   const rows = await fetchZoneDayPrices(zone, deliveryDate);
   if (!isCompleteDay(rows.length)) return null;
 
@@ -52,13 +60,12 @@ export async function buildPriceMailModel(
   const hourly = toHourlyAverages(day.prices);
   const pricesCent = hourly.map(toEurocentPerKwh);
   const { min, avg, max } = dayHourlyCentStats(day.prices);
-  const zoneName = zoneNameForRegion(region) ?? zone;
 
   return {
     deliveryDate,
     dateLabel: formatMailDate(deliveryDate),
-    region,
-    zoneName,
+    zone,
+    zoneName: MARKET_ZONES[zone].name,
     bestTip: recommendations.bestTip,
     worstTip: recommendations.worstTip,
     minLabel: formatEurocent(min),
@@ -69,9 +76,29 @@ export async function buildPriceMailModel(
       label: `${String(hour).padStart(2, "0")}:00`,
       priceLabel: formatEurocent(price),
     })),
-    ctaUrl: pricesShareUrl(publicSiteUrl(), region, deliveryDate),
     chartUrl: mailChartUrl(zone, deliveryDate),
   };
+}
+
+export function priceMailModelForRegion(
+  content: ZoneMailContent,
+  region: ItalianRegion,
+): PriceMailModel {
+  return {
+    ...content,
+    region,
+    ctaUrl: pricesShareUrl(publicSiteUrl(), region, content.deliveryDate),
+  };
+}
+
+export async function buildPriceMailModel(
+  region: ItalianRegion,
+  zone: MarketZoneId,
+  deliveryDate: string,
+): Promise<PriceMailModel | null> {
+  const content = await buildZoneMailContent(zone, deliveryDate);
+  if (!content) return null;
+  return priceMailModelForRegion(content, region);
 }
 
 export function digestSubjectLine(model: PriceMailModel) {

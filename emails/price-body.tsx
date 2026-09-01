@@ -43,6 +43,10 @@ export function PriceDigestBody({
       </Row>
       <Text style={styles.unit}>c€/kWh all&apos;ingrosso</Text>
 
+      <Button href={model.ctaUrl} style={styles.button}>
+        Vedi il grafico interattivo
+      </Button>
+
       <Section style={styles.tableWrap}>
         {model.hourly.map((row) => (
           <Row key={row.hour} style={styles.tableRow}>
@@ -55,10 +59,6 @@ export function PriceDigestBody({
           </Row>
         ))}
       </Section>
-
-      <Button href={model.ctaUrl} style={styles.button}>
-        Vedi il grafico interattivo
-      </Button>
     </>
   );
 }
@@ -120,10 +120,22 @@ const styles = {
     fontSize: "12px",
     margin: "4px 0 18px",
   },
+  button: {
+    backgroundColor: "#111111",
+    borderRadius: "6px",
+    color: "#ffffff",
+    display: "inline-block",
+    fontSize: "14px",
+    fontWeight: 500,
+    lineHeight: "20px",
+    margin: "0 0 22px",
+    padding: "12px 16px",
+    textDecoration: "none",
+  },
   tableWrap: {
     border: "1px solid #e5e5e5",
     borderRadius: "8px",
-    margin: "0 0 22px",
+    margin: 0,
     padding: "4px 12px",
   },
   tableRow: {
@@ -143,16 +155,5 @@ const styles = {
     fontVariantNumeric: "tabular-nums",
     margin: "6px 0",
     textAlign: "right" as const,
-  },
-  button: {
-    backgroundColor: "#111111",
-    borderRadius: "6px",
-    color: "#ffffff",
-    display: "inline-block",
-    fontSize: "14px",
-    fontWeight: 500,
-    lineHeight: "20px",
-    padding: "12px 16px",
-    textDecoration: "none",
   },
 } as const;

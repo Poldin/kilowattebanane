@@ -1,17 +1,23 @@
 import { addCalendarDays } from "@/lib/entsoe";
 import { romeToday } from "@/lib/day-ahead-query";
 import { createSecretClient } from "@/lib/supabase/secret";
-import { buildPriceMailModel, type PriceMailModel } from "@/lib/mail/content";
-import { sendDigestBatch } from "@/lib/mail/send";
+import { buildZoneMailContent } from "@/lib/mail/content";
+import { sendZoneDigest } from "@/lib/mail/send";
 import {
   listActiveSubscribers,
   sentSubscriberIds,
   type Subscriber,
 } from "@/lib/subscribers";
-import type { ItalianRegion, MarketZoneId } from "@/lib/market-zones";
+import type { MarketZoneId } from "@/lib/market-zones";
 
-function modelKey(zone: MarketZoneId, region: ItalianRegion) {
-  return `${zone}:${region}`;
+function groupByZone(subscribers: Subscriber[]) {
+  const groups = new Map<MarketZoneId, Subscriber[]>();
+  for (const subscriber of subscribers) {
+    const list = groups.get(subscriber.zone) ?? [];
+    list.push(subscriber);
+    groups.set(subscriber.zone, list);
+  }
+  return groups;
 }
 
 export async function sendDailyDigest(deliveryDate?: string) {
@@ -64,39 +70,38 @@ export async function sendDailyDigest(deliveryDate?: string) {
     const alreadySent = await sentSubscriberIds(date);
     const pending = subscribers.filter((row) => !alreadySent.has(row.id));
     const zonesComplete: MarketZoneId[] = [];
-    const modelByKey = new Map<string, PriceMailModel>();
-    const ready: Subscriber[] = [];
+    let sent = 0;
 
-    const pairs = new Map<string, { zone: MarketZoneId; region: ItalianRegion }>();
-    for (const subscriber of pending) {
-      pairs.set(modelKey(subscriber.zone, subscriber.region), {
-        zone: subscriber.zone,
-        region: subscriber.region,
-      });
-    }
+    for (const [zone, recipients] of groupByZone(pending)) {
+      const content = await buildZoneMailContent(zone, date);
+      if (!content) continue;
 
-    for (const { zone, region } of pairs.values()) {
-      const model = await buildPriceMailModel(region, zone, date);
-      if (!model) continue;
+      const ids = await sendZoneDigest(date, zone, recipients, content);
       zonesComplete.push(zone);
-      modelByKey.set(modelKey(zone, region), model);
+      sent += recipients.length;
+
+      const deliveries = recipients.map((subscriber, index) => ({
+        delivery_date: date,
+        subscriber_id: subscriber.id,
+        zone: subscriber.zone,
+        resend_id: ids[index] ?? null,
+        status: ids[index] ? "sent" : "failed",
+      }));
+
+      const { error: insertError } = await supabase
+        .from("digest_deliveries")
+        .upsert(deliveries, { onConflict: "delivery_date,subscriber_id" });
+      if (insertError) throw new Error(insertError.message);
     }
 
-    const uniqueComplete = [...new Set(zonesComplete)];
-
-    for (const subscriber of pending) {
-      if (modelByKey.has(modelKey(subscriber.zone, subscriber.region))) {
-        ready.push(subscriber);
-      }
-    }
-
-    if (ready.length === 0) {
+    const remaining = pending.length - sent;
+    if (sent === 0) {
       await supabase
         .from("digest_runs")
         .update({
           status: "partial",
           finished_at: new Date().toISOString(),
-          zones_complete: uniqueComplete,
+          zones_complete: zonesComplete,
           last_error: "Nessuna zona pronta per gli iscritti",
         })
         .eq("delivery_date", date);
@@ -105,35 +110,17 @@ export async function sendDailyDigest(deliveryDate?: string) {
         skipped: false as const,
         sent: 0,
         pending: pending.length,
-        zonesComplete: uniqueComplete,
+        zonesComplete: zonesComplete,
       };
     }
 
-    const ids = await sendDigestBatch(date, ready, modelByKey);
-
-    const deliveries = ready.map((subscriber, index) => ({
-      delivery_date: date,
-      subscriber_id: subscriber.id,
-      zone: subscriber.zone,
-      resend_id: ids[index] ?? null,
-      status: ids[index] ? "sent" : "failed",
-    }));
-
-    if (deliveries.length > 0) {
-      const { error: insertError } = await supabase
-        .from("digest_deliveries")
-        .upsert(deliveries, { onConflict: "delivery_date,subscriber_id" });
-      if (insertError) throw new Error(insertError.message);
-    }
-
-    const remaining = pending.length - ready.length;
     const status = remaining > 0 ? "partial" : "sent";
     await supabase
       .from("digest_runs")
       .update({
         status,
         finished_at: new Date().toISOString(),
-        zones_complete: uniqueComplete,
+        zones_complete: zonesComplete,
         last_error: remaining > 0 ? "Alcune zone non erano ancora complete" : null,
       })
       .eq("delivery_date", date);
@@ -141,9 +128,9 @@ export async function sendDailyDigest(deliveryDate?: string) {
     return {
       date,
       skipped: false as const,
-      sent: ready.length,
+      sent,
       pending: remaining,
-      zonesComplete: uniqueComplete,
+      zonesComplete,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Digest failed";

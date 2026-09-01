@@ -15,7 +15,7 @@ export function WelcomeEmail({
       preview="Iscrizione confermata."
       unsubscribeUrl={unsubscribeUrl}
     >
-      <Text style={heading}>Iscrizione confermata.</Text>
+      <Text style={heading}>TUtto pronto.</Text>
       <Text style={lead}>
         Ogni giorno ti mandiamo i prezzi dell&apos;energia nella tua zona, così
         sai già quando conviene consumare.

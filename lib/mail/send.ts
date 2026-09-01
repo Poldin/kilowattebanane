@@ -3,8 +3,14 @@ import { Resend } from "resend";
 import { DigestEmail } from "@/emails/digest";
 import { WelcomeEmail } from "@/emails/welcome";
 import { resendFrom, unsubscribeApiUrl, unsubscribePageUrl } from "@/lib/app-url";
-import { digestSubjectLine, type PriceMailModel } from "@/lib/mail/content";
+import {
+  digestSubjectLine,
+  priceMailModelForRegion,
+  type PriceMailModel,
+  type ZoneMailContent,
+} from "@/lib/mail/content";
 import type { Subscriber } from "@/lib/subscribers";
+import type { MarketZoneId } from "@/lib/market-zones";
 
 function getResend() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -36,9 +42,7 @@ export async function sendWelcomeEmail(
   const { data, error } = await getResend().emails.send({
     from: resendFrom(),
     to: subscriber.email,
-    subject: model
-      ? `Iscrizione confermata`
-      : "Iscrizione confermata",
+    subject: "Iscrizione confermata a kilowatt e banane🍌🍌🍌",
     html,
     text,
     headers: unsubscribeHeaders(subscriber.unsubscribe_token),
@@ -48,17 +52,17 @@ export async function sendWelcomeEmail(
   return data?.id;
 }
 
-export async function sendDigestBatch(
+export async function sendZoneDigest(
   deliveryDate: string,
+  zone: MarketZoneId,
   recipients: Subscriber[],
-  modelByKey: Map<string, PriceMailModel>,
+  content: ZoneMailContent,
 ) {
   const resend = getResend();
   const payload = [];
 
   for (const subscriber of recipients) {
-    const model = modelByKey.get(`${subscriber.zone}:${subscriber.region}`);
-    if (!model) continue;
+    const model = priceMailModelForRegion(content, subscriber.region);
     const pageUrl = unsubscribePageUrl(subscriber.unsubscribe_token);
     const html = await render(
       DigestEmail({ unsubscribeUrl: pageUrl, model }),
@@ -81,7 +85,7 @@ export async function sendDigestBatch(
   for (let i = 0; i < payload.length; i += 100) {
     const chunk = payload.slice(i, i + 100);
     const { data, error } = await resend.batch.send(chunk, {
-      idempotencyKey: `digest:${deliveryDate}:${i}`,
+      idempotencyKey: `digest:${deliveryDate}:${zone}:${i}`,
     });
     if (error) throw new Error(error.message);
     ids.push(...(data?.data?.map((item) => item.id) ?? chunk.map(() => null)));
