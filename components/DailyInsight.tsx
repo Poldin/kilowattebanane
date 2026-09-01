@@ -25,11 +25,13 @@ import {
   PRICES_SECTION_ID,
   REGION_QUERY_PARAM,
   pricesShareUrl,
+  regionFromParam,
   zoneForRegion,
   zoneNameForRegion,
   type ItalianRegion,
   type MarketZoneId,
 } from "@/lib/market-zones";
+import { persistRegionPref, readRegionPref } from "@/lib/region-pref";
 import {
   QUARTERS_PER_HOUR,
   formatQuarterSlot,
@@ -1258,18 +1260,31 @@ export function DailyInsight({
     if (next === region) return;
     if (zoneForRegion(next) !== zone) setIsRefreshing(true);
     startTransition(() => setRegion(next as ItalianRegion));
+    persistRegionPref(next);
   }
 
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, "");
     const search = new URLSearchParams(window.location.search);
+    const fromUrl = regionFromParam(search.get(REGION_QUERY_PARAM) ?? undefined);
+    if (fromUrl) {
+      persistRegionPref(fromUrl);
+    } else {
+      const stored = readRegionPref();
+      if (stored && stored !== initialRegion) {
+        if (zoneForRegion(stored) !== initialZone) setIsRefreshing(true);
+        startTransition(() => setRegion(stored));
+        persistRegionPref(stored);
+      }
+    }
+
+    const hash = window.location.hash.replace(/^#/, "");
     const hasDeepLink =
       hash === PRICES_SECTION_ID ||
       search.has(REGION_QUERY_PARAM) ||
       search.has(DATE_QUERY_PARAM);
     if (!hasDeepLink) return;
     document.getElementById(PRICES_SECTION_ID)?.scrollIntoView();
-  }, []);
+  }, [initialRegion, initialZone]);
 
   return (
     <section

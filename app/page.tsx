@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { Header } from "@/components/Header";
 import { RotatingAction } from "@/components/RotatingAction";
 import { SignupProvider, SignupSlot } from "@/components/SignupForm";
@@ -5,6 +6,7 @@ import { DailyInsight } from "@/components/DailyInsight";
 import { Faq } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
 import { fetchZonePrices } from "@/lib/day-ahead-query";
+import { REGION_PREF_KEY } from "@/lib/region-pref";
 import {
   DEFAULT_REGION,
   dateFromParam,
@@ -14,7 +16,11 @@ import {
 
 export default async function Home({ searchParams }: PageProps<"/">) {
   const params = await searchParams;
-  const initialRegion = regionFromParam(params.regione) ?? DEFAULT_REGION;
+  const cookieStore = await cookies();
+  const initialRegion =
+    regionFromParam(params.regione) ??
+    regionFromParam(cookieStore.get(REGION_PREF_KEY)?.value) ??
+    DEFAULT_REGION;
   const initialZone = zoneForRegion(initialRegion) ?? "IT-North";
   const initialDate = dateFromParam(params.giorno);
   let initialRows;
