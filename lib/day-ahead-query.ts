@@ -85,6 +85,28 @@ export function groupZoneDays(rows: DayAheadRow[]): ZoneDay[] {
     .sort((a, b) => b.deliveryDate.localeCompare(a.deliveryDate));
 }
 
+export async function fetchZoneDayPrices(
+  zone: MarketZoneId,
+  deliveryDate: string,
+): Promise<DayAheadRow[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("day_ahead_prices")
+    .select("delivery_date, slot_start, price_eur_mwh")
+    .eq("zone", zone)
+    .eq("delivery_date", deliveryDate)
+    .order("slot_start", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  if (!data?.length) return [];
+
+  return data.map((row) => ({
+    delivery_date: row.delivery_date as string,
+    slot_start: row.slot_start as string,
+    price_eur_mwh: Number(row.price_eur_mwh),
+  }));
+}
+
 export async function fetchZonePrices(zone: MarketZoneId): Promise<DayAheadRow[]> {
   const supabase = createAdminClient();
   const rows: DayAheadRow[] = [];

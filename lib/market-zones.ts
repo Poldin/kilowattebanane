@@ -113,9 +113,10 @@ export function dateFromParam(value: string | string[] | undefined) {
   return trimmed;
 }
 
-export function pricesShareUrl(origin: string, region: string) {
+export function pricesShareUrl(origin: string, region: string, date?: string) {
   const url = new URL("/", origin);
   url.searchParams.set(REGION_QUERY_PARAM, regionToSlug(region));
+  if (date) url.searchParams.set(DATE_QUERY_PARAM, date);
   url.hash = PRICES_SECTION_ID;
   return url.toString();
 }

@@ -1,19 +1,13 @@
 import { NextRequest } from "next/server";
 import { pullDayAheadPrices } from "@/lib/day-ahead";
 import { MARKET_ZONES, type MarketZoneId } from "@/lib/market-zones";
+import { authorizeCron } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function authorize(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = request.headers.get("authorization");
-  return header === `Bearer ${secret}`;
-}
-
 async function handle(request: NextRequest) {
-  if (!authorize(request)) {
+  if (!authorizeCron(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
