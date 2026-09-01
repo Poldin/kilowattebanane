@@ -107,6 +107,18 @@ export async function fetchZoneDayPrices(
   }));
 }
 
+export async function countZoneDaySlots(zone: MarketZoneId, deliveryDate: string) {
+  const supabase = createAdminClient();
+  const { count, error } = await supabase
+    .from("day_ahead_prices")
+    .select("*", { count: "exact", head: true })
+    .eq("zone", zone)
+    .eq("delivery_date", deliveryDate);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function fetchZonePrices(zone: MarketZoneId): Promise<DayAheadRow[]> {
   const supabase = createAdminClient();
   const rows: DayAheadRow[] = [];

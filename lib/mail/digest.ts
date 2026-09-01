@@ -1,5 +1,6 @@
 import { addCalendarDays } from "@/lib/entsoe";
-import { romeToday } from "@/lib/day-ahead-query";
+import { countZoneDaySlots, romeToday } from "@/lib/day-ahead-query";
+import { isCompleteDay } from "@/lib/insights";
 import { createSecretClient } from "@/lib/supabase/secret";
 import { buildZoneMailContent } from "@/lib/mail/content";
 import { sendZoneDigest } from "@/lib/mail/send";
@@ -9,6 +10,12 @@ import {
   type Subscriber,
 } from "@/lib/subscribers";
 import type { MarketZoneId } from "@/lib/market-zones";
+
+type DigestRunRow = {
+  status: string;
+  started_at: string | null;
+  attempt_count: number | null;
+};
 
 function groupByZone(subscribers: Subscriber[]) {
   const groups = new Map<MarketZoneId, Subscriber[]>();
@@ -20,27 +27,92 @@ function groupByZone(subscribers: Subscriber[]) {
   return groups;
 }
 
-export async function sendDailyDigest(deliveryDate?: string) {
-  const date = deliveryDate ?? addCalendarDays(romeToday(), 1);
-  const supabase = createSecretClient();
+function isInProgress(run: DigestRunRow | null) {
+  if (!run || run.status !== "sending" || !run.started_at) return false;
+  return Date.now() - new Date(run.started_at).getTime() < 10 * 60 * 1000;
+}
 
-  const { data: existing, error: lookupError } = await supabase
+async function loadRun(
+  supabase: ReturnType<typeof createSecretClient>,
+  date: string,
+) {
+  const { data, error } = await supabase
     .from("digest_runs")
     .select("status, started_at, attempt_count")
     .eq("delivery_date", date)
     .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as DigestRunRow | null;
+}
 
-  if (lookupError) throw new Error(lookupError.message);
+async function anyZoneComplete(zones: MarketZoneId[], date: string) {
+  for (const zone of zones) {
+    if (isCompleteDay(await countZoneDaySlots(zone, date))) return true;
+  }
+  return false;
+}
 
-  if (existing?.status === "sent") {
-    return { date, skipped: true as const, reason: "already-sent" };
+async function resolveDigestDate(
+  supabase: ReturnType<typeof createSecretClient>,
+  zones: MarketZoneId[],
+) {
+  const today = romeToday();
+  const tomorrow = addCalendarDays(today, 1);
+  const tomorrowRun = await loadRun(supabase, tomorrow);
+
+  if (tomorrowRun?.status !== "sent" && !isInProgress(tomorrowRun)) {
+    if (await anyZoneComplete(zones, tomorrow)) {
+      return { date: tomorrow, picked: "tomorrow" as const };
+    }
   }
 
-  if (existing?.status === "sending" && existing.started_at) {
-    const started = new Date(existing.started_at).getTime();
-    if (Date.now() - started < 10 * 60 * 1000) {
-      return { date, skipped: true as const, reason: "in-progress" };
+  if (isInProgress(tomorrowRun) || tomorrowRun?.status === "sent") {
+    return null;
+  }
+
+  const todayRun = await loadRun(supabase, today);
+  if (todayRun?.status === "sent" || isInProgress(todayRun)) {
+    return null;
+  }
+  if (await anyZoneComplete(zones, today)) {
+    return { date: today, picked: "today" as const };
+  }
+
+  return null;
+}
+
+export async function sendDailyDigest(deliveryDate?: string) {
+  const supabase = createSecretClient();
+  const subscribers = await listActiveSubscribers();
+  const zones = [...new Set(subscribers.map((row) => row.zone))];
+
+  let date: string;
+  let picked: "explicit" | "tomorrow" | "today";
+
+  if (deliveryDate) {
+    date = deliveryDate;
+    picked = "explicit";
+  } else {
+    const resolved = await resolveDigestDate(supabase, zones);
+    if (!resolved) {
+      return {
+        date: addCalendarDays(romeToday(), 1),
+        skipped: true as const,
+        reason: "nothing-to-send" as const,
+      };
     }
+    date = resolved.date;
+    picked = resolved.picked;
+  }
+
+  const existing = await loadRun(supabase, date);
+
+  if (existing?.status === "sent") {
+    return { date, skipped: true as const, reason: "already-sent" as const, picked };
+  }
+
+  if (isInProgress(existing)) {
+    return { date, skipped: true as const, reason: "in-progress" as const, picked };
   }
 
   const { error: claimError } = await supabase.from("digest_runs").upsert({
@@ -54,7 +126,6 @@ export async function sendDailyDigest(deliveryDate?: string) {
   if (claimError) throw new Error(claimError.message);
 
   try {
-    const subscribers = await listActiveSubscribers();
     if (subscribers.length === 0) {
       await supabase
         .from("digest_runs")
@@ -64,7 +135,7 @@ export async function sendDailyDigest(deliveryDate?: string) {
           zones_complete: [],
         })
         .eq("delivery_date", date);
-      return { date, skipped: true as const, reason: "no-subscribers" };
+      return { date, skipped: true as const, reason: "no-subscribers" as const, picked };
     }
 
     const alreadySent = await sentSubscriberIds(date);
@@ -110,7 +181,8 @@ export async function sendDailyDigest(deliveryDate?: string) {
         skipped: false as const,
         sent: 0,
         pending: pending.length,
-        zonesComplete: zonesComplete,
+        zonesComplete,
+        picked,
       };
     }
 
@@ -131,6 +203,7 @@ export async function sendDailyDigest(deliveryDate?: string) {
       sent,
       pending: remaining,
       zonesComplete,
+      picked,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Digest failed";
