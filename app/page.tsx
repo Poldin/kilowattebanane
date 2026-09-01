@@ -1,6 +1,7 @@
 import { Header } from "@/components/Header";
 import { RotatingAction } from "@/components/RotatingAction";
 import { SignupForm } from "@/components/SignupForm";
+import { DailyInsight } from "@/components/DailyInsight";
 import { Faq } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
 
@@ -31,6 +32,10 @@ export default function Home() {
 
         <div className="mx-auto mt-10 w-full max-w-md sm:mt-12">
           <SignupForm />
+        </div>
+
+        <div className="mx-auto mt-10 w-full max-w-xl sm:mt-12">
+          <DailyInsight />
         </div>
 
         <div className="mt-16 sm:mt-20">
