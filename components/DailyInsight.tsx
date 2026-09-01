@@ -564,6 +564,23 @@ function cheapestSlotsInBands(prices: number[], bands: PriceBand[]) {
   return slots;
 }
 
+function priciestSlotsInBands(prices: number[], bands: PriceBand[]) {
+  const slots = new Set<number>();
+  for (const band of bands) {
+    let worstSlot = -1;
+    let worstPrice = -Infinity;
+    const end = Math.min(band.end, prices.length - 1);
+    for (let slot = band.start; slot <= end; slot++) {
+      if (prices[slot] > worstPrice) {
+        worstPrice = prices[slot];
+        worstSlot = slot;
+      }
+    }
+    if (worstSlot >= 0) slots.add(worstSlot);
+  }
+  return slots;
+}
+
 function formatTipRanges(bands: PriceBand[]) {
   return joinItalian(
     bands.map((band) => {
@@ -965,12 +982,14 @@ function QuarterColumn({
   prices,
   offset,
   bananaSlots,
+  monkeySlots,
   cheapBands,
   peakBands,
 }: {
   prices: number[];
   offset: number;
   bananaSlots: Set<number>;
+  monkeySlots: Set<number>;
   cheapBands: PriceBand[];
   peakBands: PriceBand[];
 }) {
@@ -996,6 +1015,7 @@ function QuarterColumn({
           const cheap = slotInBands(slot, cheapBands);
           const peak = slotInBands(slot, peakBands);
           const cheapest = bananaSlots.has(slot);
+          const peakiest = monkeySlots.has(slot);
           return (
             <tr
               key={slot}
@@ -1035,7 +1055,16 @@ function QuarterColumn({
                     </span>
                   </>
                 ) : null}
-                {peak ? <span className="sr-only">picco </span> : null}
+                {peakiest ? (
+                  <>
+                    <span className="sr-only">picco </span>
+                    <span className="mr-0.5" aria-hidden>
+                      🐵
+                    </span>
+                  </>
+                ) : peak ? (
+                  <span className="sr-only">picco </span>
+                ) : null}
                 {formatEurocent(toEurocentPerKwh(price))}
               </td>
             </tr>
@@ -1048,6 +1077,7 @@ function QuarterColumn({
 
 function QuarterPriceTable({ day }: { day: DayInsight }) {
   const bananaSlots = cheapestSlotsInBands(day.prices, day.cheapBands);
+  const monkeySlots = priciestSlotsInBands(day.prices, day.peakBands);
   const split = day.noonIndex > 0 && day.noonIndex < day.prices.length
     ? day.noonIndex
     : Math.floor(day.prices.length / 2);
@@ -1077,6 +1107,7 @@ function QuarterPriceTable({ day }: { day: DayInsight }) {
                 prices={day.prices.slice(column.start, column.end)}
                 offset={column.start}
                 bananaSlots={bananaSlots}
+                monkeySlots={monkeySlots}
                 cheapBands={day.cheapBands}
                 peakBands={day.peakBands}
               />
