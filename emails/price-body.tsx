@@ -1,5 +1,6 @@
-import { Button, Column, Row, Section, Text } from "react-email";
+import { Button, Column, Img, Link, Row, Section, Text } from "react-email";
 import type { PriceMailModel } from "@/lib/mail/content";
+import { MAIL_CHART_DISPLAY_H, MAIL_CHART_DISPLAY_W } from "@/lib/mail/chart";
 
 export function PriceDigestBody({
   model,
@@ -14,6 +15,15 @@ export function PriceDigestBody({
       <Text style={styles.kicker}>
         {model.dateLabel} · zona {model.zoneName} · {model.region}
       </Text>
+      <Link href={model.ctaUrl} style={styles.chartLink}>
+        <Img
+          src={model.chartUrl}
+          alt={`Grafico dei prezzi ${model.dateLabel}, zona ${model.zoneName}`}
+          width={MAIL_CHART_DISPLAY_W}
+          height={MAIL_CHART_DISPLAY_H}
+          style={styles.chart}
+        />
+      </Link>
       <Text style={styles.tip}>{model.bestTip}</Text>
       {model.worstTip ? <Text style={styles.worst}>{model.worstTip}</Text> : null}
 
@@ -64,6 +74,17 @@ const styles = {
     color: "#737373",
     fontSize: "13px",
     margin: "0 0 12px",
+  },
+  chartLink: {
+    display: "block",
+    margin: "0 0 16px",
+    textDecoration: "none",
+  },
+  chart: {
+    borderRadius: "8px",
+    display: "block",
+    height: "auto",
+    width: "100%",
   },
   tip: {
     color: "#111111",

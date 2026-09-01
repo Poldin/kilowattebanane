@@ -9,7 +9,7 @@ import {
 } from "@/lib/insights";
 import { pricesShareUrl, zoneNameForRegion, type ItalianRegion, type MarketZoneId } from "@/lib/market-zones";
 import { toHourlyAverages } from "@/lib/prices";
-import { publicSiteUrl } from "@/lib/app-url";
+import { mailChartUrl, publicSiteUrl } from "@/lib/app-url";
 
 export type PriceMailModel = {
   deliveryDate: string;
@@ -23,6 +23,7 @@ export type PriceMailModel = {
   maxLabel: string;
   hourly: { hour: number; label: string; priceLabel: string }[];
   ctaUrl: string;
+  chartUrl: string;
 };
 
 export function formatMailDate(ymd: string, today = romeToday()) {
@@ -69,6 +70,7 @@ export async function buildPriceMailModel(
       priceLabel: formatEurocent(price),
     })),
     ctaUrl: pricesShareUrl(publicSiteUrl(), region, deliveryDate),
+    chartUrl: mailChartUrl(zone, deliveryDate),
   };
 }
 

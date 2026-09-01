@@ -121,6 +121,17 @@ export function smoothPathSegmentControls(
   };
 }
 
+export function toSmoothPath(points: { x: number; y: number }[]) {
+  if (points.length < 2) return "";
+
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const { c1, c2, p2 } = smoothPathSegmentControls(points, i);
+    d += ` C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`;
+  }
+  return d;
+}
+
 function cubicBezierPoint(
   p1: { x: number; y: number },
   c1: { x: number; y: number },

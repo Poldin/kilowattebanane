@@ -37,8 +37,8 @@ export async function sendWelcomeEmail(
     from: resendFrom(),
     to: subscriber.email,
     subject: model
-      ? `Ecco i prezzi di oggi in ${model.zoneName}`
-      : "Ecco i prezzi di oggi nella tua zona",
+      ? `Iscrizione confermata`
+      : "Iscrizione confermata",
     html,
     text,
     headers: unsubscribeHeaders(subscriber.unsubscribe_token),

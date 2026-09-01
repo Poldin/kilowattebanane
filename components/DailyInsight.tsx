@@ -58,9 +58,9 @@ import {
   sampleNearestHour,
   sampleSmoothCurve,
   slotInBands,
-  smoothPathSegmentControls,
   toEurocentPerKwh,
   toPoints,
+  toSmoothPath,
   yScale,
 } from "@/lib/insights";
 
@@ -357,17 +357,6 @@ function DayStats({ prices }: { prices: number[] }) {
       </p>
     </div>
   );
-}
-
-function toSmoothPath(points: { x: number; y: number }[]) {
-  if (points.length < 2) return "";
-
-  let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const { c1, c2, p2 } = smoothPathSegmentControls(points, i);
-    d += ` C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`;
-  }
-  return d;
 }
 
 function bananaToMonkeyPercent(price: number, min: number, max: number) {

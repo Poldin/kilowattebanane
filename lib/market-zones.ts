@@ -96,6 +96,20 @@ export function regionFromParam(value: string | string[] | undefined) {
   return REGION_BY_SLUG[slugifyRegion(trimmed)];
 }
 
+export function zoneFromParam(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return undefined;
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+  const zone = decoded.trim();
+  if (zone in MARKET_ZONES) return zone as MarketZoneId;
+  return undefined;
+}
+
 export function dateFromParam(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return undefined;

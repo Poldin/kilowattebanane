@@ -18,3 +18,10 @@ export function unsubscribePageUrl(token: string) {
 export function resendFrom() {
   return process.env.RESEND_FROM ?? "Paolo <onboarding@resend.dev>";
 }
+
+export function mailChartUrl(zone: string, date: string) {
+  const url = new URL("/api/mail/chart", publicSiteUrl());
+  url.searchParams.set("zona", zone);
+  url.searchParams.set("giorno", date);
+  return url.toString();
+}
