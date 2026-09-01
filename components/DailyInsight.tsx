@@ -19,14 +19,18 @@ import {
   toHourlyAverages,
 } from "@/lib/prices";
 
+type PriceBand = {
+  start: number;
+  end: number;
+  hour: number;
+};
+
 type DayInsight = {
   deliveryDate: string;
   prices: number[];
   noonIndex: number;
-  cheapStart: number;
-  cheapEnd: number;
-  peakStart: number;
-  peakEnd: number;
+  cheapBands: PriceBand[];
+  peakBands: PriceBand[];
   bestTip: string;
   worstTip: string;
 };
@@ -48,10 +52,8 @@ function buildDayInsight(day: ZoneDay): DayInsight {
     deliveryDate: day.deliveryDate,
     prices: day.prices,
     noonIndex: day.noonIndex,
-    cheapStart: recommendations.cheapStart,
-    cheapEnd: recommendations.cheapEnd,
-    peakStart: recommendations.peakStart,
-    peakEnd: recommendations.peakEnd,
+    cheapBands: recommendations.cheapBands,
+    peakBands: recommendations.peakBands,
     bestTip: recommendations.bestTip,
     worstTip: recommendations.worstTip,
   };
@@ -59,6 +61,7 @@ function buildDayInsight(day: ZoneDay): DayInsight {
 
 const BANANA = "#F5D547";
 const PEAK = "#EF4444";
+const MARKER_FONT_SIZE = 20;
 const CHART_W = 640;
 const CHART_W_MOBILE = 400;
 const CHART_H_DESKTOP = 260;
@@ -218,35 +221,16 @@ function cubicBezierPoint(
   };
 }
 
-function smoothPathExtrema(points: { x: number; y: number }[]) {
-  if (points.length === 0) {
-    return { min: { x: 0, y: 0 }, max: { x: 0, y: 0 } };
-  }
-
-  let min = { ...points[0] };
-  let max = { ...points[0] };
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const { p1, c1, c2, p2 } = smoothPathSegmentControls(points, i);
-    for (let step = 0; step <= 40; step++) {
-      const p = cubicBezierPoint(p1, c1, c2, p2, step / 40);
-      if (p.y < min.y) min = p;
-      if (p.y > max.y) max = p;
-    }
-  }
-
-  return { min, max };
-}
-
 function yToPrice(
   y: number,
   scaleMin: number,
   scaleMax: number,
   chartH: number = CHART_H_DESKTOP,
+  pad: { t: number; r: number; b: number; l: number } = PAD,
 ) {
-  const innerH = chartH - PAD.t - PAD.b;
+  const innerH = chartH - pad.t - pad.b;
   const range = scaleMax - scaleMin || 1;
-  return scaleMin + (1 - (y - PAD.t) / innerH) * range;
+  return scaleMin + (1 - (y - pad.t) / innerH) * range;
 }
 
 type CurveSample = {
@@ -260,8 +244,11 @@ function sampleSmoothCurve(
   points: { x: number; y: number }[],
   scaleMin: number,
   scaleMax: number,
+  chartW = CHART_W,
+  pad: { t: number; r: number; b: number; l: number } = PAD,
+  chartH = CHART_H_DESKTOP,
 ): CurveSample[] {
-  const innerW = CHART_W - PAD.l - PAD.r;
+  const innerW = chartW - pad.l - pad.r;
   const samples: CurveSample[] = [];
 
   for (let i = 0; i < points.length - 1; i++) {
@@ -271,8 +258,8 @@ function sampleSmoothCurve(
       samples.push({
         x: p.x,
         y: p.y,
-        hour: ((p.x - PAD.l) / innerW) * 24,
-        price: yToPrice(p.y, scaleMin, scaleMax),
+        hour: ((p.x - pad.l) / innerW) * 24,
+        price: yToPrice(p.y, scaleMin, scaleMax, chartH, pad),
       });
     }
   }
@@ -294,36 +281,72 @@ function findLocalExtrema(samples: CurveSample[]) {
   return { minima, maxima };
 }
 
-function pickDistinctTips(
+const TIP_DELTA = 0.05;
+const MAX_TIPS = 3;
+const MIN_TIP_SEPARATION_HOURS = 0.75;
+const NEAR_ZERO_CENT = 1;
+const TOP_TIP_WINDOW_HOURS = 1;
+
+function isNearZeroOrNegative(price: number) {
+  return price <= 0 || Math.abs(price) < NEAR_ZERO_CENT;
+}
+
+function withinTipDelta(
+  price: number,
+  extreme: number,
+  dayMin: number,
+  dayMax: number,
+) {
+  const delta = Math.abs(price - extreme);
+  if (isNearZeroOrNegative(extreme)) {
+    const span = dayMax - dayMin || 1;
+    return delta / span <= TIP_DELTA;
+  }
+  return delta / Math.abs(extreme) <= TIP_DELTA;
+}
+
+function pickSimilarTips(
   extrema: CurveSample[],
   allSamples: CurveSample[],
   mode: "min" | "max",
-  count: number,
-) {
-  const sorted = [...extrema].sort((a, b) =>
+  dayMin: number,
+  dayMax: number,
+): CurveSample[] {
+  if (allSamples.length === 0) return [];
+
+  const global = allSamples.reduce((best, sample) => {
+    if (mode === "min") return sample.price < best.price ? sample : best;
+    return sample.price > best.price ? sample : best;
+  });
+
+  const candidates = [global, ...extrema].sort((a, b) =>
     mode === "min" ? a.price - b.price : b.price - a.price,
   );
+  const extremePrice = candidates[0].price;
   const picked: CurveSample[] = [];
 
-  for (const sample of sorted) {
-    if (picked.some((p) => Math.abs(p.hour - sample.hour) < 0.75)) continue;
+  for (const sample of candidates) {
+    if (!withinTipDelta(sample.price, extremePrice, dayMin, dayMax)) break;
+    if (
+      picked.some(
+        (p) => Math.abs(p.hour - sample.hour) < MIN_TIP_SEPARATION_HOURS,
+      )
+    ) {
+      continue;
+    }
     picked.push(sample);
-    if (picked.length === count) return picked;
-  }
-
-  const fallback = [...allSamples].sort((a, b) =>
-    mode === "min" ? a.price - b.price : b.price - a.price,
-  );
-  for (const sample of fallback) {
-    if (picked.some((p) => Math.abs(p.hour - sample.hour) < 0.75)) continue;
-    picked.push(sample);
-    if (picked.length === count) break;
+    if (picked.length === MAX_TIPS) break;
   }
 
   return picked;
 }
 
-const TOP_TIP_WINDOW_HOURS = 1;
+function sampleNearestHour(samples: CurveSample[], hour: number) {
+  if (samples.length === 0) return null;
+  return samples.reduce((best, sample) =>
+    Math.abs(sample.hour - hour) < Math.abs(best.hour - hour) ? sample : best,
+  );
+}
 
 function formatTipHour(hour: number) {
   const totalMinutes = Math.round(hour * 60);
@@ -346,48 +369,105 @@ function hoursToQuarterRange(fromHour: number, toHour: number) {
   return hourRangeToQuarters(Math.floor(fromHour), Math.floor(toHour));
 }
 
-function computeRecommendations(prices: number[]) {
-  if (prices.length < QUARTERS_PER_HOUR) {
-    return {
-      cheapStart: 0,
-      cheapEnd: 0,
-      peakStart: 0,
-      peakEnd: 0,
-      bestTip: "Prezzi in aggiornamento.",
-      worstTip: "",
-    };
+function joinItalian(parts: string[]) {
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} e ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
+}
+
+function bandsFromTips(tips: CurveSample[]): PriceBand[] {
+  return [...tips]
+    .sort((a, b) => a.hour - b.hour)
+    .map((tip) => {
+      const bounds = tipRangeBounds(tip.hour);
+      const quarters = hoursToQuarterRange(bounds.from, bounds.to);
+      return { start: quarters.start, end: quarters.end, hour: tip.hour };
+    });
+}
+
+function mergeQuarterBands(bands: PriceBand[]) {
+  if (bands.length === 0) return [];
+  const sorted = [...bands].sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [
+    { start: sorted[0].start, end: sorted[0].end },
+  ];
+  for (const band of sorted.slice(1)) {
+    const last = merged[merged.length - 1];
+    if (band.start <= last.end + 1) {
+      last.end = Math.max(last.end, band.end);
+    } else {
+      merged.push({ start: band.start, end: band.end });
+    }
   }
+  return merged;
+}
+
+function slotInBands(slot: number, bands: PriceBand[]) {
+  return bands.some((band) => slot >= band.start && slot <= band.end);
+}
+
+function cheapestSlotsInBands(prices: number[], bands: PriceBand[]) {
+  const slots = new Set<number>();
+  for (const band of bands) {
+    let bestSlot = -1;
+    let bestPrice = Infinity;
+    const end = Math.min(band.end, prices.length - 1);
+    for (let slot = band.start; slot <= end; slot++) {
+      if (prices[slot] < bestPrice) {
+        bestPrice = prices[slot];
+        bestSlot = slot;
+      }
+    }
+    if (bestSlot >= 0) slots.add(bestSlot);
+  }
+  return slots;
+}
+
+function formatTipRanges(bands: PriceBand[]) {
+  return joinItalian(
+    bands.map((band) => {
+      const bounds = tipRangeBounds(band.hour);
+      return `dalle ${formatTipHour(bounds.from)} alle ${formatTipHour(bounds.to)}`;
+    }),
+  );
+}
+
+function emptyRecommendations() {
+  return {
+    cheapBands: [] as PriceBand[],
+    peakBands: [] as PriceBand[],
+    bestTip: "Prezzi in aggiornamento.",
+    worstTip: "",
+  };
+}
+
+function computeRecommendations(prices: number[]) {
+  if (prices.length < QUARTERS_PER_HOUR) return emptyRecommendations();
 
   const hourly = toHourlyAverages(prices);
   const pricesCent = hourly.map(toEurocentPerKwh);
+  const dayMin = Math.min(...pricesCent);
+  const dayMax = Math.max(...pricesCent);
   const scale = yScale(pricesCent);
   const points = toPoints(pricesCent, scale.min, scale.max, CHART_H_DESKTOP);
   const samples = sampleSmoothCurve(points, scale.min, scale.max);
   const { minima, maxima } = findLocalExtrema(samples);
-  const bestSample = pickDistinctTips(minima, samples, "min", 1)[0];
-  const worstSample = pickDistinctTips(maxima, samples, "max", 1)[0];
-  if (!bestSample || !worstSample) {
-    return {
-      cheapStart: 0,
-      cheapEnd: 0,
-      peakStart: 0,
-      peakEnd: 0,
-      bestTip: "Prezzi in aggiornamento.",
-      worstTip: "",
-    };
-  }
-  const bestBounds = tipRangeBounds(bestSample.hour);
-  const worstBounds = tipRangeBounds(worstSample.hour);
-  const bestQuarters = hoursToQuarterRange(bestBounds.from, bestBounds.to);
-  const worstQuarters = hoursToQuarterRange(worstBounds.from, worstBounds.to);
+  const bestTips = pickSimilarTips(minima, samples, "min", dayMin, dayMax);
+  const worstTips = pickSimilarTips(maxima, samples, "max", dayMin, dayMax);
+  if (bestTips.length === 0) return emptyRecommendations();
+
+  const cheapBands = bandsFromTips(bestTips);
+  const peakBands = bandsFromTips(worstTips);
 
   return {
-    cheapStart: bestQuarters.start,
-    cheapEnd: bestQuarters.end,
-    peakStart: worstQuarters.start,
-    peakEnd: worstQuarters.end,
-    bestTip: `🍌 Top risparmio dalle ${formatTipHour(bestBounds.from)} alle ${formatTipHour(bestBounds.to)}`,
-    worstTip: `🐵 Evita consumi dalle ${formatTipHour(worstBounds.from)} alle ${formatTipHour(worstBounds.to)}`,
+    cheapBands,
+    peakBands,
+    bestTip: `🍌 Top risparmio ${formatTipRanges(cheapBands)}`,
+    worstTip:
+      peakBands.length > 0
+        ? `🐵 Evita consumi ${formatTipRanges(peakBands)}`
+        : "",
   };
 }
 
@@ -430,19 +510,36 @@ function PriceChart({ day }: { day: DayInsight }) {
     [pricesCent, scale.min, scale.max, chartH, chartW, pad],
   );
   const line = useMemo(() => toSmoothPath(points), [points]);
-  const { min: monkey, max: banana } = useMemo(
-    () => smoothPathExtrema(points),
-    [points],
+  const samples = useMemo(
+    () =>
+      sampleSmoothCurve(points, scale.min, scale.max, chartW, pad, chartH),
+    [points, scale.min, scale.max, chartW, pad, chartH],
+  );
+  const bananaMarks = useMemo(
+    () =>
+      day.cheapBands
+        .map((band) => sampleNearestHour(samples, band.hour))
+        .filter((mark): mark is CurveSample => mark !== null),
+    [day.cheapBands, samples],
+  );
+  const monkeyMarks = useMemo(
+    () =>
+      day.peakBands
+        .map((band) => sampleNearestHour(samples, band.hour))
+        .filter((mark): mark is CurveSample => mark !== null),
+    [day.peakBands, samples],
   );
 
-  const cheapestIndex = pricesCent.indexOf(Math.min(...pricesCent));
-  const peakIndex = pricesCent.indexOf(Math.max(...pricesCent));
   const innerH = chartH - pad.t - pad.b;
-  const cheapFromX = hourToX(day.cheapStart / QUARTERS_PER_HOUR, chartW, pad);
-  const cheapToX = hourToX((day.cheapEnd + 1) / QUARTERS_PER_HOUR, chartW, pad);
-  const peakFromX = hourToX(day.peakStart / QUARTERS_PER_HOUR, chartW, pad);
-  const peakToX = hourToX((day.peakEnd + 1) / QUARTERS_PER_HOUR, chartW, pad);
+  const cheapFills = mergeQuarterBands(day.cheapBands);
+  const peakFills = mergeQuarterBands(day.peakBands);
   const range = scale.max - scale.min || 1;
+  const bananaHours = joinItalian(
+    day.cheapBands.map((band) => formatTipHour(band.hour)),
+  );
+  const monkeyHours = joinItalian(
+    day.peakBands.map((band) => formatTipHour(band.hour)),
+  );
 
   const hourTicks = [0, 6, 12, 18, 24];
   const font = "var(--font-geist-sans), system-ui, sans-serif";
@@ -452,7 +549,7 @@ function PriceChart({ day }: { day: DayInsight }) {
       viewBox={`0 0 ${chartW} ${chartH}`}
       className="h-auto w-full"
       role="img"
-      aria-label={`Andamento orario del prezzo in centesimi di euro per kilowattora. Minimo alle ${cheapestIndex}:00, massimo alle ${peakIndex}:00.`}
+      aria-label={`Andamento orario del prezzo in centesimi di euro per kilowattora. Momenti più convenienti alle ${bananaHours || "n.d."}, picchi da evitare alle ${monkeyHours || "n.d."}.`}
     >
       <rect width={chartW} height={chartH} fill="#111111" rx="8" />
 
@@ -521,22 +618,36 @@ function PriceChart({ day }: { day: DayInsight }) {
         );
       })}
 
-      <rect
-        x={cheapFromX}
-        y={pad.t}
-        width={Math.max(cheapToX - cheapFromX, 8)}
-        height={innerH}
-        fill={BANANA}
-        opacity="0.08"
-      />
-      <rect
-        x={peakFromX}
-        y={pad.t}
-        width={Math.max(peakToX - peakFromX, 8)}
-        height={innerH}
-        fill={PEAK}
-        opacity="0.16"
-      />
+      {cheapFills.map((band) => {
+        const fromX = hourToX(band.start / QUARTERS_PER_HOUR, chartW, pad);
+        const toX = hourToX((band.end + 1) / QUARTERS_PER_HOUR, chartW, pad);
+        return (
+          <rect
+            key={`cheap-${band.start}-${band.end}`}
+            x={fromX}
+            y={pad.t}
+            width={Math.max(toX - fromX, 8)}
+            height={innerH}
+            fill={BANANA}
+            opacity="0.08"
+          />
+        );
+      })}
+      {peakFills.map((band) => {
+        const fromX = hourToX(band.start / QUARTERS_PER_HOUR, chartW, pad);
+        const toX = hourToX((band.end + 1) / QUARTERS_PER_HOUR, chartW, pad);
+        return (
+          <rect
+            key={`peak-${band.start}-${band.end}`}
+            x={fromX}
+            y={pad.t}
+            width={Math.max(toX - fromX, 8)}
+            height={innerH}
+            fill={PEAK}
+            opacity="0.16"
+          />
+        );
+      })}
 
       <path
         d={line}
@@ -547,23 +658,29 @@ function PriceChart({ day }: { day: DayInsight }) {
         strokeLinejoin="round"
       />
 
-      <text
-        x={banana.x}
-        y={banana.y - 10}
-        textAnchor="middle"
-        fontSize="18"
-      >
-        🍌
-      </text>
+      {bananaMarks.map((mark) => (
+        <text
+          key={`banana-${mark.hour}`}
+          x={mark.x}
+          y={mark.y - 11}
+          textAnchor="middle"
+          fontSize={MARKER_FONT_SIZE}
+        >
+          🍌
+        </text>
+      ))}
 
-      <text
-        x={monkey.x}
-        y={monkey.y - 10}
-        textAnchor="middle"
-        fontSize="18"
-      >
-        🐵
-      </text>
+      {monkeyMarks.map((mark) => (
+        <text
+          key={`monkey-${mark.hour}`}
+          x={mark.x}
+          y={mark.y - 11}
+          textAnchor="middle"
+          fontSize={MARKER_FONT_SIZE}
+        >
+          🐵
+        </text>
+      ))}
     </svg>
   );
 }
@@ -571,19 +688,15 @@ function PriceChart({ day }: { day: DayInsight }) {
 function QuarterColumn({
   prices,
   offset,
-  minPrice,
-  cheapStart,
-  cheapEnd,
-  peakStart,
-  peakEnd,
+  bananaSlots,
+  cheapBands,
+  peakBands,
 }: {
   prices: number[];
   offset: number;
-  minPrice: number;
-  cheapStart: number;
-  cheapEnd: number;
-  peakStart: number;
-  peakEnd: number;
+  bananaSlots: Set<number>;
+  cheapBands: PriceBand[];
+  peakBands: PriceBand[];
 }) {
   return (
     <table className="w-full table-fixed border-collapse text-xs leading-tight sm:text-sm">
@@ -604,9 +717,9 @@ function QuarterColumn({
       <tbody>
         {prices.map((price, i) => {
           const slot = offset + i;
-          const cheap = slot >= cheapStart && slot <= cheapEnd;
-          const peak = slot >= peakStart && slot <= peakEnd;
-          const cheapest = price === minPrice;
+          const cheap = slotInBands(slot, cheapBands);
+          const peak = slotInBands(slot, peakBands);
+          const cheapest = bananaSlots.has(slot);
           return (
             <tr
               key={slot}
@@ -658,7 +771,7 @@ function QuarterColumn({
 }
 
 function QuarterPriceTable({ day }: { day: DayInsight }) {
-  const minPrice = Math.min(...day.prices);
+  const bananaSlots = cheapestSlotsInBands(day.prices, day.cheapBands);
   const split = day.noonIndex > 0 && day.noonIndex < day.prices.length
     ? day.noonIndex
     : Math.floor(day.prices.length / 2);
@@ -687,11 +800,9 @@ function QuarterPriceTable({ day }: { day: DayInsight }) {
               <QuarterColumn
                 prices={day.prices.slice(column.start, column.end)}
                 offset={column.start}
-                minPrice={minPrice}
-                cheapStart={day.cheapStart}
-                cheapEnd={day.cheapEnd}
-                peakStart={day.peakStart}
-                peakEnd={day.peakEnd}
+                bananaSlots={bananaSlots}
+                cheapBands={day.cheapBands}
+                peakBands={day.peakBands}
               />
             </div>
           ))}

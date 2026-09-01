@@ -52,7 +52,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Come leggo il grafico?",
     answer:
-      "L'asse verticale è in centesimi di euro per kilowattora (c€/kWh): è il prezzo all'ingrosso di un'ora di consumo, non la bolletta finale. L'asse orizzontale copre l'intera giornata, da mezzanotte a mezzanotte. La curva gialla segue l'andamento orario; la banana segna il momento più conveniente, la scimmia il picco da evitare. Sotto, la tabella ripete gli stessi valori ogni quarto d'ora.",
+      "L'asse verticale è in centesimi di euro per kilowattora (c€/kWh): è il prezzo all'ingrosso di un'ora di consumo, non la bolletta finale. L'asse orizzontale copre l'intera giornata, da mezzanotte a mezzanotte. La curva gialla segue l'andamento orario; le banane segnano i momenti più convenienti, le scimmie i picchi da evitare — se due valli o due picchi distano poco, li segnaliamo entrambi. Sotto, la tabella ripete gli stessi valori ogni quarto d'ora.",
   },
   {
     question: "Il prezzo all'ingrosso è quello che pago in bolletta?",
