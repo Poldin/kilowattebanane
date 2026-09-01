@@ -35,6 +35,13 @@ export function pullWindow(daysBack: number, aheadDays = 1) {
   const today = deliveryDateInRome(new Date());
   const from = addCalendarDays(today, -Math.max(0, daysBack));
   const to = addCalendarDays(today, Math.max(0, aheadDays));
+  return rangeWindow(from, to);
+}
+
+export function rangeWindow(from: string, to: string) {
+  if (from > to) {
+    return rangeWindow(to, from);
+  }
   return {
     from,
     to,
@@ -115,15 +122,29 @@ async function pullZone(options: {
   throw lastError instanceof Error ? lastError : new Error("energy-charts failed");
 }
 
+export async function pullDayAheadRange(
+  from: string,
+  to: string,
+  zoneIds: MarketZoneId[] = ZONES,
+): Promise<PullSummary> {
+  return pullDayAheadForWindow(rangeWindow(from, to), zoneIds);
+}
+
 export async function pullDayAheadPrices(
   daysBack = 0,
   aheadDays = 1,
   zoneIds: MarketZoneId[] = ZONES,
 ): Promise<PullSummary> {
+  return pullDayAheadForWindow(pullWindow(daysBack, aheadDays), zoneIds);
+}
+
+async function pullDayAheadForWindow(
+  window: ReturnType<typeof rangeWindow>,
+  zoneIds: MarketZoneId[],
+): Promise<PullSummary> {
   const apiKey = process.env.ENTSOE_API_KEY;
   if (!apiKey) throw new Error("Missing ENTSOE_API_KEY");
 
-  const window = pullWindow(daysBack, aheadDays);
   const zones: ZonePullResult[] = [];
   const errors: PullSummary["errors"] = [];
   const allSlots: PriceSlot[] = [];

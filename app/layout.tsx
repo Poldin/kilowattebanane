@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { publicSiteUrl } from "@/lib/app-url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,9 +14,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "kilowatt e banane🍌🍌🍌",
+  metadataBase: new URL(publicSiteUrl()),
+  title: {
+    default: "kilowatt e banane🍌🍌🍌",
+    template: "%s · kilowatt e banane",
+  },
   description:
     "Ricevi ogni giorno una mail con il costo dell'energia nella tua zona. Sai già al mattino quando consumare per risparmiare sulla bolletta. Gratis.",
+  openGraph: {
+    locale: "it_IT",
+    type: "website",
+    siteName: "kilowatt e banane",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

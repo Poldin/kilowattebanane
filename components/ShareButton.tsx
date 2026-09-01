@@ -7,7 +7,8 @@ function isAbortError(error: unknown) {
 }
 
 type ShareButtonProps = {
-  getUrl: () => string;
+  getUrl?: () => string;
+  url?: string;
   title: string;
   text: string;
   ariaLabel: string;
@@ -15,6 +16,7 @@ type ShareButtonProps = {
 
 export function ShareButton({
   getUrl,
+  url: urlProp,
   title,
   text,
   ariaLabel,
@@ -22,7 +24,8 @@ export function ShareButton({
   const [copied, setCopied] = useState(false);
 
   async function share() {
-    const url = getUrl();
+    const url = getUrl?.() ?? urlProp ?? "";
+    if (!url) return;
     const data = { title, text, url };
 
     if (typeof navigator.share === "function") {

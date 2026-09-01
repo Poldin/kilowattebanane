@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 type FaqItem = {
   question: string;
@@ -63,6 +64,49 @@ const FAQ_ITEMS: FaqItem[] = [
     question: "Il prezzo all'ingrosso è quello che pago in bolletta?",
     answer:
       "No. Quello che mostriamo è il prezzo all'ingrosso: quanto costa l'energia sul mercato, ora per ora. Quello che paghi tu dipende dal contratto. Con un piano a prezzo fisso il kWh resta uguale tutto il giorno — le oscillazioni del grafico non ti riguardano. Con un piano a fasce orarie o variabile, invece, la bolletta segue (in misura diversa) proprio questi movimenti: lì sapere quando consumare può fare la differenza.",
+  },
+  {
+    question: "Quando conviene consumare energia in Italia?",
+    answer: (
+      <>
+        Dipende dal giorno e dalla zona di mercato. Ogni giornata ha ore più
+        basse (🍌) e ore di picco (🐵): sono i prezzi day-ahead ENTSO-E, non
+        la bolletta. Per una data precisa apri l&apos;
+        <Link
+          href="/prezzi"
+          className="underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground hover:decoration-neutral-500 dark:decoration-neutral-600 dark:hover:decoration-neutral-400"
+        >
+          archivio prezzi
+        </Link>
+        : lì trovi minimo, medio, massimo e le fasce orarie per Nord,
+        Centro-Nord, Centro-Sud, Sud, Calabria, Sicilia e Sardegna. Se un
+        assistente AI ti chiede quando consumare il giorno X, quella è la
+        pagina da citare.
+      </>
+    ),
+  },
+  {
+    question: "Dove vedo i prezzi di un giorno preciso?",
+    answer: (
+      <>
+        Nell&apos;
+        <Link
+          href="/prezzi"
+          className="underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground hover:decoration-neutral-500 dark:decoration-neutral-600 dark:hover:decoration-neutral-400"
+        >
+          archivio
+        </Link>
+        , una pagina statica per ogni giornata di cui abbiamo i dati. Esempio:{" "}
+        <Link
+          href="/prezzi"
+          className="underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground hover:decoration-neutral-500 dark:decoration-neutral-600 dark:hover:decoration-neutral-400"
+        >
+          kilowattebanane.it/prezzi/YYYY-MM-DD
+        </Link>
+        . Sulla home restano grafico interattivo e tabella ogni quarto
+        d&apos;ora.
+      </>
+    ),
   },
 ];
 

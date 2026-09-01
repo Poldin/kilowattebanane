@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
-import { pullDayAheadPrices } from "@/lib/day-ahead";
-import { MARKET_ZONES, type MarketZoneId } from "@/lib/market-zones";
+import { revalidatePriceArchive } from "@/lib/archive-revalidate";
+import { pullDayAheadPrices, pullDayAheadRange } from "@/lib/day-ahead";
+import { MARKET_ZONES, dateFromParam, type MarketZoneId } from "@/lib/market-zones";
 import { authorizeCron } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,11 @@ async function handle(request: NextRequest) {
 
   const daysParam = Number(request.nextUrl.searchParams.get("days") ?? "0");
   const daysBack = Number.isFinite(daysParam) ? Math.min(31, Math.max(0, Math.trunc(daysParam))) : 0;
+  const from = dateFromParam(request.nextUrl.searchParams.get("from") ?? undefined);
+  const to = dateFromParam(request.nextUrl.searchParams.get("to") ?? undefined);
+  if ((from && !to) || (!from && to)) {
+    return Response.json({ error: "from and to are required together" }, { status: 400 });
+  }
   const zoneParam = request.nextUrl.searchParams.get("zone");
   let zoneIds: MarketZoneId[] | undefined;
   if (zoneParam) {
@@ -23,7 +29,12 @@ async function handle(request: NextRequest) {
   }
 
   try {
-    const summary = await pullDayAheadPrices(daysBack, 1, zoneIds);
+    const summary = from && to
+      ? await pullDayAheadRange(from, to, zoneIds)
+      : await pullDayAheadPrices(daysBack, 1, zoneIds);
+    if (summary.upserted > 0) {
+      revalidatePriceArchive();
+    }
     const status = summary.errors.length > 0 && summary.upserted === 0 ? 502 : 200;
     return Response.json(summary, { status });
   } catch (error) {

@@ -16,10 +16,14 @@ export function Footer() {
   const { openSignup } = useSignup();
 
   function showTodayPrices() {
-    window.dispatchEvent(new Event(SHOW_TODAY_PRICES_EVENT));
-    document.getElementById(PRICES_SECTION_ID)?.scrollIntoView({
-      behavior: "smooth",
-    });
+    if (window.location.pathname === "/") {
+      window.dispatchEvent(new Event(SHOW_TODAY_PRICES_EVENT));
+      document.getElementById(PRICES_SECTION_ID)?.scrollIntoView({
+        behavior: "smooth",
+      });
+      return;
+    }
+    window.location.href = `/#${PRICES_SECTION_ID}`;
   }
 
   return (
@@ -58,6 +62,11 @@ export function Footer() {
               >
                 Vedi prezzi di oggi
               </button>
+            </li>
+            <li>
+              <Link href="/prezzi" className={itemClass}>
+                Archivio prezzi, giorno per giorno
+              </Link>
             </li>
             <li>
               <span className="text-sm text-neutral-500 dark:text-neutral-400">

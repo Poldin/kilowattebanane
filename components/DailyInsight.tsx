@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useEffect,
   useMemo,
@@ -20,6 +21,7 @@ import {
   type ZoneDay,
 } from "@/lib/day-ahead-query";
 import { ShareButton } from "@/components/ShareButton";
+import { LookbackInsight } from "@/components/LookbackInsight";
 import {
   DATE_QUERY_PARAM,
   DEFAULT_REGION,
@@ -303,7 +305,7 @@ function PriceTips({
           />
           Sono le{" "}
           <span className={NOW_BADGE}>{nowLine.time}</span>{" "}
-          <span className={NOW_BADGE}>
+          <span className={NOW_BADGE}>prezzo a 
             <span aria-hidden>{nowLine.cheap ? "🍌" : "🐵"}</span>
             <span className="sr-only">
               {nowLine.cheap ? "prezzo conveniente " : "prezzo alto "}
@@ -1050,6 +1052,17 @@ export function DailyInsight({
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Scegli il giorno e la regione: grafico e tabella ti dicono quando
         conviene consumare.
+        {selectedDate ? (
+          <>
+            {" "}
+            <Link
+              href={`/prezzi/${selectedDate}`}
+              className="underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground hover:decoration-neutral-500 dark:decoration-neutral-600 dark:hover:decoration-neutral-400"
+            >
+              Pagina del giorno
+            </Link>
+          </>
+        ) : null}
       </p>
 
       <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
@@ -1121,17 +1134,20 @@ export function DailyInsight({
           Ancora nessun prezzo per questa zona.
         </p>
       ) : (
-        <div
-          key={`${zone}-${day.deliveryDate}`}
-          className="insight-content-in"
-        >
-          <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
-            <PriceChart day={day} nowHour={nowLine?.hour} />
+        <>
+          <div
+            key={`${zone}-${day.deliveryDate}`}
+            className="insight-content-in"
+          >
+            <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
+              <PriceChart day={day} nowHour={nowLine?.hour} />
+            </div>
+            <PriceTips best={day.bestTip} worst={day.worstTip} nowLine={nowLine} />
+            <DayStats prices={day.prices} />
+            <QuarterPriceTable day={day} />
           </div>
-          <PriceTips best={day.bestTip} worst={day.worstTip} nowLine={nowLine} />
-          <DayStats prices={day.prices} />
-          <QuarterPriceTable day={day} />
-        </div>
+          <LookbackInsight days={days} />
+        </>
       )}
     </section>
   );

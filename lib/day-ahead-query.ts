@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { MarketZoneId } from "@/lib/market-zones";
+import { MARKET_ZONE_IDS, type MarketZoneId } from "@/lib/market-zones";
+import { isCompleteDay } from "@/lib/insights";
 
 export type DayAheadRow = {
   delivery_date: string;
@@ -117,6 +118,111 @@ export async function countZoneDaySlots(zone: MarketZoneId, deliveryDate: string
 
   if (error) throw new Error(error.message);
   return count ?? 0;
+}
+
+export type ZonedDayAheadRow = DayAheadRow & { zone: MarketZoneId };
+
+function asZone(value: string): MarketZoneId | null {
+  return MARKET_ZONE_IDS.includes(value as MarketZoneId)
+    ? (value as MarketZoneId)
+    : null;
+}
+
+export async function fetchDayPrices(
+  deliveryDate: string,
+): Promise<ZonedDayAheadRow[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("day_ahead_prices")
+    .select("delivery_date, slot_start, price_eur_mwh, zone")
+    .eq("delivery_date", deliveryDate)
+    .order("slot_start", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  if (!data?.length) return [];
+
+  const rows: ZonedDayAheadRow[] = [];
+  for (const row of data) {
+    const zone = asZone(row.zone as string);
+    if (!zone) continue;
+    rows.push({
+      delivery_date: row.delivery_date as string,
+      slot_start: row.slot_start as string,
+      price_eur_mwh: Number(row.price_eur_mwh),
+      zone,
+    });
+  }
+  return rows;
+}
+
+export async function listCompleteDeliveryDates(): Promise<string[]> {
+  const supabase = createAdminClient();
+  const counts = new Map<string, Map<string, number>>();
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("day_ahead_prices")
+      .select("delivery_date, zone")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw new Error(error.message);
+    if (!data?.length) break;
+
+    for (const row of data) {
+      const date = row.delivery_date as string;
+      const zone = row.zone as string;
+      const byZone = counts.get(date) ?? new Map<string, number>();
+      byZone.set(zone, (byZone.get(zone) ?? 0) + 1);
+      counts.set(date, byZone);
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return [...counts.entries()]
+    .filter(([, byZone]) =>
+      [...byZone.values()].some((count) => isCompleteDay(count)),
+    )
+    .map(([date]) => date)
+    .sort((a, b) => b.localeCompare(a));
+}
+
+export async function fetchPriceRowsSince(
+  minDate: string,
+): Promise<ZonedDayAheadRow[]> {
+  const supabase = createAdminClient();
+  const rows: ZonedDayAheadRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("day_ahead_prices")
+      .select("delivery_date, slot_start, price_eur_mwh, zone")
+      .gte("delivery_date", minDate)
+      .order("slot_start", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw new Error(error.message);
+    if (!data?.length) break;
+
+    for (const row of data) {
+      const zone = asZone(row.zone as string);
+      if (!zone) continue;
+      rows.push({
+        delivery_date: row.delivery_date as string,
+        slot_start: row.slot_start as string,
+        price_eur_mwh: Number(row.price_eur_mwh),
+        zone,
+      });
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return rows;
 }
 
 export async function fetchZonePrices(zone: MarketZoneId): Promise<DayAheadRow[]> {
