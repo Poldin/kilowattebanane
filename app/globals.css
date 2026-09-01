@@ -2,7 +2,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0a0a0a;
 }
 
 @theme inline {
@@ -19,8 +19,41 @@
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+.region-select-list {
+  scrollbar-width: thin;
+  scrollbar-color: #a3a3a3 transparent;
+}
+
+.region-select-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.region-select-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.region-select-list::-webkit-scrollbar-thumb {
+  background-color: #a3a3a3;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+@media (prefers-color-scheme: dark) {
+  .region-select-list {
+    scrollbar-color: #525252 transparent;
+  }
+
+  .region-select-list::-webkit-scrollbar-thumb {
+    background-color: #525252;
+  }
 }
