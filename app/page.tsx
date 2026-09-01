@@ -7,6 +7,7 @@ import { Footer } from "@/components/Footer";
 import { fetchZonePrices } from "@/lib/day-ahead-query";
 import {
   DEFAULT_REGION,
+  dateFromParam,
   regionFromParam,
   zoneForRegion,
 } from "@/lib/market-zones";
@@ -15,6 +16,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const params = await searchParams;
   const initialRegion = regionFromParam(params.regione) ?? DEFAULT_REGION;
   const initialZone = zoneForRegion(initialRegion) ?? "IT-North";
+  const initialDate = dateFromParam(params.giorno);
   let initialRows;
   try {
     initialRows = await fetchZonePrices(initialZone);
@@ -43,7 +45,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               href="#faq"
               className="mt-5 inline-flex max-w-full items-center rounded-full border border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-200/80 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:bg-neutral-800"
             >
-              😯come fate a sapere il costo dell&apos;energia durante la giornata??
+              😯come fate a sapere il costo dell&apos;energia di domani??
             </a>
           </section>
 
@@ -53,6 +55,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             <DailyInsight
               initialRegion={initialRegion}
               initialZone={initialZone}
+              initialDate={initialDate}
               initialRows={initialRows}
             />
           </div>

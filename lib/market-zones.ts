@@ -60,6 +60,8 @@ export const ITALIAN_REGIONS = Object.keys(REGION_TO_ZONE) as ItalianRegion[];
 export const DEFAULT_REGION: ItalianRegion = "Lombardia";
 export const PRICES_SECTION_ID = "prezzi";
 export const REGION_QUERY_PARAM = "regione";
+export const DATE_QUERY_PARAM = "giorno";
+const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function slugifyRegion(name: string) {
   return name
@@ -91,6 +93,23 @@ export function regionFromParam(value: string | string[] | undefined) {
   const trimmed = decoded.trim();
   if (trimmed in REGION_TO_ZONE) return trimmed as ItalianRegion;
   return REGION_BY_SLUG[slugifyRegion(trimmed)];
+}
+
+export function dateFromParam(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!DATE_PARAM_RE.test(trimmed)) return undefined;
+  const [year, month, day] = trimmed.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return trimmed;
 }
 
 export function pricesShareUrl(origin: string, region: string) {

@@ -12,6 +12,7 @@ import {
 } from "@/lib/day-ahead-query";
 import { ShareButton } from "@/components/ShareButton";
 import {
+  DATE_QUERY_PARAM,
   DEFAULT_REGION,
   PRICES_SECTION_ID,
   REGION_QUERY_PARAM,
@@ -897,16 +898,26 @@ function InsightSkeleton() {
 export function DailyInsight({
   initialRegion = DEFAULT_REGION,
   initialZone = "IT-North",
+  initialDate,
   initialRows,
 }: {
   initialRegion?: ItalianRegion;
   initialZone?: MarketZoneId;
+  initialDate?: string;
   initialRows?: DayAheadRow[];
 } = {}) {
   const [region, setRegion] = useState(initialRegion);
-  const [selectedDate, setSelectedDate] = useState<string | null>(() =>
-    pickDefaultDate(initialRows?.length ? groupZoneDays(initialRows) : []),
-  );
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => {
+    const days = initialRows?.length ? groupZoneDays(initialRows) : [];
+    if (
+      initialDate &&
+      (days.length === 0 ||
+        days.some((day) => day.deliveryDate === initialDate))
+    ) {
+      return initialDate;
+    }
+    return pickDefaultDate(days);
+  });
   const [rowsByZone, setRowsByZone] = useState<
     Partial<Record<MarketZoneId, DayAheadRow[]>>
   >(() => (initialRows?.length ? { [initialZone]: initialRows } : {}));
@@ -990,10 +1001,12 @@ export function DailyInsight({
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
-    const hasRegionParam = new URLSearchParams(window.location.search).has(
-      REGION_QUERY_PARAM,
-    );
-    if (hash !== PRICES_SECTION_ID && !hasRegionParam) return;
+    const search = new URLSearchParams(window.location.search);
+    const hasDeepLink =
+      hash === PRICES_SECTION_ID ||
+      search.has(REGION_QUERY_PARAM) ||
+      search.has(DATE_QUERY_PARAM);
+    if (!hasDeepLink) return;
     document.getElementById(PRICES_SECTION_ID)?.scrollIntoView();
   }, []);
 

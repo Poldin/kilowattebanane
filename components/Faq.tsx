@@ -7,7 +7,7 @@ type FaqItem = {
 
 const FAQ_ITEMS: FaqItem[] = [
   {
-    question: "Come fate a sapere il costo dell'energia durante la giornata?",
+    question: "Come fate a sapere il costo dell'energia di domani?",
     answer: (
       <>
         Usiamo i prezzi di mercato dell&apos;energia elettrica pubblicati ogni
