@@ -633,7 +633,11 @@ function PriceTips({
             className="mr-2 inline-block h-[1em] w-[2px] translate-y-[0.12em] align-middle"
             style={{ backgroundColor: NOW }}
           />
-          Sono le {nowLine.time} {nowLine.comment.before}
+          Sono le{" "}
+          <span className="mx-0.5 inline-flex translate-y-px items-center rounded-full bg-neutral-100 px-2 py-0.5 font-medium tabular-nums text-[#111111]">
+            {nowLine.time}
+          </span>{" "}
+          {nowLine.comment.before}
           {nowLine.comment.mark ? (
             <span
               className="underline decoration-2 underline-offset-2"
