@@ -49,6 +49,11 @@ const FAQ_ITEMS: FaqItem[] = [
     answer:
       "In Italia il costo dell'energia può variare per zona di mercato. Con la regione giusta ti mandiamo i dati rilevanti per dove consumi.",
   },
+  {
+    question: "Come leggo il grafico?",
+    answer:
+      "L'asse verticale è in centesimi di euro per kilowattora (c€/kWh): è il prezzo all'ingrosso di un'ora di consumo, non la bolletta finale. L'asse orizzontale copre l'intera giornata, da mezzanotte a mezzanotte. La curva gialla segue l'andamento orario; la banana segna il momento più conveniente, la scimmia il picco da evitare. Sotto, la tabella ripete gli stessi valori ogni quarto d'ora.",
+  },
 ];
 
 export function Faq() {

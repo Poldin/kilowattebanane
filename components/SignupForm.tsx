@@ -11,18 +11,18 @@ import {
 import { RegionSelect } from "@/components/RegionSelect";
 
 type SignupContextValue = {
-  show: boolean;
   openSignup: () => void;
 };
 
 const SignupContext = createContext<SignupContextValue | null>(null);
 
 export function SignupProvider({ children }: { children: React.ReactNode }) {
-  const [show, setShow] = useState(false);
-  const openSignup = useCallback(() => setShow(true), []);
+  const openSignup = useCallback(() => {
+    document.getElementById("iscriviti")?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   return (
-    <SignupContext.Provider value={{ show, openSignup }}>
+    <SignupContext.Provider value={{ openSignup }}>
       {children}
     </SignupContext.Provider>
   );
@@ -37,15 +37,6 @@ export function useSignup() {
 }
 
 export function SignupSlot() {
-  const { show } = useSignup();
-
-  useEffect(() => {
-    if (!show) return;
-    document.getElementById("iscriviti")?.scrollIntoView({ behavior: "smooth" });
-  }, [show]);
-
-  if (!show) return null;
-
   return (
     <div id="iscriviti" className="mx-auto mt-10 w-full max-w-md sm:mt-12">
       <SignupForm />

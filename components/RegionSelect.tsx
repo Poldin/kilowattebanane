@@ -109,7 +109,7 @@ export function RegionSelect({
   const isBanana = variant === "banana";
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className={`relative ${compact ? "w-full sm:w-auto" : ""}`}>
       <span
         id={labelId}
         className={
@@ -152,9 +152,9 @@ export function RegionSelect({
         onKeyDown={onTriggerKeyDown}
         className={
           isBanana
-            ? `flex items-center justify-between gap-2 rounded-md bg-[#F5D547] text-left text-[#111111] outline-none transition-opacity hover:opacity-90 ${
+            ? `flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-[#111111] text-left text-neutral-100 outline-none transition-colors hover:bg-neutral-900 ${
                 compact
-                  ? "h-8 min-w-[9.5rem] max-w-[12rem] px-2.5 text-xs sm:min-w-[11rem] sm:text-sm"
+                  ? "h-8 w-full px-2.5 text-xs sm:min-w-[11rem] sm:w-auto sm:text-sm"
                   : "h-10 w-full px-3 text-sm"
               }`
             : `flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-left text-sm outline-none transition-colors ${
@@ -179,7 +179,7 @@ export function RegionSelect({
           aria-hidden
           viewBox="0 0 16 16"
           className={`h-4 w-4 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""} ${
-            isBanana ? "text-[#111111]" : "text-neutral-500"
+            isBanana ? "text-neutral-400" : "text-neutral-500"
           }`}
           fill="none"
           stroke="currentColor"
@@ -195,20 +195,20 @@ export function RegionSelect({
             align === "right" ? "right-0" : "left-0"
           } ${
             isBanana
-              ? "w-[min(18rem,calc(100vw-2rem))] border border-[#F5D547]/40 bg-[#111111]"
+              ? "w-[min(18rem,calc(100vw-2rem))] border border-neutral-800 bg-[#111111]"
               : "w-full border border-neutral-200 bg-background dark:border-neutral-800"
           }`}
         >
           <div
             className={`border-b px-3 py-2 ${
               isBanana
-                ? "border-[#F5D547]/20"
+                ? "border-neutral-800"
                 : "border-neutral-200 dark:border-neutral-800"
             }`}
           >
             <p
               className={`text-[11px] font-medium tracking-wide uppercase ${
-                isBanana ? "text-[#F5D547]" : "text-neutral-500"
+                isBanana ? "text-neutral-400" : "text-neutral-500"
               }`}
             >
               Zone di mercato
@@ -246,7 +246,7 @@ export function RegionSelect({
                     className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
                       isBanana
                         ? active
-                          ? "bg-[#F5D547] text-[#111111]"
+                          ? "bg-neutral-800 text-neutral-100"
                           : "text-neutral-300"
                         : active
                           ? "bg-neutral-100 text-foreground dark:bg-neutral-900"
@@ -261,7 +261,7 @@ export function RegionSelect({
                         aria-hidden
                         viewBox="0 0 16 16"
                         className={`h-3.5 w-3.5 shrink-0 ${
-                          isBanana && active ? "text-[#111111]" : isBanana ? "text-[#F5D547]" : "text-foreground"
+                          isBanana ? "text-neutral-100" : "text-foreground"
                         }`}
                         fill="none"
                         stroke="currentColor"

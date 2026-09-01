@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { RegionSelect } from "@/components/RegionSelect";
+import {
+  fetchZonePrices,
+  groupZoneDays,
+  romeToday,
+  type DayAheadRow,
+  type ZoneDay,
+} from "@/lib/day-ahead-query";
 import { zoneForRegion, zoneNameForRegion, type MarketZoneId } from "@/lib/market-zones";
 import {
   QUARTERS_PER_HOUR,
@@ -12,8 +19,9 @@ import {
 } from "@/lib/prices";
 
 type DayInsight = {
-  daysAgo: number;
+  deliveryDate: string;
   prices: number[];
+  noonIndex: number;
   cheapStart: number;
   cheapEnd: number;
   peakStart: number;
@@ -22,43 +30,18 @@ type DayInsight = {
   worstTip: string;
 };
 
-const ZONE_PRICE_SHIFT: Record<MarketZoneId, number> = {
-  "IT-North": 0,
-  "IT-Centre-North": 3,
-  "IT-Centre-South": 5,
-  "IT-South": 8,
-  "IT-Calabria": 12,
-  "IT-Sicily": 18,
-  "IT-Sardinia": 6,
-};
-
-function shiftPrices(prices: number[], zone: MarketZoneId | undefined) {
-  const shift = zone ? ZONE_PRICE_SHIFT[zone] : 0;
-  return prices.map((price) => Math.round((price + shift) * 100) / 100);
+function pickDefaultDate(days: ZoneDay[]) {
+  const today = romeToday();
+  if (days.some((day) => day.deliveryDate === today)) return today;
+  return days[0]?.deliveryDate ?? null;
 }
 
-type DaySeed = {
-  daysAgo: number;
-  hourly: number[];
-};
-
-function expandToQuarters(hourly: number[]) {
-  return hourly.flatMap((price, hour) => {
-    const next = hourly[hour + 1] ?? price;
-    const step = (next - price) / QUARTERS_PER_HOUR;
-    return [0, 1, 2, 3].map(
-      (quarter) => Math.round((price + step * quarter) * 100) / 100,
-    );
-  });
-}
-
-function buildDayInsight(seed: DaySeed, zone: MarketZoneId | undefined): DayInsight {
-  const prices = shiftPrices(expandToQuarters(seed.hourly), zone);
-  const recommendations = computeRecommendations(prices);
-
+function buildDayInsight(day: ZoneDay): DayInsight {
+  const recommendations = computeRecommendations(day.prices);
   return {
-    daysAgo: seed.daysAgo,
-    prices,
+    deliveryDate: day.deliveryDate,
+    prices: day.prices,
+    noonIndex: day.noonIndex,
     cheapStart: recommendations.cheapStart,
     cheapEnd: recommendations.cheapEnd,
     peakStart: recommendations.peakStart,
@@ -68,36 +51,14 @@ function buildDayInsight(seed: DaySeed, zone: MarketZoneId | undefined): DayInsi
   };
 }
 
-const DAY_SEEDS: DaySeed[] = [
-  {
-    daysAgo: 0,
-    hourly: [
-      85, 82, 78, 75, 80, 95, 110, 125, 118, 105, 90, 70, 55, 42, 38, 45, 62,
-      95, 145, 160, 140, 115, 98, 88,
-    ],
-  },
-  {
-    daysAgo: 1,
-    hourly: [
-      48, 45, 42, 40, 44, 58, 88, 120, 135, 142, 138, 130, 125, 128, 132, 140,
-      148, 155, 138, 110, 85, 72, 62, 55,
-    ],
-  },
-  {
-    daysAgo: 2,
-    hourly: [
-      62, 60, 58, 56, 58, 65, 72, 78, 75, 70, 68, 64, 60, 58, 55, 57, 68, 82,
-      95, 88, 78, 72, 68, 64,
-    ],
-  },
-];
-
 const BANANA = "#F5D547";
 const PEAK = "#EF4444";
 const CHART_W = 640;
+const CHART_W_MOBILE = 400;
 const CHART_H_DESKTOP = 260;
 const CHART_H_MOBILE = 360;
-const PAD = { t: 28, r: 16, b: 36, l: 48 };
+const PAD = { t: 30, r: 18, b: 44, l: 56 };
+const PAD_MOBILE = { t: 40, r: 16, b: 56, l: 68 };
 const MWH_TO_CENT_KWH = 10;
 
 function toEurocentPerKwh(euroPerMwh: number) {
@@ -144,23 +105,30 @@ function yScale(prices: number[]) {
   return { min, max, ticks, tickDigits };
 }
 
-function formatDate(daysAgo: number, now: Date) {
-  const d = new Date(now);
-  d.setHours(12, 0, 0, 0);
-  d.setDate(d.getDate() - daysAgo);
-  const formatted = d.toLocaleDateString("it-IT", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-  if (daysAgo === 0) return `Oggi · ${formatted}`;
-  if (daysAgo === 1) return `Ieri · ${formatted}`;
+function addCalendarDays(ymd: string, delta: number) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + delta)).toISOString().slice(0, 10);
+}
+
+function formatDeliveryDate(ymd: string, today: string) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const formatted = new Date(Date.UTC(year, month - 1, day, 12)).toLocaleDateString(
+    "it-IT",
+    { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" },
+  );
+  if (ymd === today) return `Oggi · ${formatted}`;
+  if (ymd === addCalendarDays(today, -1)) return `Ieri · ${formatted}`;
+  if (ymd === addCalendarDays(today, 1)) return `Domani · ${formatted}`;
   return formatted;
 }
 
-function hourToX(hour: number) {
-  const innerW = CHART_W - PAD.l - PAD.r;
-  return PAD.l + (hour / 24) * innerW;
+function hourToX(
+  hour: number,
+  chartW = CHART_W,
+  pad: { t: number; r: number; b: number; l: number } = PAD,
+) {
+  const innerW = chartW - pad.l - pad.r;
+  return pad.l + (hour / 24) * innerW;
 }
 
 function toPoints(
@@ -168,31 +136,46 @@ function toPoints(
   min: number,
   max: number,
   chartH: number,
+  chartW = CHART_W,
+  pad: { t: number; r: number; b: number; l: number } = PAD,
 ) {
   const range = max - min || 1;
-  const innerH = chartH - PAD.t - PAD.b;
+  const innerH = chartH - pad.t - pad.b;
 
   return prices.map((price, i) => ({
-    x: hourToX(i + 0.5),
-    y: PAD.t + (1 - (price - min) / range) * innerH,
+    x: hourToX(i + 0.5, chartW, pad),
+    y: pad.t + (1 - (price - min) / range) * innerH,
   }));
 }
 
-function useChartHeight() {
-  const [chartH, setChartH] = useState(CHART_H_DESKTOP);
+function useChartLayout() {
+  const [mobile, setMobile] = useState(false);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 639px)");
-    const update = () => {
-      setChartH(media.matches ? CHART_H_MOBILE : CHART_H_DESKTOP);
-    };
-
+    const update = () => setMobile(media.matches);
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
 
-  return chartH;
+  if (mobile) {
+    return {
+      chartW: CHART_W_MOBILE,
+      chartH: CHART_H_MOBILE,
+      pad: PAD_MOBILE,
+      axisFontSize: 22,
+      unitFontSize: 16,
+    };
+  }
+
+  return {
+    chartW: CHART_W,
+    chartH: CHART_H_DESKTOP,
+    pad: PAD,
+    axisFontSize: 15,
+    unitFontSize: 13,
+  };
 }
 
 function smoothPathSegmentControls(
@@ -358,6 +341,17 @@ function hoursToQuarterRange(fromHour: number, toHour: number) {
 }
 
 function computeRecommendations(prices: number[]) {
+  if (prices.length < QUARTERS_PER_HOUR) {
+    return {
+      cheapStart: 0,
+      cheapEnd: 0,
+      peakStart: 0,
+      peakEnd: 0,
+      bestTip: "Prezzi in aggiornamento.",
+      worstTip: "",
+    };
+  }
+
   const hourly = toHourlyAverages(prices);
   const pricesCent = hourly.map(toEurocentPerKwh);
   const scale = yScale(pricesCent);
@@ -366,6 +360,16 @@ function computeRecommendations(prices: number[]) {
   const { minima, maxima } = findLocalExtrema(samples);
   const bestSample = pickDistinctTips(minima, samples, "min", 1)[0];
   const worstSample = pickDistinctTips(maxima, samples, "max", 1)[0];
+  if (!bestSample || !worstSample) {
+    return {
+      cheapStart: 0,
+      cheapEnd: 0,
+      peakStart: 0,
+      peakEnd: 0,
+      bestTip: "Prezzi in aggiornamento.",
+      worstTip: "",
+    };
+  }
   const bestBounds = tipRangeBounds(bestSample.hour);
   const worstBounds = tipRangeBounds(worstSample.hour);
   const bestQuarters = hoursToQuarterRange(bestBounds.from, bestBounds.to);
@@ -389,7 +393,9 @@ function PriceTips({ best, worst }: { best: string; worst: string }) {
       aria-label="Consigli su quando consumare o evitare"
     >
       <p className="font-medium text-foreground">{best}</p>
-      <p className="text-neutral-600 dark:text-neutral-400">{worst}</p>
+      {worst ? (
+        <p className="text-neutral-600 dark:text-neutral-400">{worst}</p>
+      ) : null}
     </div>
   );
 }
@@ -406,7 +412,7 @@ function toSmoothPath(points: { x: number; y: number }[]) {
 }
 
 function PriceChart({ day }: { day: DayInsight }) {
-  const chartH = useChartHeight();
+  const { chartW, chartH, pad, axisFontSize, unitFontSize } = useChartLayout();
   const hourly = useMemo(() => toHourlyAverages(day.prices), [day.prices]);
   const pricesCent = useMemo(
     () => hourly.map(toEurocentPerKwh),
@@ -414,8 +420,8 @@ function PriceChart({ day }: { day: DayInsight }) {
   );
   const scale = useMemo(() => yScale(pricesCent), [pricesCent]);
   const points = useMemo(
-    () => toPoints(pricesCent, scale.min, scale.max, chartH),
-    [pricesCent, scale.min, scale.max, chartH],
+    () => toPoints(pricesCent, scale.min, scale.max, chartH, chartW, pad),
+    [pricesCent, scale.min, scale.max, chartH, chartW, pad],
   );
   const line = useMemo(() => toSmoothPath(points), [points]);
   const { min: monkey, max: banana } = useMemo(
@@ -425,11 +431,11 @@ function PriceChart({ day }: { day: DayInsight }) {
 
   const cheapestIndex = pricesCent.indexOf(Math.min(...pricesCent));
   const peakIndex = pricesCent.indexOf(Math.max(...pricesCent));
-  const innerH = chartH - PAD.t - PAD.b;
-  const cheapFromX = hourToX(day.cheapStart / QUARTERS_PER_HOUR);
-  const cheapToX = hourToX((day.cheapEnd + 1) / QUARTERS_PER_HOUR);
-  const peakFromX = hourToX(day.peakStart / QUARTERS_PER_HOUR);
-  const peakToX = hourToX((day.peakEnd + 1) / QUARTERS_PER_HOUR);
+  const innerH = chartH - pad.t - pad.b;
+  const cheapFromX = hourToX(day.cheapStart / QUARTERS_PER_HOUR, chartW, pad);
+  const cheapToX = hourToX((day.cheapEnd + 1) / QUARTERS_PER_HOUR, chartW, pad);
+  const peakFromX = hourToX(day.peakStart / QUARTERS_PER_HOUR, chartW, pad);
+  const peakToX = hourToX((day.peakEnd + 1) / QUARTERS_PER_HOUR, chartW, pad);
   const range = scale.max - scale.min || 1;
 
   const hourTicks = [0, 6, 12, 18, 24];
@@ -437,42 +443,44 @@ function PriceChart({ day }: { day: DayInsight }) {
 
   return (
     <svg
-      viewBox={`0 0 ${CHART_W} ${chartH}`}
+      viewBox={`0 0 ${chartW} ${chartH}`}
       className="h-auto w-full"
       role="img"
       aria-label={`Andamento orario del prezzo in centesimi di euro per kilowattora. Minimo alle ${cheapestIndex}:00, massimo alle ${peakIndex}:00.`}
     >
-      <rect width={CHART_W} height={chartH} fill="#111111" rx="8" />
+      <rect width={chartW} height={chartH} fill="#111111" rx="8" />
 
       <text
-        x={PAD.l}
-        y={16}
-        fill="#a3a3a3"
-        fontSize="10"
+        x={pad.l}
+        y={Math.round(unitFontSize + 8)}
+        fill="#e5e5e5"
+        fontSize={unitFontSize}
         fontFamily={font}
+        fontWeight="500"
       >
         c€/kWh
       </text>
 
       {scale.ticks.map((tick) => {
-        const y = PAD.t + (1 - (tick - scale.min) / range) * innerH;
+        const y = pad.t + (1 - (tick - scale.min) / range) * innerH;
         return (
           <g key={tick}>
             <line
-              x1={PAD.l}
-              x2={CHART_W - PAD.r}
+              x1={pad.l}
+              x2={chartW - pad.r}
               y1={y}
               y2={y}
               stroke="#262626"
               strokeWidth="1"
             />
             <text
-              x={PAD.l - 8}
-              y={y + 4}
+              x={pad.l - 10}
+              y={y + axisFontSize / 3}
               textAnchor="end"
-              fill="#a3a3a3"
-              fontSize="11"
+              fill="#f5f5f5"
+              fontSize={axisFontSize}
               fontFamily={font}
+              fontWeight="600"
             >
               {formatEurocent(tick, scale.tickDigits)}
             </text>
@@ -481,24 +489,25 @@ function PriceChart({ day }: { day: DayInsight }) {
       })}
 
       {hourTicks.map((hour) => {
-        const x = hourToX(hour);
+        const x = hourToX(hour, chartW, pad);
         return (
           <g key={hour}>
             <line
               x1={x}
               x2={x}
-              y1={PAD.t}
-              y2={chartH - PAD.b}
+              y1={pad.t}
+              y2={chartH - pad.b}
               stroke="#1f1f1f"
               strokeWidth="1"
             />
             <text
               x={x}
-              y={chartH - 12}
+              y={chartH - 18}
               textAnchor="middle"
-              fill="#737373"
-              fontSize="12"
+              fill="#f5f5f5"
+              fontSize={axisFontSize}
               fontFamily={font}
+              fontWeight="600"
             >
               {String(hour).padStart(2, "0")}
             </text>
@@ -508,7 +517,7 @@ function PriceChart({ day }: { day: DayInsight }) {
 
       <rect
         x={cheapFromX}
-        y={PAD.t}
+        y={pad.t}
         width={Math.max(cheapToX - cheapFromX, 8)}
         height={innerH}
         fill={BANANA}
@@ -516,7 +525,7 @@ function PriceChart({ day }: { day: DayInsight }) {
       />
       <rect
         x={peakFromX}
-        y={PAD.t}
+        y={pad.t}
         width={Math.max(peakToX - peakFromX, 8)}
         height={innerH}
         fill={PEAK}
@@ -644,9 +653,12 @@ function QuarterColumn({
 
 function QuarterPriceTable({ day }: { day: DayInsight }) {
   const minPrice = Math.min(...day.prices);
+  const split = day.noonIndex > 0 && day.noonIndex < day.prices.length
+    ? day.noonIndex
+    : Math.floor(day.prices.length / 2);
   const columns = [
-    { start: 0, end: 48, label: "00–12" },
-    { start: 48, end: 96, label: "12–24" },
+    { start: 0, end: split, label: "00–12" },
+    { start: split, end: day.prices.length, label: "12–24" },
   ];
 
   return (
@@ -683,20 +695,77 @@ function QuarterPriceTable({ day }: { day: DayInsight }) {
   );
 }
 
-export function DailyInsight() {
-  const [index, setIndex] = useState(0);
+export function DailyInsight({
+  initialZone = "IT-North",
+  initialRows,
+}: {
+  initialZone?: MarketZoneId;
+  initialRows?: DayAheadRow[];
+} = {}) {
   const [region, setRegion] = useState("Lombardia");
-  const [now, setNow] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(() =>
+    pickDefaultDate(initialRows?.length ? groupZoneDays(initialRows) : []),
+  );
+  const [rowsByZone, setRowsByZone] = useState<
+    Partial<Record<MarketZoneId, DayAheadRow[]>>
+  >(() => (initialRows?.length ? { [initialZone]: initialRows } : {}));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setNow(new Date());
-  }, []);
   const zone = zoneForRegion(region);
   const zoneName = zoneNameForRegion(region);
-  const seed = DAY_SEEDS[index];
-  const day = useMemo(() => buildDayInsight(seed, zone), [seed, zone]);
-  const isOldest = index === DAY_SEEDS.length - 1;
-  const isToday = index === 0;
+  const cached = zone ? rowsByZone[zone] : undefined;
+
+  useEffect(() => {
+    if (!zone || cached) return;
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetchZonePrices(zone)
+      .then((rows) => {
+        if (cancelled) return;
+        setRowsByZone((prev) => ({ ...prev, [zone]: rows }));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Caricamento fallito");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [zone, cached]);
+
+  const days = useMemo(() => groupZoneDays(cached ?? []), [cached]);
+
+  useEffect(() => {
+    if (days.length === 0) return;
+    setSelectedDate((current) => {
+      if (current && days.some((day) => day.deliveryDate === current)) {
+        return current;
+      }
+      const today = romeToday();
+      if (days.some((day) => day.deliveryDate === today)) return today;
+      return days[0].deliveryDate;
+    });
+  }, [days]);
+
+  const selected = days.find((day) => day.deliveryDate === selectedDate) ?? days[0];
+  const day = useMemo(
+    () => (selected ? buildDayInsight(selected) : null),
+    [selected],
+  );
+  const dateIndex = selectedDate
+    ? days.findIndex((item) => item.deliveryDate === selectedDate)
+    : 0;
+  const isOldest = dateIndex < 0 || dateIndex === days.length - 1;
+  const isNewest = dateIndex <= 0;
+  const today = romeToday();
 
   return (
     <section aria-labelledby="daily-insight-heading" className="w-full">
@@ -711,12 +780,15 @@ export function DailyInsight() {
         conviene consumare.
       </p>
 
-      <div className="mt-5 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div className="flex min-w-0 items-center gap-1.5 sm:flex-1 sm:gap-2">
           <button
             type="button"
-            onClick={() => setIndex((i) => Math.min(i + 1, DAY_SEEDS.length - 1))}
-            disabled={isOldest}
+            onClick={() => {
+              const next = days[dateIndex + 1];
+              if (next) setSelectedDate(next.deliveryDate);
+            }}
+            disabled={isOldest || days.length === 0}
             aria-label="Giorno precedente"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-lg leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
           >
@@ -724,8 +796,11 @@ export function DailyInsight() {
           </button>
           <button
             type="button"
-            onClick={() => setIndex((i) => Math.max(i - 1, 0))}
-            disabled={isToday}
+            onClick={() => {
+              const next = days[dateIndex - 1];
+              if (next) setSelectedDate(next.deliveryDate);
+            }}
+            disabled={isNewest || days.length === 0}
             aria-label="Giorno successivo"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-lg leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
           >
@@ -735,11 +810,11 @@ export function DailyInsight() {
             className="min-w-0 truncate text-sm font-medium capitalize tracking-tight text-foreground sm:text-base"
             aria-live="polite"
           >
-            {now ? formatDate(day.daysAgo, now) : "Oggi"}
+            {day ? formatDeliveryDate(day.deliveryDate, today) : "Prezzi"}
           </p>
         </div>
 
-        <div className="shrink-0">
+        <div className="w-full sm:w-auto sm:shrink-0">
           <RegionSelect
             value={region}
             onChange={setRegion}
@@ -752,18 +827,35 @@ export function DailyInsight() {
       </div>
 
       {zoneName ? (
-        <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-          Zona di mercato: {zoneName}
+        <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+          Zona di mercato:
+          <span className="inline-flex items-center rounded-full bg-[#F5D547] px-2 py-0.5 font-medium text-[#111111]">
+            {zoneName}
+          </span>
         </p>
       ) : null}
 
-      <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
-        <PriceChart day={day} />
-      </div>
-
-      <PriceTips best={day.bestTip} worst={day.worstTip} />
-
-      <QuarterPriceTable day={day} />
+      {error ? (
+        <p className="mt-4 text-sm text-red-600 dark:text-red-400">
+          Non riesco a caricare i prezzi. Riprova tra poco.
+        </p>
+      ) : loading && !day ? (
+        <p className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+          Carico i prezzi della zona…
+        </p>
+      ) : !day || day.prices.length === 0 ? (
+        <p className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+          Ancora nessun prezzo per questa zona.
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
+            <PriceChart day={day} />
+          </div>
+          <PriceTips best={day.bestTip} worst={day.worstTip} />
+          <QuarterPriceTable day={day} />
+        </>
+      )}
     </section>
   );
 }

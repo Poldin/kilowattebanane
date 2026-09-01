@@ -4,8 +4,16 @@ import { SignupProvider, SignupSlot } from "@/components/SignupForm";
 import { DailyInsight } from "@/components/DailyInsight";
 import { Faq } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
+import { fetchZonePrices } from "@/lib/day-ahead-query";
 
-export default function Home() {
+export default async function Home() {
+  let initialRows;
+  try {
+    initialRows = await fetchZonePrices("IT-North");
+  } catch {
+    initialRows = undefined;
+  }
+
   return (
     <SignupProvider>
       <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
@@ -34,7 +42,7 @@ export default function Home() {
           <SignupSlot />
 
           <div className="mx-auto mt-10 w-full max-w-xl sm:mt-12">
-            <DailyInsight />
+            <DailyInsight initialZone="IT-North" initialRows={initialRows} />
           </div>
 
           <div className="mt-16 sm:mt-20">

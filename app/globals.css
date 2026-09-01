@@ -60,7 +60,7 @@ body {
 
 .region-select-list-banana {
   scrollbar-width: thin;
-  scrollbar-color: #f5d547 transparent;
+  scrollbar-color: #525252 transparent;
 }
 
 .region-select-list-banana::-webkit-scrollbar {
@@ -72,7 +72,7 @@ body {
 }
 
 .region-select-list-banana::-webkit-scrollbar-thumb {
-  background-color: #f5d547;
+  background-color: #525252;
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
