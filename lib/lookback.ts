@@ -153,12 +153,88 @@ export function formatLookbackDate(ymd: string, withYear = false) {
   );
 }
 
+export function lookbackPointFromHours(
+  date: string,
+  hours: (number | null)[],
+): LookbackDayPoint | null {
+  const cents: number[] = [];
+  for (const hour of hours) {
+    if (hour == null || !Number.isFinite(hour)) continue;
+    cents.push(toEurocentPerKwh(hour));
+  }
+  if (cents.length < 23) return null;
+  const min = Math.min(...cents);
+  const max = Math.max(...cents);
+  const avg = cents.reduce((sum, value) => sum + value, 0) / cents.length;
+  return { date, min, avg, max };
+}
+
+export function sliceLookbackDates(
+  dates: string[],
+  rangeDays: number | null,
+  endDate: string,
+) {
+  const sorted = [...dates].sort((a, b) => a.localeCompare(b));
+  if (rangeDays == null) {
+    return sorted.filter((date) => date <= endDate);
+  }
+  const start = addCalendarDays(endDate, -(rangeDays - 1));
+  return sorted.filter((date) => date >= start && date <= endDate);
+}
+
+export function lookbackEndDateFromDates(dates: string[]) {
+  if (dates.length === 0) return null;
+  return [...dates].sort((a, b) => a.localeCompare(b)).at(-1) ?? null;
+}
+
+export function sliceLookbackPoints(
+  points: LookbackDayPoint[],
+  rangeDays: number | null,
+  endDate: string,
+) {
+  const dates = new Set(sliceLookbackDates(
+    points.map((point) => point.date),
+    rangeDays,
+    endDate,
+  ));
+  return points.filter((point) => dates.has(point.date));
+}
+
+export function lookbackWindowStatsFromHourly(
+  hourly: { date: string; hours: (number | null)[] }[],
+): LookbackWindowStats | null {
+  const cents: number[] = [];
+  for (const day of hourly) {
+    for (const hour of day.hours) {
+      if (hour == null || !Number.isFinite(hour)) continue;
+      cents.push(toEurocentPerKwh(hour));
+    }
+  }
+  if (cents.length === 0) return null;
+  return {
+    min: Math.min(...cents),
+    avg: cents.reduce((sum, value) => sum + value, 0) / cents.length,
+    max: Math.max(...cents),
+  };
+}
+
+export function dayHourlyCentSeriesFromHours(hours: (number | null)[]) {
+  return hours.map((hour) =>
+    hour == null || !Number.isFinite(hour) ? 0 : toEurocentPerKwh(hour),
+  );
+}
+
 export function formatLookbackCaption(days: ZoneDay[]) {
-  if (days.length === 0) return "";
-  const first = days[0].deliveryDate;
-  const last = days[days.length - 1].deliveryDate;
+  return formatLookbackCaptionFromDates(days.map((day) => day.deliveryDate));
+}
+
+export function formatLookbackCaptionFromDates(dates: string[]) {
+  if (dates.length === 0) return "";
+  const sorted = [...dates].sort((a, b) => a.localeCompare(b));
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
   const countLabel =
-    days.length === 1 ? "1 giorno" : `${days.length} giorni`;
+    sorted.length === 1 ? "1 giorno" : `${sorted.length} giorni`;
   if (first === last) {
     return `${formatLookbackDate(first, true)} · ${countLabel}`;
   }
@@ -187,8 +263,9 @@ export type LatestDayRankCopy = {
   tone: "expensive" | "cheap" | "mid";
 };
 
-export function latestDayWindowRank(days: ZoneDay[]): LatestDayRank | null {
-  const points = toLookbackDayPoints(days);
+export function latestDayWindowRankFromPoints(
+  points: LookbackDayPoint[],
+): LatestDayRank | null {
   if (points.length < 2) return null;
   const latest = points[points.length - 1];
   const higher = points.filter((point) => point.avg > latest.avg + AVG_TIE_EPS).length;
@@ -203,6 +280,10 @@ export function latestDayWindowRank(days: ZoneDay[]): LatestDayRank | null {
     cheapRank: lower + 1,
     ties,
   };
+}
+
+export function latestDayWindowRank(days: ZoneDay[]): LatestDayRank | null {
+  return latestDayWindowRankFromPoints(toLookbackDayPoints(days));
 }
 
 function periodDaysLabel(count: number) {

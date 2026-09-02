@@ -1,12 +1,10 @@
-import { cookies } from "next/headers";
 import { Header } from "@/components/Header";
 import { RotatingAction } from "@/components/RotatingAction";
 import { SignupProvider, SignupSlot } from "@/components/SignupForm";
 import { DailyInsight } from "@/components/DailyInsight";
-import { Faq } from "@/components/Faq";
+import { Faq, FAQ_TOMORROW_ID, FAQ_TOMORROW_Q } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
-import { fetchZonePrices } from "@/lib/day-ahead-query";
-import { REGION_PREF_KEY } from "@/lib/region-pref";
+import { loadZoneHome } from "@/lib/zone-home";
 import {
   DEFAULT_REGION,
   dateFromParam,
@@ -14,20 +12,19 @@ import {
   zoneForRegion,
 } from "@/lib/market-zones";
 
+export const revalidate = 3600;
+
 export default async function Home({ searchParams }: PageProps<"/">) {
   const params = await searchParams;
-  const cookieStore = await cookies();
   const initialRegion =
-    regionFromParam(params.regione) ??
-    regionFromParam(cookieStore.get(REGION_PREF_KEY)?.value) ??
-    DEFAULT_REGION;
+    regionFromParam(params.regione) ?? DEFAULT_REGION;
   const initialZone = zoneForRegion(initialRegion) ?? "IT-North";
   const initialDate = dateFromParam(params.giorno);
-  let initialRows;
+  let initialHome;
   try {
-    initialRows = await fetchZonePrices(initialZone);
+    initialHome = await loadZoneHome(initialZone, initialDate);
   } catch {
-    initialRows = undefined;
+    initialHome = undefined;
   }
 
   return (
@@ -48,10 +45,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             </p>
 
             <a
-              href="#faq"
+              href={`#${FAQ_TOMORROW_ID}`}
               className="mt-5 inline-flex max-w-full items-center rounded-full border border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-200/80 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:bg-neutral-800"
             >
-              😯come fate a sapere il costo dell&apos;energia di domani??
+              😯{FAQ_TOMORROW_Q.toLowerCase()}?
             </a>
           </section>
 
@@ -61,8 +58,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             <DailyInsight
               initialRegion={initialRegion}
               initialZone={initialZone}
-              initialDate={initialDate}
-              initialRows={initialRows}
+              initialDate={initialDate ?? initialHome?.date ?? undefined}
+              initialHome={initialHome}
             />
           </div>
 

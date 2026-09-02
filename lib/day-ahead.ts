@@ -116,7 +116,7 @@ async function pullZone(options: {
       lastError = error;
       const retryable = error instanceof Error && /HTTP 429/.test(error.message);
       if (!retryable || attempt === 4) break;
-      await sleep(1000 * 2 ** attempt);
+      await sleep(2500 * 2 ** attempt);
     }
   }
   throw lastError instanceof Error ? lastError : new Error("energy-charts failed");

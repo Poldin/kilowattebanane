@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type PointerEvent } from "react";
-import { romeToday, type ZoneDay } from "@/lib/day-ahead-query";
+import { romeToday } from "@/lib/day-ahead-core";
 import {
   CHART_W,
   PAD,
@@ -15,21 +15,23 @@ import {
   DEFAULT_LOOKBACK_RANGE,
   LOOKBACK_RANGES,
   bandPath,
-  dayHourlyCentSeries,
+  dayHourlyCentSeriesFromHours,
   formatLatestDayRank,
-  formatLookbackCaption,
+  formatLookbackCaptionFromDates,
   formatLookbackDate,
-  latestDayWindowRank,
-  lookbackEndDate,
+  latestDayWindowRankFromPoints,
+  lookbackEndDateFromDates,
   lookbackRangeById,
-  lookbackWindowStats,
+  lookbackWindowStatsFromHourly,
   pickAxisTicks,
   pointerToIndex,
-  sliceLookbackDays,
-  toLookbackDayPoints,
+  sliceLookbackDates,
+  sliceLookbackPoints,
   valuesToPoints,
+  type LookbackDayPoint,
   type LookbackRangeId,
 } from "@/lib/lookback";
+import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
 
 const BANANA = "#F5D547";
 const PEAK = "#EF4444";
@@ -79,24 +81,23 @@ type PickedPoint = {
 };
 
 function LookbackChart({
-  windowDays,
+  windowPoints,
+  windowHourly,
   rangeId,
 }: {
-  windowDays: ZoneDay[];
+  windowPoints: LookbackDayPoint[];
+  windowHourly: ZoneHourlyPayload[];
   rangeId: LookbackRangeId;
 }) {
   const { chartW, chartH, pad, axisFontSize, unitFontSize } = useChartLayout();
   const [pickedIndex, setPickedIndex] = useState<number | null>(null);
   const hourly = rangeId === "1";
-  const single = hourly ? windowDays[windowDays.length - 1] : null;
+  const single = hourly ? windowHourly[windowHourly.length - 1] : null;
   const hourlyCent = useMemo(
-    () => (single ? dayHourlyCentSeries(single) : []),
+    () => (single ? dayHourlyCentSeriesFromHours(single.hours) : []),
     [single],
   );
-  const dailyPoints = useMemo(
-    () => (hourly ? [] : toLookbackDayPoints(windowDays)),
-    [hourly, windowDays],
-  );
+  const dailyPoints = hourly ? [] : windowPoints;
 
   const series = hourly ? hourlyCent : dailyPoints.map((point) => point.avg);
   const bandMins = hourly ? [] : dailyPoints.map((point) => point.min);
@@ -322,22 +323,40 @@ function LookbackChart({
   );
 }
 
-export function LookbackInsight({ days }: { days: ZoneDay[] }) {
+export function LookbackInsight({
+  points,
+  hourly,
+}: {
+  points: LookbackDayPoint[];
+  hourly: ZoneHourlyPayload[];
+}) {
   const [rangeId, setRangeId] = useState<LookbackRangeId>(DEFAULT_LOOKBACK_RANGE);
-  const endDate = lookbackEndDate(days);
+  const endDate = lookbackEndDateFromDates(points.map((point) => point.date));
   const range = lookbackRangeById(rangeId);
-  const windowDays = useMemo(() => {
+  const windowDates = useMemo(() => {
     if (!endDate) return [];
-    return sliceLookbackDays(days, range.days, endDate);
-  }, [days, endDate, range.days]);
-  const stats = lookbackWindowStats(windowDays);
-  const caption = formatLookbackCaption(windowDays);
-  const latestRank = latestDayWindowRank(windowDays);
+    return sliceLookbackDates(
+      points.map((point) => point.date),
+      range.days,
+      endDate,
+    );
+  }, [points, endDate, range.days]);
+  const windowPoints = useMemo(() => {
+    if (!endDate) return [];
+    return sliceLookbackPoints(points, range.days, endDate);
+  }, [points, endDate, range.days]);
+  const windowHourly = useMemo(() => {
+    const allowed = new Set(windowDates);
+    return hourly.filter((day) => allowed.has(day.date));
+  }, [hourly, windowDates]);
+  const stats = lookbackWindowStatsFromHourly(windowHourly);
+  const caption = formatLookbackCaptionFromDates(windowDates);
+  const latestRank = latestDayWindowRankFromPoints(windowPoints);
   const latestCopy = latestRank
     ? formatLatestDayRank(latestRank, romeToday())
     : null;
 
-  if (!endDate || windowDays.length === 0 || !stats) return null;
+  if (!endDate || windowPoints.length === 0 || !stats) return null;
 
   return (
     <section
@@ -384,7 +403,8 @@ export function LookbackInsight({ days }: { days: ZoneDay[] }) {
       <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
         <LookbackChart
           key={rangeId}
-          windowDays={windowDays}
+          windowPoints={windowPoints}
+          windowHourly={windowHourly}
           rangeId={rangeId}
         />
       </div>

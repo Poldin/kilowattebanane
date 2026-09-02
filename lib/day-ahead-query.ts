@@ -1,90 +1,23 @@
+import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { DayAheadRow } from "@/lib/day-ahead-core";
 import { MARKET_ZONE_IDS, type MarketZoneId } from "@/lib/market-zones";
-import { isCompleteDay } from "@/lib/insights";
+import { MIN_COMPLETE_SLOTS } from "@/lib/insights";
 
-export type DayAheadRow = {
-  delivery_date: string;
-  slot_start: string;
-  price_eur_mwh: number;
-};
-
-export type ZoneDay = {
-  deliveryDate: string;
-  prices: number[];
-  noonIndex: number;
-};
+export type {
+  DayAheadRow,
+  RomeNow,
+  ZoneDay,
+} from "@/lib/day-ahead-core";
+export {
+  groupZoneDays,
+  pickDefaultDeliveryDate,
+  romeNow,
+  romeNowHour,
+  romeToday,
+} from "@/lib/day-ahead-core";
 
 const PAGE_SIZE = 1000;
-
-export type RomeNow = {
-  date: string;
-  hour: number;
-  minute: number;
-};
-
-export function romeNow(): RomeNow {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Rome",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date());
-
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-
-  return {
-    date: `${value("year")}-${value("month")}-${value("day")}`,
-    hour: Number(value("hour")),
-    minute: Number(value("minute")),
-  };
-}
-
-export function romeToday() {
-  return romeNow().date;
-}
-
-export function romeNowHour() {
-  return romeNow().hour;
-}
-
-function romeHour(iso: string) {
-  return Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Rome",
-      hour: "numeric",
-      hourCycle: "h23",
-    }).format(new Date(iso)),
-  );
-}
-
-export function groupZoneDays(rows: DayAheadRow[]): ZoneDay[] {
-  const byDate = new Map<string, DayAheadRow[]>();
-
-  for (const row of rows) {
-    const date = row.delivery_date;
-    const list = byDate.get(date) ?? [];
-    list.push(row);
-    byDate.set(date, list);
-  }
-
-  return [...byDate.entries()]
-    .map(([deliveryDate, slots]) => {
-      const sorted = [...slots].sort((a, b) =>
-        a.slot_start.localeCompare(b.slot_start),
-      );
-      const noonIndex = sorted.findIndex((slot) => romeHour(slot.slot_start) >= 12);
-      return {
-        deliveryDate,
-        prices: sorted.map((slot) => Number(slot.price_eur_mwh)),
-        noonIndex: noonIndex >= 0 ? noonIndex : Math.floor(sorted.length / 2),
-      };
-    })
-    .sort((a, b) => b.deliveryDate.localeCompare(a.deliveryDate));
-}
 
 export async function fetchZoneDayPrices(
   zone: MarketZoneId,
@@ -110,14 +43,15 @@ export async function fetchZoneDayPrices(
 
 export async function countZoneDaySlots(zone: MarketZoneId, deliveryDate: string) {
   const supabase = createAdminClient();
-  const { count, error } = await supabase
-    .from("day_ahead_prices")
-    .select("*", { count: "exact", head: true })
+  const { data, error } = await supabase
+    .from("day_ahead_day_stats")
+    .select("slot_count")
     .eq("zone", zone)
-    .eq("delivery_date", deliveryDate);
+    .eq("delivery_date", deliveryDate)
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return count ?? 0;
+  return data?.slot_count ?? 0;
 }
 
 export type ZonedDayAheadRow = DayAheadRow & { zone: MarketZoneId };
@@ -155,77 +89,135 @@ export async function fetchDayPrices(
   return rows;
 }
 
-export async function listCompleteDeliveryDates(): Promise<string[]> {
-  const supabase = createAdminClient();
-  const counts = new Map<string, Map<string, number>>();
-  let from = 0;
+export type DayAheadDayStat = {
+  zone: MarketZoneId;
+  deliveryDate: string;
+  slotCount: number;
+  minEurMwh: number;
+  avgEurMwh: number;
+  maxEurMwh: number;
+};
 
-  while (true) {
-    const { data, error } = await supabase
-      .from("day_ahead_prices")
-      .select("delivery_date, zone")
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (error) throw new Error(error.message);
-    if (!data?.length) break;
-
-    for (const row of data) {
-      const date = row.delivery_date as string;
-      const zone = row.zone as string;
-      const byZone = counts.get(date) ?? new Map<string, number>();
-      byZone.set(zone, (byZone.get(zone) ?? 0) + 1);
-      counts.set(date, byZone);
-    }
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return [...counts.entries()]
-    .filter(([, byZone]) =>
-      [...byZone.values()].some((count) => isCompleteDay(count)),
-    )
-    .map(([date]) => date)
-    .sort((a, b) => b.localeCompare(a));
+function mapDayStat(row: {
+  zone: unknown;
+  delivery_date: unknown;
+  slot_count: unknown;
+  min_eur_mwh: unknown;
+  avg_eur_mwh: unknown;
+  max_eur_mwh: unknown;
+}): DayAheadDayStat | null {
+  const zone = asZone(row.zone as string);
+  if (!zone) return null;
+  return {
+    zone,
+    deliveryDate: row.delivery_date as string,
+    slotCount: Number(row.slot_count),
+    minEurMwh: Number(row.min_eur_mwh),
+    avgEurMwh: Number(row.avg_eur_mwh),
+    maxEurMwh: Number(row.max_eur_mwh),
+  };
 }
 
-export async function fetchPriceRowsSince(
-  minDate: string,
-): Promise<ZonedDayAheadRow[]> {
+async function listCompleteDeliveryDatesUncached(): Promise<string[]> {
   const supabase = createAdminClient();
-  const rows: ZonedDayAheadRow[] = [];
-  let from = 0;
+  const { data, error } = await supabase.rpc("list_complete_delivery_dates", {
+    min_slots: MIN_COMPLETE_SLOTS,
+  });
 
-  while (true) {
+  if (error) throw new Error(error.message);
+  if (!data?.length) return [];
+
+  return (data as string[]).map(String).sort((a, b) => b.localeCompare(a));
+}
+
+export const listCompleteDeliveryDates = unstable_cache(
+  listCompleteDeliveryDatesUncached,
+  ["complete-delivery-dates"],
+  { revalidate: 3600, tags: ["prices"] },
+);
+
+export async function fetchDayStatsForDates(
+  dates: string[],
+): Promise<DayAheadDayStat[]> {
+  if (dates.length === 0) return [];
+
+  const supabase = createAdminClient();
+  const rows: DayAheadDayStat[] = [];
+
+  for (let i = 0; i < dates.length; i += PAGE_SIZE) {
+    const chunk = dates.slice(i, i + PAGE_SIZE);
     const { data, error } = await supabase
-      .from("day_ahead_prices")
-      .select("delivery_date, slot_start, price_eur_mwh, zone")
-      .gte("delivery_date", minDate)
-      .order("slot_start", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
+      .from("day_ahead_day_stats")
+      .select("zone, delivery_date, slot_count, min_eur_mwh, avg_eur_mwh, max_eur_mwh")
+      .in("delivery_date", chunk)
+      .gte("slot_count", MIN_COMPLETE_SLOTS);
 
     if (error) throw new Error(error.message);
-    if (!data?.length) break;
+    if (!data?.length) continue;
 
     for (const row of data) {
-      const zone = asZone(row.zone as string);
-      if (!zone) continue;
-      rows.push({
-        delivery_date: row.delivery_date as string,
-        slot_start: row.slot_start as string,
-        price_eur_mwh: Number(row.price_eur_mwh),
-        zone,
-      });
+      const mapped = mapDayStat(row);
+      if (mapped) rows.push(mapped);
     }
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
   }
 
   return rows;
 }
 
-export async function fetchZonePrices(zone: MarketZoneId): Promise<DayAheadRow[]> {
+export async function fetchZoneDayStats(zone: MarketZoneId): Promise<DayAheadDayStat[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("day_ahead_day_stats")
+    .select("zone, delivery_date, slot_count, min_eur_mwh, avg_eur_mwh, max_eur_mwh")
+    .eq("zone", zone)
+    .gte("slot_count", MIN_COMPLETE_SLOTS)
+    .order("delivery_date", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!data?.length) return [];
+
+  const rows: DayAheadDayStat[] = [];
+  for (const row of data) {
+    const mapped = mapDayStat(row);
+    if (mapped) rows.push(mapped);
+  }
+  return rows;
+}
+
+export type ZoneHourlyRow = {
+  deliveryDate: string;
+  hours: (number | null)[];
+};
+
+function mapHourlyArray(value: unknown): (number | null)[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) =>
+    item == null || item === "" ? null : Number(item),
+  );
+}
+
+export async function fetchZoneHourlyStats(zone: MarketZoneId): Promise<ZoneHourlyRow[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("day_ahead_hourly_stats")
+    .select("delivery_date, avg_eur_mwh")
+    .eq("zone", zone)
+    .order("delivery_date", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  if (!data?.length) return [];
+
+  return data.map((row) => ({
+    deliveryDate: row.delivery_date as string,
+    hours: mapHourlyArray(row.avg_eur_mwh),
+  }));
+}
+
+export async function fetchZonePriceRange(
+  zone: MarketZoneId,
+  fromDate: string,
+  toDate: string,
+): Promise<DayAheadRow[]> {
   const supabase = createAdminClient();
   const rows: DayAheadRow[] = [];
   let from = 0;
@@ -235,6 +227,8 @@ export async function fetchZonePrices(zone: MarketZoneId): Promise<DayAheadRow[]
       .from("day_ahead_prices")
       .select("delivery_date, slot_start, price_eur_mwh")
       .eq("zone", zone)
+      .gte("delivery_date", fromDate)
+      .lte("delivery_date", toDate)
       .order("slot_start", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 

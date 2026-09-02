@@ -2,7 +2,7 @@ import { cache } from "react";
 import { publicSiteUrl } from "@/lib/app-url";
 import {
   fetchDayPrices,
-  fetchPriceRowsSince,
+  fetchDayStatsForDates,
   listCompleteDeliveryDates,
   romeToday,
   type ZonedDayAheadRow,
@@ -250,7 +250,7 @@ export const loadArchiveDay = cache(async (date: string): Promise<ArchiveDay | n
 
   const [rows, dates] = await Promise.all([
     fetchDayPrices(date),
-    listCompleteDeliveryDates(),
+    listArchiveDates(),
   ]);
   const zones = zonesFromRows(rows);
   if (zones.length === 0) return null;
@@ -278,31 +278,34 @@ export const loadArchiveDay = cache(async (date: string): Promise<ArchiveDay | n
 });
 
 export const loadArchiveIndex = cache(async (): Promise<ArchiveIndexItem[]> => {
-  const dates = await listCompleteDeliveryDates();
-  if (dates.length === 0) return [];
+  const dates = (await listArchiveDates()).slice(0, INDEX_DAYS);
+  const stats = await fetchDayStatsForDates(dates);
+  if (stats.length === 0) return [];
 
-  const recent = dates.slice(0, INDEX_DAYS);
-  const rows = await fetchPriceRowsSince(recent[recent.length - 1]);
-  const byDate = new Map<string, ZonedDayAheadRow[]>();
-  for (const row of rows) {
-    const list = byDate.get(row.delivery_date) ?? [];
+  const byDate = new Map<string, typeof stats>();
+  for (const row of stats) {
+    const list = byDate.get(row.deliveryDate) ?? [];
     list.push(row);
-    byDate.set(row.delivery_date, list);
+    byDate.set(row.deliveryDate, list);
   }
 
-  return recent.flatMap((date) => {
-    const zones = zonesFromRows(byDate.get(date) ?? []);
-    if (zones.length === 0) return [];
-    const italy = italyFromZones(zones);
+  return dates.flatMap((date) => {
+    const zoneStats = byDate.get(date);
+    if (!zoneStats?.length) return [];
+    const min = Math.min(...zoneStats.map((row) => toEurocentPerKwh(row.minEurMwh)));
+    const max = Math.max(...zoneStats.map((row) => toEurocentPerKwh(row.maxEurMwh)));
+    const avg =
+      zoneStats.reduce((sum, row) => sum + toEurocentPerKwh(row.avgEurMwh), 0) /
+      zoneStats.length;
     const dateLabel = formatArchiveDate(date);
     return [
       {
         date,
         dateLabel,
         dateTitle: titleCaseIt(dateLabel),
-        min: italy.min,
-        avg: italy.avg,
-        max: italy.max,
+        min,
+        avg,
+        max,
       },
     ];
   });

@@ -11,16 +11,19 @@ import {
 } from "react";
 import { RegionSelect } from "@/components/RegionSelect";
 import {
-  fetchZonePrices,
   groupZoneDays,
+  pickDefaultDeliveryDate,
   romeNow,
-  romeNowHour,
   romeToday,
   type DayAheadRow,
   type RomeNow,
   type ZoneDay,
-} from "@/lib/day-ahead-query";
+} from "@/lib/day-ahead-core";
+import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
+import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { ShareButton } from "@/components/ShareButton";
+import { HourlyProfileInsight } from "@/components/HourlyProfileInsight";
+import { LoadShiftSim } from "@/components/LoadShiftSim";
 import { LookbackInsight } from "@/components/LookbackInsight";
 import {
   DATE_QUERY_PARAM,
@@ -28,6 +31,7 @@ import {
   PRICES_SECTION_ID,
   REGION_QUERY_PARAM,
   SHOW_TODAY_PRICES_EVENT,
+  dateFromParam,
   pricesShareUrl,
   regionFromParam,
   zoneForRegion,
@@ -75,17 +79,6 @@ type DayInsight = {
   bestTip: string;
   worstTip: string;
 };
-
-function pickDefaultDate(days: ZoneDay[]) {
-  const today = romeToday();
-  const tomorrow = addCalendarDays(today, 1);
-
-  if (romeNowHour() >= 22 && days.some((day) => day.deliveryDate === tomorrow)) {
-    return tomorrow;
-  }
-  if (days.some((day) => day.deliveryDate === today)) return today;
-  return days[0]?.deliveryDate ?? null;
-}
 
 function buildDayInsight(day: ZoneDay): DayInsight {
   const recommendations = computeRecommendations(day.prices);
@@ -885,47 +878,65 @@ export function DailyInsight({
   initialRegion = DEFAULT_REGION,
   initialZone = "IT-North",
   initialDate,
-  initialRows,
+  initialHome,
 }: {
   initialRegion?: ItalianRegion;
   initialZone?: MarketZoneId;
   initialDate?: string;
-  initialRows?: DayAheadRow[];
+  initialHome?: ZoneHomePayload;
 } = {}) {
   const [region, setRegion] = useState(initialRegion);
   const [selectedDate, setSelectedDate] = useState<string | null>(() => {
-    const days = initialRows?.length ? groupZoneDays(initialRows) : [];
-    if (
-      initialDate &&
-      (days.length === 0 ||
-        days.some((day) => day.deliveryDate === initialDate))
-    ) {
+    const dates = initialHome?.dates ?? [];
+    if (initialDate && (dates.length === 0 || dates.includes(initialDate))) {
       return initialDate;
     }
-    return pickDefaultDate(days);
+    return initialHome?.date ?? pickDefaultDeliveryDate(dates);
   });
-  const [rowsByZone, setRowsByZone] = useState<
-    Partial<Record<MarketZoneId, DayAheadRow[]>>
-  >(() => (initialRows?.length ? { [initialZone]: initialRows } : {}));
+  const [homeByZone, setHomeByZone] = useState<
+    Partial<Record<MarketZoneId, ZoneHomePayload>>
+  >(() => (initialHome ? { [initialZone]: initialHome } : {}));
+  const [slotsByKey, setSlotsByKey] = useState<Record<string, DayAheadRow[]>>(
+    () => {
+      if (!initialHome?.date || !initialHome.slots.length) return {};
+      return { [`${initialHome.zone}:${initialHome.date}`]: initialHome.slots };
+    },
+  );
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [, startTransition] = useTransition();
 
   const zone = zoneForRegion(region);
   const zoneName = zoneNameForRegion(region);
-  const cached = zone ? rowsByZone[zone] : undefined;
-  const fetching = Boolean(zone) && cached === undefined && !error;
+  const home = zone ? homeByZone[zone] : undefined;
+  const dates = home?.dates ?? [];
+  const slotKey = zone && selectedDate ? `${zone}:${selectedDate}` : null;
+  const selectedSlots = slotKey ? slotsByKey[slotKey] : undefined;
+  const fetchingHome = Boolean(zone) && home === undefined && !error;
+  const fetchingDay =
+    Boolean(slotKey) &&
+    selectedSlots === undefined &&
+    !fetchingHome &&
+    Boolean(home) &&
+    !error;
+  const fetching = fetchingHome || fetchingDay;
 
   useEffect(() => {
-    if (!zone || cached) return;
+    if (!zone || home) return;
 
     let cancelled = false;
     setError(null);
 
-    fetchZonePrices(zone)
-      .then((rows) => {
+    fetchZoneHome(zone, selectedDate ?? undefined)
+      .then((payload) => {
         if (cancelled) return;
-        setRowsByZone((prev) => ({ ...prev, [zone]: rows }));
+        setHomeByZone((prev) => ({ ...prev, [zone]: payload }));
+        if (payload.date && payload.slots.length) {
+          setSlotsByKey((prev) => ({
+            ...prev,
+            [`${payload.zone}:${payload.date}`]: payload.slots,
+          }));
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -935,7 +946,30 @@ export function DailyInsight({
     return () => {
       cancelled = true;
     };
-  }, [zone, cached]);
+  }, [zone, home, selectedDate]);
+
+  useEffect(() => {
+    if (!zone || !selectedDate || selectedSlots || !home) return;
+    if (!home.dates.includes(selectedDate)) return;
+
+    let cancelled = false;
+    fetchZoneSlots(zone, selectedDate, selectedDate)
+      .then((rows) => {
+        if (cancelled) return;
+        setSlotsByKey((prev) => ({
+          ...prev,
+          [`${zone}:${selectedDate}`]: rows,
+        }));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Caricamento fallito");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [zone, selectedDate, selectedSlots, home]);
 
   useEffect(() => {
     if (!isRefreshing) return;
@@ -944,27 +978,24 @@ export function DailyInsight({
     return () => window.clearTimeout(id);
   }, [isRefreshing, fetching, selectedDate, region]);
 
-  const days = useMemo(() => groupZoneDays(cached ?? []), [cached]);
-
   useEffect(() => {
-    if (days.length === 0) return;
+    if (dates.length === 0) return;
     setSelectedDate((current) => {
-      if (current && days.some((day) => day.deliveryDate === current)) {
-        return current;
-      }
-      return pickDefaultDate(days);
+      if (current && dates.includes(current)) return current;
+      return home?.date ?? pickDefaultDeliveryDate(dates);
     });
-  }, [days]);
+  }, [dates, home?.date]);
 
-  const selected = days.find((day) => day.deliveryDate === selectedDate) ?? days[0];
+  const selected = useMemo(() => {
+    const grouped = groupZoneDays(selectedSlots ?? []);
+    return grouped.find((day) => day.deliveryDate === selectedDate) ?? grouped[0];
+  }, [selectedSlots, selectedDate]);
   const day = useMemo(
     () => (selected ? buildDayInsight(selected) : null),
     [selected],
   );
-  const dateIndex = selectedDate
-    ? days.findIndex((item) => item.deliveryDate === selectedDate)
-    : 0;
-  const isOldest = dateIndex < 0 || dateIndex === days.length - 1;
+  const dateIndex = selectedDate ? dates.indexOf(selectedDate) : 0;
+  const isOldest = dateIndex < 0 || dateIndex === dates.length - 1;
   const isNewest = dateIndex <= 0;
   const today = romeToday();
   const now = useRomeNow();
@@ -1019,6 +1050,11 @@ export function DailyInsight({
       }
     }
 
+    const fromDate = dateFromParam(search.get(DATE_QUERY_PARAM) ?? undefined);
+    if (fromDate && fromDate !== selectedDateRef.current) {
+      startTransition(() => setSelectedDate(fromDate));
+    }
+
     const hash = window.location.hash.replace(/^#/, "");
     const hasDeepLink =
       hash === PRICES_SECTION_ID ||
@@ -1070,10 +1106,10 @@ export function DailyInsight({
           <button
             type="button"
             onClick={() => {
-              const next = days[dateIndex + 1];
-              if (next) goToDate(next.deliveryDate);
+              const next = dates[dateIndex + 1];
+              if (next) goToDate(next);
             }}
-            disabled={isOldest || days.length === 0 || fetching}
+            disabled={isOldest || dates.length === 0 || fetching}
             aria-label="Giorno precedente"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-2xl leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:text-lg dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
           >
@@ -1082,10 +1118,10 @@ export function DailyInsight({
           <button
             type="button"
             onClick={() => {
-              const next = days[dateIndex - 1];
-              if (next) goToDate(next.deliveryDate);
+              const next = dates[dateIndex - 1];
+              if (next) goToDate(next);
             }}
-            disabled={isNewest || days.length === 0 || fetching}
+            disabled={isNewest || dates.length === 0 || fetching}
             aria-label="Giorno successivo"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-2xl leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:text-lg dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
           >
@@ -1146,7 +1182,13 @@ export function DailyInsight({
             <DayStats prices={day.prices} />
             <QuarterPriceTable day={day} />
           </div>
-          <LookbackInsight days={days} />
+          {home ? (
+            <>
+              <LookbackInsight points={home.points} hourly={home.hourly} />
+              <HourlyProfileInsight hourly={home.hourly} />
+              <LoadShiftSim hourly={home.hourly} />
+            </>
+          ) : null}
         </>
       )}
     </section>
