@@ -110,7 +110,7 @@ export function SignupForm() {
         id="signup-heading"
         className="text-base font-medium tracking-tight text-foreground sm:text-lg"
       >
-        Ricevi i prezzi dell'energia ogni giorno. Gratis.
+        💌Ricevi ogni giorno i prezzi dell'energia nella tua zona. Gratis.
       </h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Scegli la tua regione e inserisci l&apos;email.

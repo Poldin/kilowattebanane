@@ -39,9 +39,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             </h1>
 
             <p className="mt-6 max-w-xl text-pretty text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-400">
-              Ricevi ogni giorno una mail che ti mostra il costo dell&apos;energia
-              nella tua zona. Così sai già al mattino quando consumare e quando no
-              per risparmiare sulla bolletta. Gratis.
+              Ti mostriamo ogni giorno il costo dell&apos;energia all'ingrosso
+              nella tua zona. Così sai come risparmiare sulla bolletta. Gratis.
             </p>
 
             <a
