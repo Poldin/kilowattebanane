@@ -1037,7 +1037,8 @@ export function DailyInsight({
   }, []);
 
   useEffect(() => {
-    const search = new URLSearchParams(window.location.search);
+    const url = new URL(window.location.href);
+    const search = url.searchParams;
     const fromUrl = regionFromParam(search.get(REGION_QUERY_PARAM) ?? undefined);
     if (fromUrl) {
       persistRegionPref(fromUrl);
@@ -1055,13 +1056,21 @@ export function DailyInsight({
       startTransition(() => setSelectedDate(fromDate));
     }
 
-    const hash = window.location.hash.replace(/^#/, "");
+    const hash = url.hash.replace(/^#/, "");
+    const hadRegionParam = search.has(REGION_QUERY_PARAM);
+    const hadDateParam = search.has(DATE_QUERY_PARAM);
     const hasDeepLink =
-      hash === PRICES_SECTION_ID ||
-      search.has(REGION_QUERY_PARAM) ||
-      search.has(DATE_QUERY_PARAM);
-    if (!hasDeepLink) return;
-    document.getElementById(PRICES_SECTION_ID)?.scrollIntoView();
+      hash === PRICES_SECTION_ID || hadRegionParam || hadDateParam;
+    if (hasDeepLink) {
+      document.getElementById(PRICES_SECTION_ID)?.scrollIntoView();
+    }
+
+    if (!hadRegionParam && !hadDateParam) return;
+    search.delete(REGION_QUERY_PARAM);
+    search.delete(DATE_QUERY_PARAM);
+    const nextSearch = search.toString();
+    const next = `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}${url.hash}`;
+    window.history.replaceState(window.history.state, "", next);
   }, [initialRegion, initialZone]);
 
   return (
