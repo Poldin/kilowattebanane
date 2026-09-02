@@ -39,7 +39,7 @@ const MID = "#A3A3A3";
 const CHART_H_DESKTOP = 220;
 const CHART_W_MOBILE = 400;
 const CHART_H_MOBILE = 280;
-const PAD_MOBILE = { t: 36, r: 16, b: 48, l: 64 };
+const PAD_MOBILE = { t: 36, r: 16, b: 48, l: 42 };
 
 function useChartLayout() {
   const [mobile, setMobile] = useState(false);
@@ -57,8 +57,8 @@ function useChartLayout() {
       chartW: CHART_W_MOBILE,
       chartH: CHART_H_MOBILE,
       pad: PAD_MOBILE,
-      axisFontSize: 20,
-      unitFontSize: 15,
+      axisFontSize: 13,
+      unitFontSize: 11,
     };
   }
 
