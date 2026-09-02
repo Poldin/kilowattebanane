@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   useEffect,
   useMemo,
@@ -9,7 +8,7 @@ import {
   useTransition,
   type PointerEvent,
 } from "react";
-import { RegionSelect } from "@/components/RegionSelect";
+import { RegionZoneBar } from "@/components/RegionZoneBar";
 import {
   groupZoneDays,
   pickDefaultDeliveryDate,
@@ -35,7 +34,6 @@ import {
   pricesShareUrl,
   regionFromParam,
   zoneForRegion,
-  zoneNameForRegion,
   type ItalianRegion,
   type MarketZoneId,
 } from "@/lib/market-zones";
@@ -907,7 +905,6 @@ export function DailyInsight({
   const [, startTransition] = useTransition();
 
   const zone = zoneForRegion(region);
-  const zoneName = zoneNameForRegion(region);
   const home = zone ? homeByZone[zone] : undefined;
   const dates = home?.dates ?? [];
   const slotKey = zone && selectedDate ? `${zone}:${selectedDate}` : null;
@@ -1089,7 +1086,7 @@ export function DailyInsight({
         </h2>
         <ShareButton
           getUrl={() => pricesShareUrl(window.location.origin, region)}
-          title={`kilowatt e banane🍌🍌🍌 — prezzi in ${region}`}
+          title={`kilowatt e banane🍌🍌🍌 prezzi in ${region}`}
           text={`I prezzi dell'energia all'ingrosso in ${region}. Guarda quando conviene consumare.`}
           ariaLabel={`Condividi i prezzi in ${region}`}
         />
@@ -1097,73 +1094,58 @@ export function DailyInsight({
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Scegli il giorno e la regione: grafico e tabella ti dicono quando
         conviene consumare.
-        {selectedDate ? (
+        {dates.includes(today) ? (
           <>
             {" "}
-            <Link
-              href={`/prezzi/${selectedDate}`}
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedDate !== today) goToDate(today);
+              }}
               className="underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground hover:decoration-neutral-500 dark:decoration-neutral-600 dark:hover:decoration-neutral-400"
             >
-              Pagina del giorno
-            </Link>
+              Vedi il grafico di oggi
+            </button>
           </>
         ) : null}
       </p>
 
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-        <div className="flex min-w-0 items-center gap-1.5 sm:flex-1 sm:gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              const next = dates[dateIndex + 1];
-              if (next) goToDate(next);
-            }}
-            disabled={isOldest || dates.length === 0 || fetching}
-            aria-label="Giorno precedente"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-2xl leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:text-lg dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const next = dates[dateIndex - 1];
-              if (next) goToDate(next);
-            }}
-            disabled={isNewest || dates.length === 0 || fetching}
-            aria-label="Giorno successivo"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-2xl leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:text-lg dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-          >
-            ›
-          </button>
-          <p
-            className="min-w-0 truncate text-sm font-medium capitalize tracking-tight text-foreground sm:text-base"
-            aria-live="polite"
-          >
-            {dateLabel}
-          </p>
-        </div>
-
-        <div className="w-full sm:w-auto sm:shrink-0">
-          <RegionSelect
-            value={region}
-            onChange={handleRegionChange}
-            variant="banana"
-            compact
-            hideLabel
-            align="right"
-          />
-        </div>
-      </div>
-
-      {zoneName ? (
-        <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-          Zona di mercato:
-          <span className="inline-flex items-center rounded-full bg-[#F5D547] px-2 py-0.5 font-medium text-[#111111]">
-            {zoneName}
-          </span>
+      <RegionZoneBar
+        region={region}
+        onRegionChange={handleRegionChange}
+        className="mt-5"
+      >
+        <button
+          type="button"
+          onClick={() => {
+            const next = dates[dateIndex + 1];
+            if (next) goToDate(next);
+          }}
+          disabled={isOldest || dates.length === 0 || fetching}
+          aria-label="Giorno precedente"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-2xl leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:text-lg dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = dates[dateIndex - 1];
+            if (next) goToDate(next);
+          }}
+          disabled={isNewest || dates.length === 0 || fetching}
+          aria-label="Giorno successivo"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-2xl leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:text-lg dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+        >
+          ›
+        </button>
+        <p
+          className="min-w-0 truncate text-sm font-medium capitalize tracking-tight text-foreground sm:text-base"
+          aria-live="polite"
+        >
+          {dateLabel}
         </p>
-      ) : null}
+      </RegionZoneBar>
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400">
@@ -1193,9 +1175,22 @@ export function DailyInsight({
           </div>
           {home ? (
             <>
-              <LookbackInsight points={home.points} hourly={home.hourly} />
-              <HourlyProfileInsight hourly={home.hourly} />
-              <LoadShiftSim hourly={home.hourly} />
+              <LookbackInsight
+                points={home.points}
+                hourly={home.hourly}
+                region={region}
+                onRegionChange={handleRegionChange}
+              />
+              <HourlyProfileInsight
+                hourly={home.hourly}
+                region={region}
+                onRegionChange={handleRegionChange}
+              />
+              <LoadShiftSim
+                hourly={home.hourly}
+                region={region}
+                onRegionChange={handleRegionChange}
+              />
             </>
           ) : null}
         </>

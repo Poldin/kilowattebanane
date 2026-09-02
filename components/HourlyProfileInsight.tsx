@@ -23,6 +23,8 @@ import {
   sliceLookbackDates,
   type LookbackRangeId,
 } from "@/lib/lookback";
+import { RegionZoneBar } from "@/components/RegionZoneBar";
+import type { ItalianRegion } from "@/lib/market-zones";
 import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
 
 const BANANA = "#F5D547";
@@ -230,7 +232,15 @@ function HourlyProfileChart({ profile }: { profile: HourlyProfile }) {
   );
 }
 
-export function HourlyProfileInsight({ hourly }: { hourly: ZoneHourlyPayload[] }) {
+export function HourlyProfileInsight({
+  hourly,
+  region,
+  onRegionChange,
+}: {
+  hourly: ZoneHourlyPayload[];
+  region: ItalianRegion;
+  onRegionChange: (value: string) => void;
+}) {
   const [rangeId, setRangeId] = useState<LookbackRangeId>(DEFAULT_LOOKBACK_RANGE);
   const dates = hourly.map((day) => day.date);
   const endDate = lookbackEndDateFromDates(dates);
@@ -267,31 +277,33 @@ export function HourlyProfileInsight({ hourly }: { hourly: ZoneHourlyPayload[] }
         rosse le più alte.
       </p>
 
-      <div
-        role="tablist"
-        aria-label="Periodo del profilo orario"
-        className="mt-4 flex gap-1 overflow-x-auto pb-1"
-      >
-        {LOOKBACK_RANGES.map((item) => {
-          const active = item.id === rangeId;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setRangeId(item.id)}
-              className={
-                active
-                  ? "shrink-0 rounded-md bg-[#F5D547] px-2.5 py-1.5 text-xs font-semibold text-[#111111]"
-                  : "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
-              }
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
+      <RegionZoneBar region={region} onRegionChange={onRegionChange}>
+        <div
+          role="tablist"
+          aria-label="Periodo del profilo orario"
+          className="flex min-w-0 flex-1 gap-1 overflow-x-auto pb-1"
+        >
+          {LOOKBACK_RANGES.map((item) => {
+            const active = item.id === rangeId;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setRangeId(item.id)}
+                className={
+                  active
+                    ? "shrink-0 rounded-md bg-[#F5D547] px-2.5 py-1.5 text-xs font-semibold text-[#111111]"
+                    : "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
+                }
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </RegionZoneBar>
 
       {profile ? (
         <>
