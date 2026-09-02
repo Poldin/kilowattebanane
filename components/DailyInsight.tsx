@@ -98,7 +98,7 @@ const MID = "#A3A3A3";
 const MARKER_FONT_SIZE = 20;
 const CHART_W_MOBILE = 400;
 const CHART_H_MOBILE = 360;
-const PAD_MOBILE = { t: 40, r: 16, b: 56, l: 68 };
+const PAD_MOBILE = { t: 40, r: 16, b: 56, l: 45 };
 
 function addCalendarDays(ymd: string, delta: number) {
   const [year, month, day] = ymd.split("-").map(Number);
