@@ -99,9 +99,8 @@ function HourlyProfileChart({ profile }: { profile: HourlyProfile }) {
           pickFromPointer(event);
         }}
         onPointerMove={(event) => {
-          pickFromPointer(event);
+          if (event.buttons > 0) pickFromPointer(event);
         }}
-        onPointerLeave={() => setPickedHour(null)}
       >
         <rect width={chartW} height={chartH} fill="#111111" rx="8" />
 
@@ -206,15 +205,26 @@ function HourlyProfileChart({ profile }: { profile: HourlyProfile }) {
       </svg>
 
       {picked ? (
-        <div className="pointer-events-none absolute top-2.5 right-2.5 z-10 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-white">
-          <p className="text-xs font-semibold tabular-nums sm:text-sm">
-            {String(picked.hour).padStart(2, "0")}:00 ·{" "}
-            {formatEurocent(picked.avg)}
-          </p>
-          <p className="text-[11px] text-white/70">
-            tra le più basse in {picked.cheapDays} giorni su {picked.samples}
-          </p>
-        </div>
+        <button
+          type="button"
+          className="absolute top-2.5 right-2.5 z-10 flex items-start gap-2 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-left text-white shadow-sm"
+          aria-label={`Chiudi lettura delle ${String(picked.hour).padStart(2, "0")}:00, ${formatEurocent(picked.avg)}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => setPickedHour(null)}
+        >
+          <span>
+            <span className="block text-xs font-semibold tabular-nums sm:text-sm">
+              {String(picked.hour).padStart(2, "0")}:00 ·{" "}
+              {formatEurocent(picked.avg)}
+            </span>
+            <span className="block text-[11px] text-white/70">
+              tra le più basse in {picked.cheapDays} giorni su {picked.samples}
+            </span>
+          </span>
+          <span aria-hidden className="text-sm leading-none text-white/70">
+            ×
+          </span>
+        </button>
       ) : null}
     </div>
   );

@@ -204,7 +204,6 @@ function LookbackChart({
         onPointerMove={(event) => {
           if (event.buttons > 0) pickFromPointer(event);
         }}
-        onPointerLeave={() => setPickedIndex(null)}
       >
         <rect width={chartW} height={chartH} fill="#111111" rx="8" />
 
@@ -308,16 +307,27 @@ function LookbackChart({
       </svg>
 
       {picked ? (
-        <div className="pointer-events-none absolute top-2.5 right-2.5 z-10 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-white">
-          <p className="text-xs font-semibold tabular-nums sm:text-sm">
-            {picked.label} · {picked.avgLabel}
-          </p>
-          {picked.minLabel && picked.maxLabel ? (
-            <p className="text-[11px] tabular-nums text-white/70">
-              min {picked.minLabel} · max {picked.maxLabel}
-            </p>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          className="absolute top-2.5 right-2.5 z-10 flex items-start gap-2 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-left text-white shadow-sm"
+          aria-label={`Chiudi lettura del ${picked.label}, ${picked.avgLabel}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => setPickedIndex(null)}
+        >
+          <span>
+            <span className="block text-xs font-semibold tabular-nums sm:text-sm">
+              {picked.label} · {picked.avgLabel}
+            </span>
+            {picked.minLabel && picked.maxLabel ? (
+              <span className="block text-[11px] tabular-nums text-white/70">
+                min {picked.minLabel} · max {picked.maxLabel}
+              </span>
+            ) : null}
+          </span>
+          <span aria-hidden className="text-sm leading-none text-white/70">
+            ×
+          </span>
+        </button>
       ) : null}
     </div>
   );
