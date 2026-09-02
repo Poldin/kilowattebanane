@@ -12,7 +12,7 @@ import {
   zoneForRegion,
 } from "@/lib/market-zones";
 
-export const revalidate = 3600;
+export const revalidate = 7200;
 
 export default async function Home({ searchParams }: PageProps<"/">) {
   const params = await searchParams;
