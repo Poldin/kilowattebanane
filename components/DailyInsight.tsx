@@ -65,6 +65,7 @@ import {
   toEurocentPerKwh,
   toPoints,
   toSmoothPath,
+  toLinearPath,
   yScale,
 } from "@/lib/insights";
 
@@ -389,7 +390,7 @@ function PriceChart({
     () => toPoints(pricesCent, scale.min, scale.max, chartH, chartW, pad),
     [pricesCent, scale.min, scale.max, chartH, chartW, pad],
   );
-  const line = useMemo(() => toSmoothPath(points), [points]);
+  const line = useMemo(() => toLinearPath(points), [points]);
   const samples = useMemo(
     () =>
       sampleSmoothCurve(points, scale.min, scale.max, chartW, pad, chartH),

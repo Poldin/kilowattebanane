@@ -113,10 +113,28 @@ export function smoothPathSegmentControls(
   const p1 = points[i];
   const p2 = points[i + 1];
   const p3 = points[i + 2] ?? p2;
+
+  // 1. Tensione ridotta (da 1/6 a 1/12) per stringere le curve sui tratti lineari
+  const tension = 1 / 12;
+
+  // 2. Controllo dei picchi (cambi di direzione della curva)
+  const isP1LocalPeak =
+    (p1.y <= p0.y && p1.y <= p2.y) || (p1.y >= p0.y && p1.y >= p2.y);
+  const isP2LocalPeak =
+    (p2.y <= p1.y && p2.y <= p3.y) || (p2.y >= p1.y && p2.y >= p3.y);
+
+  // Calcolo componenti Y per i punti di controllo
+  let c1y = p1.y + (p2.y - p0.y) * tension;
+  let c2y = p2.y - (p3.y - p1.y) * tension;
+
+  // Se siamo su un picco, forza il punto di controllo ad allinearsi in orizzontale
+  if (isP1LocalPeak) c1y = p1.y;
+  if (isP2LocalPeak) c2y = p2.y;
+
   return {
     p1,
-    c1: { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 },
-    c2: { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 },
+    c1: { x: p1.x + (p2.x - p0.x) * tension, y: c1y },
+    c2: { x: p2.x - (p3.x - p1.x) * tension, y: c2y },
     p2,
   };
 }
@@ -128,6 +146,17 @@ export function toSmoothPath(points: { x: number; y: number }[]) {
   for (let i = 0; i < points.length - 1; i++) {
     const { c1, c2, p2 } = smoothPathSegmentControls(points, i);
     d += ` C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`;
+  }
+  return d;
+}
+
+export function toLinearPath(points: { x: number; y: number }[]) {
+  if (points.length < 2) return "";
+
+  // M muove al primo punto, poi colleghi ciascun punto successivo con L (line)
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i].x} ${points[i].y}`;
   }
   return d;
 }
