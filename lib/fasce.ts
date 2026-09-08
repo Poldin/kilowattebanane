@@ -14,6 +14,24 @@ export const TARIFF_PLANS = [
 
 export type TariffPlanId = (typeof TARIFF_PLANS)[number]["id"];
 export const DEFAULT_TARIFF_PLAN: TariffPlanId = "dinamica";
+export const MAIL_DEFAULT_TARIFF_PLAN: TariffPlanId = "fasce";
+
+export function tariffPlanLabel(id: TariffPlanId) {
+  return TARIFF_PLANS.find((plan) => plan.id === id)?.label ?? id;
+}
+
+export function tariffMailPhrase(id: TariffPlanId) {
+  switch (id) {
+    case "fasce":
+      return "a fasce (F1, F2 e F3)";
+    case "bioraria":
+      return "in bioraria (F1 e F23)";
+    case "monoraria":
+      return "in monoraria";
+    case "dinamica":
+      return "ora per ora";
+  }
+}
 
 export const FASCIA_COLOR: Record<FasciaId, string> = {
   F1: "#F97316",

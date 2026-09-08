@@ -19,9 +19,10 @@ export function resendFrom() {
   return process.env.RESEND_FROM ?? "Paolo <onboarding@resend.dev>";
 }
 
-export function mailChartUrl(zone: string, date: string) {
+export function mailChartUrl(zone: string, date: string, tariff?: string) {
   const url = new URL("/api/mail/chart", publicSiteUrl());
   url.searchParams.set("zona", zone);
   url.searchParams.set("giorno", date);
+  if (tariff) url.searchParams.set("piano", tariff);
   return url.toString();
 }

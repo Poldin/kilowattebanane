@@ -2,7 +2,7 @@ import { addCalendarDays } from "@/lib/entsoe";
 import { countZoneDaySlots, romeToday } from "@/lib/day-ahead-query";
 import { isCompleteDay } from "@/lib/insights";
 import { createSecretClient } from "@/lib/supabase/secret";
-import { buildZoneMailContent } from "@/lib/mail/content";
+import { loadZoneMailDay } from "@/lib/mail/content";
 import { sendZoneDigest } from "@/lib/mail/send";
 import {
   listActiveSubscribers,
@@ -144,10 +144,10 @@ export async function sendDailyDigest(deliveryDate?: string) {
     let sent = 0;
 
     for (const [zone, recipients] of groupByZone(pending)) {
-      const content = await buildZoneMailContent(zone, date);
-      if (!content) continue;
+      const day = await loadZoneMailDay(zone, date);
+      if (!day) continue;
 
-      const ids = await sendZoneDigest(date, zone, recipients, content);
+      const ids = await sendZoneDigest(date, zone, recipients, day);
       zonesComplete.push(zone);
       sent += recipients.length;
 

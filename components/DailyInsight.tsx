@@ -41,7 +41,7 @@ import {
   type MarketZoneId,
 } from "@/lib/market-zones";
 import { persistRegionPref, readRegionPref } from "@/lib/region-pref";
-import { persistTariffPref, readTariffPref } from "@/lib/tariff-pref";
+import { persistTariffPref, readTariffPref, TARIFF_PREF_EVENT } from "@/lib/tariff-pref";
 import {
   QUARTERS_PER_HOUR,
   formatQuarterSlot,
@@ -472,7 +472,7 @@ function FasciaBandMark({
   const mark =
     cheapId === bandId ? "🍌" : peakId === bandId ? "🐵" : null;
   const centerX = (fromX + toX) / 2;
-  const emojiY = labelY - 16;
+  const emojiY = labelY - 24;
 
   if (width >= 28) {
     return (
@@ -1433,6 +1433,18 @@ export function DailyInsight({
   }, []);
 
   useEffect(() => {
+    function onTariffPref(event: Event) {
+      const next = (event as CustomEvent<TariffPlanId>).detail;
+      if (!next) return;
+      setTariff(next);
+      setLayers(layersForTariff(next));
+    }
+
+    window.addEventListener(TARIFF_PREF_EVENT, onTariffPref);
+    return () => window.removeEventListener(TARIFF_PREF_EVENT, onTariffPref);
+  }, []);
+
+  useEffect(() => {
     const url = new URL(window.location.href);
     const search = url.searchParams;
     const fromUrl = regionFromParam(search.get(REGION_QUERY_PARAM) ?? undefined);
@@ -1582,12 +1594,12 @@ export function DailyInsight({
               onLayersChange={setLayers}
               tariff={tariff}
             />
-            <DayStats date={day.deliveryDate} prices={day.prices} tariff={tariff} />
             <PriceTips
               best={tips.bestTip}
               worst={tips.worstTip}
               nowLine={nowLine}
             />
+            <DayStats date={day.deliveryDate} prices={day.prices} tariff={tariff} />
             <SignupSlot className="mt-6 w-full scroll-mt-20" />
             <QuarterPriceTable day={day} />
           </div>

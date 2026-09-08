@@ -4,6 +4,7 @@ import { buildPriceMailModel } from "@/lib/mail/content";
 import { sendWelcomeEmail } from "@/lib/mail/send";
 import { upsertSubscriber } from "@/lib/subscribers";
 import { romeToday } from "@/lib/day-ahead-query";
+import { resolveMailTariff } from "@/lib/tariff-pref";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export async function POST(request: NextRequest) {
   let body: {
     email?: string;
     region?: string;
+    contractType?: string;
     website?: string;
   };
 
@@ -28,6 +30,7 @@ export async function POST(request: NextRequest) {
 
   const email = body.email?.trim().toLowerCase() ?? "";
   const region = body.region?.trim() ?? "";
+  const contractType = resolveMailTariff(body.contractType);
 
   if (!EMAIL_RE.test(email) || email.length > 254) {
     return Response.json({ error: "Inserisci un'email valida." }, { status: 400 });
@@ -40,6 +43,7 @@ export async function POST(request: NextRequest) {
     const { subscriber, created, reactivated } = await upsertSubscriber(
       email,
       region as ItalianRegion,
+      contractType,
     );
 
     if (created || reactivated) {
@@ -47,6 +51,7 @@ export async function POST(request: NextRequest) {
         subscriber.region,
         subscriber.zone,
         romeToday(),
+        subscriber.tariff,
       );
       try {
         await sendWelcomeEmail(subscriber, model);

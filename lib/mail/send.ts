@@ -6,8 +6,9 @@ import { resendFrom, unsubscribeApiUrl, unsubscribePageUrl } from "@/lib/app-url
 import {
   digestSubjectLine,
   priceMailModelForRegion,
+  zoneMailContentFromDay,
   type PriceMailModel,
-  type ZoneMailContent,
+  type ZoneMailDay,
 } from "@/lib/mail/content";
 import type { Subscriber } from "@/lib/subscribers";
 import type { MarketZoneId } from "@/lib/market-zones";
@@ -32,10 +33,18 @@ export async function sendWelcomeEmail(
 ) {
   const pageUrl = unsubscribePageUrl(subscriber.unsubscribe_token);
   const html = await render(
-    WelcomeEmail({ unsubscribeUrl: pageUrl, model }),
+    WelcomeEmail({
+      unsubscribeUrl: pageUrl,
+      model,
+      tariff: subscriber.tariff,
+    }),
   );
   const text = await render(
-    WelcomeEmail({ unsubscribeUrl: pageUrl, model }),
+    WelcomeEmail({
+      unsubscribeUrl: pageUrl,
+      model,
+      tariff: subscriber.tariff,
+    }),
     { plainText: true },
   );
 
@@ -56,12 +65,13 @@ export async function sendZoneDigest(
   deliveryDate: string,
   zone: MarketZoneId,
   recipients: Subscriber[],
-  content: ZoneMailContent,
+  day: ZoneMailDay,
 ) {
   const resend = getResend();
   const payload = [];
 
   for (const subscriber of recipients) {
+    const content = zoneMailContentFromDay(day, subscriber.tariff);
     const model = priceMailModelForRegion(content, subscriber.region);
     const pageUrl = unsubscribePageUrl(subscriber.unsubscribe_token);
     const html = await render(

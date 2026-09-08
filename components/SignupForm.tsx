@@ -11,7 +11,16 @@ import {
   useState,
 } from "react";
 import { RegionSelect } from "@/components/RegionSelect";
+import { TariffSelect } from "@/components/TariffSelect";
+import {
+  MAIL_DEFAULT_TARIFF_PLAN,
+  tariffMailPhrase,
+  tariffPlanLabel,
+  type TariffPlanId,
+} from "@/lib/fasce";
+import { persistTariffPref, readTariffPref, TARIFF_PREF_EVENT } from "@/lib/tariff-pref";
 import { zoneNameForRegion } from "@/lib/regions";
+import { FasciaBadgeGroup } from "@/components/TariffSelect";
 
 type SignupContextValue = {
   openSignup: () => void;
@@ -54,14 +63,34 @@ export function SignupSlot({
 type ConfirmedSignup = {
   email: string;
   region: string;
+  tariff: TariffPlanId;
 };
 
 export function SignupForm() {
   const [region, setRegion] = useState("");
+  const [tariff, setTariff] = useState<TariffPlanId>(MAIL_DEFAULT_TARIFF_PLAN);
   const [email, setEmail] = useState("");
   const [confirmed, setConfirmed] = useState<ConfirmedSignup | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = readTariffPref();
+    if (stored) setTariff(stored);
+
+    function onPref(event: Event) {
+      const next = (event as CustomEvent<TariffPlanId>).detail;
+      if (next) setTariff(next);
+    }
+
+    window.addEventListener(TARIFF_PREF_EVENT, onPref);
+    return () => window.removeEventListener(TARIFF_PREF_EVENT, onPref);
+  }, []);
+
+  function handleTariffChange(next: TariffPlanId) {
+    setTariff(next);
+    persistTariffPref(next);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -79,6 +108,7 @@ export function SignupForm() {
         body: JSON.stringify({
           email,
           region,
+          contractType: tariff,
           website: typeof honeypot === "string" ? honeypot : "",
         }),
       });
@@ -91,7 +121,8 @@ export function SignupForm() {
         return;
       }
 
-      setConfirmed({ email, region });
+      persistTariffPref(tariff);
+      setConfirmed({ email, region, tariff });
     } catch {
       setError("Non è stato possibile completare l'iscrizione. Riprova.");
     } finally {
@@ -102,6 +133,7 @@ export function SignupForm() {
   function handleConfirmedClose() {
     setConfirmed(null);
     setRegion("");
+    setTariff(readTariffPref() ?? MAIL_DEFAULT_TARIFF_PLAN);
     setEmail("");
   }
 
@@ -117,7 +149,7 @@ export function SignupForm() {
         💌Ricevi ogni giorno i prezzi dell'energia nella tua zona. Gratis.
       </h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-        Scegli la tua regione e inserisci l&apos;email.
+        Scegli regione, tipo di dati in mail e inserisci l&apos;email.
       </p>
 
       <form onSubmit={handleSubmit} className="relative mt-5 flex flex-col gap-3">
@@ -129,6 +161,15 @@ export function SignupForm() {
         </div>
 
         <RegionSelect required value={region} onChange={setRegion} />
+
+        <TariffSelect
+          value={tariff}
+          onChange={handleTariffChange}
+          variant="default"
+          align="left"
+          hideLabel={false}
+          label="Come vuoi vedere i prezzi in mail?"
+        />
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
@@ -227,9 +268,10 @@ function SignupConfirmDialog({
             Iscrizione confermata
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-            Tutto pronto. Ogni giorno ti mandiamo i prezzi nella tua zona.
-            Controlla la casella: ti arriva a breve una mail di benvenuto con i
-            prezzi di oggi.
+            Tutto pronto. Ogni giorno ti mandiamo i prezzi
+            {confirmed ? ` ${tariffMailPhrase(confirmed.tariff)}` : ""} nella tua
+            zona. Controlla la casella: ti arriva a breve una mail di benvenuto
+            con i prezzi di oggi.
           </p>
 
           {confirmed ? (
@@ -245,6 +287,15 @@ function SignupConfirmDialog({
                   Regione
                 </dt>
                 <dd className="text-sm text-foreground">{confirmed.region}</dd>
+              </div>
+              <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+                <dt className="text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                  In mail
+                </dt>
+                <dd className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+                  <span>{tariffPlanLabel(confirmed.tariff)}</span>
+                  <FasciaBadgeGroup planId={confirmed.tariff} />
+                </dd>
               </div>
               {zoneName ? (
                 <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">

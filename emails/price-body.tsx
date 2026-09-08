@@ -13,12 +13,12 @@ export function PriceDigestBody({
     <>
       {intro ? <Text style={styles.intro}>{intro}</Text> : null}
       <Text style={styles.kicker}>
-        {model.dateLabel} · zona {model.zoneName} · {model.region}
+        {model.dateLabel} · zona {model.zoneName} · {model.region} · {model.tariffLabel}
       </Text>
       <Link href={model.ctaUrl} style={styles.chartLink}>
         <Img
           src={model.chartUrl}
-          alt={`Grafico dei prezzi ${model.dateLabel}, zona ${model.zoneName}`}
+          alt={`Grafico dei prezzi ${model.dateLabel}, zona ${model.zoneName}, ${model.tariffLabel}`}
           width={MAIL_CHART_DISPLAY_W}
           height={MAIL_CHART_DISPLAY_H}
           style={styles.chart}
@@ -26,6 +26,25 @@ export function PriceDigestBody({
       </Link>
       <Text style={styles.tip}>{model.bestTip}</Text>
       {model.worstTip ? <Text style={styles.worst}>{model.worstTip}</Text> : null}
+
+      {model.fasciaStats.length > 0 ? (
+        <Row style={styles.stats}>
+          {model.fasciaStats.map((stat) => (
+            <Column key={stat.id}>
+              <Text style={{ ...styles.statLabel, color: stat.color }}>
+                {stat.mark === "cheap" ? "🍌 " : stat.mark === "peak" ? "🐵 " : ""}
+                {stat.label}
+              </Text>
+              <Text style={{ ...styles.statValue, color: stat.color }}>
+                {stat.priceLabel}
+              </Text>
+              {stat.rangeLabel ? (
+                <Text style={styles.statHint}>{stat.rangeLabel}</Text>
+              ) : null}
+            </Column>
+          ))}
+        </Row>
+      ) : null}
 
       <Row style={styles.stats}>
         <Column>
@@ -47,18 +66,20 @@ export function PriceDigestBody({
         Vedi il grafico interattivo
       </Button>
 
-      <Section style={styles.tableWrap}>
-        {model.hourly.map((row) => (
-          <Row key={row.hour} style={styles.tableRow}>
-            <Column style={styles.hourCol}>
-              <Text style={styles.cell}>{row.label}</Text>
-            </Column>
-            <Column>
-              <Text style={styles.priceCell}>{row.priceLabel}</Text>
-            </Column>
-          </Row>
-        ))}
-      </Section>
+      {model.tariff === "dinamica" ? (
+        <Section style={styles.tableWrap}>
+          {model.hourly.map((row) => (
+            <Row key={row.hour} style={styles.tableRow}>
+              <Column style={styles.hourCol}>
+                <Text style={styles.cell}>{row.label}</Text>
+              </Column>
+              <Column>
+                <Text style={styles.priceCell}>{row.priceLabel}</Text>
+              </Column>
+            </Row>
+          ))}
+        </Section>
+      ) : null}
     </>
   );
 }
@@ -114,6 +135,11 @@ const styles = {
     fontSize: "20px",
     fontWeight: 600,
     margin: 0,
+  },
+  statHint: {
+    color: "#a3a3a3",
+    fontSize: "11px",
+    margin: "2px 0 0",
   },
   unit: {
     color: "#a3a3a3",

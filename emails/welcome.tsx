@@ -2,23 +2,32 @@ import { Text } from "react-email";
 import { EmailShell } from "@/emails/shell";
 import { PriceDigestBody } from "@/emails/price-body";
 import type { PriceMailModel } from "@/lib/mail/content";
+import {
+  MAIL_DEFAULT_TARIFF_PLAN,
+  tariffMailPhrase,
+  type TariffPlanId,
+} from "@/lib/fasce";
 
 export function WelcomeEmail({
   unsubscribeUrl,
   model,
+  tariff = MAIL_DEFAULT_TARIFF_PLAN,
 }: {
   unsubscribeUrl: string;
   model: PriceMailModel | null;
+  tariff?: TariffPlanId;
 }) {
+  const plan = model?.tariff ?? tariff;
+
   return (
     <EmailShell
       preview="Iscrizione confermata."
       unsubscribeUrl={unsubscribeUrl}
     >
-      <Text style={heading}>TUtto pronto.</Text>
+      <Text style={heading}>Tutto pronto.</Text>
       <Text style={lead}>
-        Ogni giorno ti mandiamo i prezzi dell&apos;energia nella tua zona, così
-        sai già quando conviene consumare.
+        Ogni giorno ti mandiamo i prezzi dell&apos;energia {tariffMailPhrase(plan)}{" "}
+        nella tua zona, così sai già quando conviene consumare.
       </Text>
       {model ? (
         <PriceDigestBody

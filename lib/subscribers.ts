@@ -1,5 +1,7 @@
 import { createSecretClient } from "@/lib/supabase/secret";
 import { zoneForRegion, type ItalianRegion, type MarketZoneId } from "@/lib/market-zones";
+import type { TariffPlanId } from "@/lib/fasce";
+import { resolveMailTariff } from "@/lib/tariff-pref";
 
 export type Subscriber = {
   id: string;
@@ -8,7 +10,12 @@ export type Subscriber = {
   zone: MarketZoneId;
   unsubscribe_token: string;
   unsubscribed_at: string | null;
+  contract_type: string | null;
+  tariff: TariffPlanId;
 };
+
+const SUBSCRIBER_COLUMNS =
+  "id, email, region, zone, unsubscribe_token, unsubscribed_at, contract_type";
 
 function asSubscriber(row: {
   id: string;
@@ -17,6 +24,7 @@ function asSubscriber(row: {
   zone: string;
   unsubscribe_token: string;
   unsubscribed_at: string | null;
+  contract_type: string | null;
 }): Subscriber {
   return {
     id: row.id,
@@ -25,32 +33,43 @@ function asSubscriber(row: {
     zone: row.zone as MarketZoneId,
     unsubscribe_token: row.unsubscribe_token,
     unsubscribed_at: row.unsubscribed_at,
+    contract_type: row.contract_type,
+    tariff: resolveMailTariff(row.contract_type),
   };
 }
 
-export async function upsertSubscriber(email: string, region: ItalianRegion) {
+export async function upsertSubscriber(
+  email: string,
+  region: ItalianRegion,
+  contractType?: string | null,
+) {
   const zone = zoneForRegion(region);
   if (!zone) throw new Error("Unknown region");
 
   const supabase = createSecretClient();
   const normalized = email.trim().toLowerCase();
+  const contract_type = resolveMailTariff(contractType);
   const now = new Date().toISOString();
 
   const { data: existing, error: lookupError } = await supabase
     .from("subscribers")
-    .select("id, email, region, zone, unsubscribe_token, unsubscribed_at")
+    .select(SUBSCRIBER_COLUMNS)
     .eq("email", normalized)
     .maybeSingle();
 
   if (lookupError) throw new Error(lookupError.message);
 
   if (existing && !existing.unsubscribed_at) {
-    if (existing.region !== region || existing.zone !== zone) {
+    if (
+      existing.region !== region ||
+      existing.zone !== zone ||
+      existing.contract_type !== contract_type
+    ) {
       const { data, error } = await supabase
         .from("subscribers")
-        .update({ region, zone, updated_at: now })
+        .update({ region, zone, contract_type, updated_at: now })
         .eq("id", existing.id)
-        .select("id, email, region, zone, unsubscribe_token, unsubscribed_at")
+        .select(SUBSCRIBER_COLUMNS)
         .single();
       if (error) throw new Error(error.message);
       return { subscriber: asSubscriber(data), created: false, reactivated: false };
@@ -64,11 +83,12 @@ export async function upsertSubscriber(email: string, region: ItalianRegion) {
       .update({
         region,
         zone,
+        contract_type,
         unsubscribed_at: null,
         updated_at: now,
       })
       .eq("id", existing.id)
-      .select("id, email, region, zone, unsubscribe_token, unsubscribed_at")
+      .select(SUBSCRIBER_COLUMNS)
       .single();
     if (error) throw new Error(error.message);
     return { subscriber: asSubscriber(data), created: false, reactivated: true };
@@ -76,8 +96,8 @@ export async function upsertSubscriber(email: string, region: ItalianRegion) {
 
   const { data, error } = await supabase
     .from("subscribers")
-    .insert({ email: normalized, region, zone })
-    .select("id, email, region, zone, unsubscribe_token, unsubscribed_at")
+    .insert({ email: normalized, region, zone, contract_type })
+    .select(SUBSCRIBER_COLUMNS)
     .single();
   if (error) throw new Error(error.message);
   return { subscriber: asSubscriber(data), created: true, reactivated: false };
@@ -116,7 +136,7 @@ export async function listActiveSubscribers() {
   while (true) {
     const { data, error } = await supabase
       .from("subscribers")
-      .select("id, email, region, zone, unsubscribe_token, unsubscribed_at")
+      .select(SUBSCRIBER_COLUMNS)
       .is("unsubscribed_at", null)
       .order("id", { ascending: true })
       .range(from, from + page - 1);
