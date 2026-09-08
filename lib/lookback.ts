@@ -99,6 +99,44 @@ export function valuesToPoints(
   }));
 }
 
+export function nullableValuesToPoints(
+  values: (number | null)[],
+  min: number,
+  max: number,
+  chartH: number,
+  chartW: number,
+  pad: { t: number; r: number; b: number; l: number },
+) {
+  const range = max - min || 1;
+  const innerH = chartH - pad.t - pad.b;
+  const innerW = chartW - pad.l - pad.r;
+  const n = values.length;
+  return values.map((price, i) => {
+    if (price == null || !Number.isFinite(price)) return null;
+    return {
+      x: n <= 1 ? pad.l + innerW / 2 : pad.l + (i / (n - 1)) * innerW,
+      y: pad.t + (1 - (price - min) / range) * innerH,
+      value: price,
+    };
+  });
+}
+
+export function toBrokenLinearPath(
+  points: ({ x: number; y: number } | null)[],
+) {
+  let d = "";
+  let drawing = false;
+  for (const point of points) {
+    if (!point) {
+      drawing = false;
+      continue;
+    }
+    d += drawing ? ` L ${point.x} ${point.y}` : ` M ${point.x} ${point.y}`;
+    drawing = true;
+  }
+  return d;
+}
+
 export function bandPath(
   maxPoints: { x: number; y: number }[],
   minPoints: { x: number; y: number }[],

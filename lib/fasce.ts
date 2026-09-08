@@ -267,19 +267,20 @@ function meanOrNull(sum: number, count: number) {
   return count > 0 ? sum / count : null;
 }
 
-export function fasciaAveragesFromHourly(
-  ymd: string,
-  hours: (number | null)[],
+export function fasciaAveragesFromDays(
+  days: { date: string; hours: (number | null)[] }[],
 ): FasciaAverages {
   const sums: Record<FasciaId, number> = { F1: 0, F2: 0, F3: 0 };
   const counts: Record<FasciaId, number> = { F1: 0, F2: 0, F3: 0 };
 
-  for (let hour = 0; hour < hours.length; hour++) {
-    const value = hours[hour];
-    if (value == null || !Number.isFinite(value)) continue;
-    const fascia = fasciaForHour(ymd, hour);
-    sums[fascia] += toEurocentPerKwh(value);
-    counts[fascia] += 1;
+  for (const day of days) {
+    for (let hour = 0; hour < day.hours.length; hour++) {
+      const value = day.hours[hour];
+      if (value == null || !Number.isFinite(value)) continue;
+      const fascia = fasciaForHour(day.date, hour);
+      sums[fascia] += toEurocentPerKwh(value);
+      counts[fascia] += 1;
+    }
   }
 
   const f23Count = counts.F2 + counts.F3;
@@ -291,6 +292,13 @@ export function fasciaAveragesFromHourly(
     F23: meanOrNull(sums.F2 + sums.F3, f23Count),
     Fmonoraria: meanOrNull(sums.F1 + sums.F2 + sums.F3, allCount),
   };
+}
+
+export function fasciaAveragesFromHourly(
+  ymd: string,
+  hours: (number | null)[],
+): FasciaAverages {
+  return fasciaAveragesFromDays([{ date: ymd, hours }]);
 }
 
 export function fasciaAveragesFromQuarters(

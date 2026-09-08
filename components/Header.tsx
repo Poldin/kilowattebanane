@@ -6,7 +6,7 @@ import { useSyncedTick } from "@/lib/use-synced-tick";
 import { useTypewriter } from "@/lib/use-typewriter";
 
 const LOGO_TEXT = "kilowatt e banane";
-const LOGO_EMOJI = "🔌💡e 🍌🍌🍌";
+const LOGO_EMOJI = "💡e 🍌🍌🍌";
 
 export function Header() {
   const { openSignup } = useSignup();

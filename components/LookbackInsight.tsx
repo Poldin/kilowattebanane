@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type PointerEvent } from "react";
+import { ChartLayerToggles } from "@/components/ChartLayerToggles";
 import { romeToday } from "@/lib/day-ahead-core";
 import {
   CHART_W,
@@ -11,6 +12,22 @@ import {
   toSmoothPath,
   yScale,
 } from "@/lib/insights";
+import {
+  cheapPeakForTariff,
+  fasciaAveragesFromDays,
+  fasciaAveragesFromHourly,
+  fasciaF23Bands,
+  fasciaForHour,
+  fasciaHourBands,
+  FASCIA_COLOR,
+  FASCIA_LEGEND_COLOR,
+  layersForTariff,
+  type ChartLayers,
+  type FasciaAverages,
+  type FasciaId,
+  type FasciaStatId,
+  type TariffPlanId,
+} from "@/lib/fasce";
 import {
   DEFAULT_LOOKBACK_RANGE,
   LOOKBACK_RANGES,
@@ -23,10 +40,12 @@ import {
   lookbackEndDateFromDates,
   lookbackRangeById,
   lookbackWindowStatsFromHourly,
+  nullableValuesToPoints,
   pickAxisTicks,
   pointerToIndex,
   sliceLookbackDates,
   sliceLookbackPoints,
+  toBrokenLinearPath,
   valuesToPoints,
   type LookbackDayPoint,
   type LookbackRangeId,
@@ -42,6 +61,32 @@ const CHART_H_DESKTOP = 220;
 const CHART_W_MOBILE = 400;
 const CHART_H_MOBILE = 280;
 const PAD_MOBILE = { t: 36, r: 16, b: 48, l: 42 };
+
+const FASCIA_CURVES: {
+  id: FasciaStatId;
+  color: string;
+  dash?: string;
+  layer: keyof ChartLayers;
+}[] = [
+  {
+    id: "Fmonoraria",
+    color: FASCIA_LEGEND_COLOR.Fmonoraria,
+    dash: "2 4",
+    layer: "mono",
+  },
+  { id: "F23", color: FASCIA_LEGEND_COLOR.F23, dash: "6 4", layer: "f23" },
+  { id: "F3", color: FASCIA_COLOR.F3, layer: "f3" },
+  { id: "F2", color: FASCIA_COLOR.F2, layer: "f2" },
+  { id: "F1", color: FASCIA_COLOR.F1, layer: "f1" },
+];
+
+const FASCIA_STATS: { id: FasciaStatId; label: string }[] = [
+  { id: "F1", label: "F1" },
+  { id: "F2", label: "F2" },
+  { id: "F3", label: "F3" },
+  { id: "F23", label: "F23" },
+  { id: "Fmonoraria", label: "Fmonoraria" },
+];
 
 function useChartLayout() {
   const [mobile, setMobile] = useState(false);
@@ -73,38 +118,136 @@ function useChartLayout() {
   };
 }
 
+function priceToY(
+  price: number,
+  scale: { min: number; max: number },
+  pad: { t: number; r: number; b: number; l: number },
+  innerH: number,
+) {
+  const range = scale.max - scale.min || 1;
+  const plotBottom = pad.t + innerH;
+  return Math.min(
+    plotBottom,
+    Math.max(pad.t, pad.t + (1 - (price - scale.min) / range) * innerH),
+  );
+}
+
+function formatFasciaValue(value: number | null) {
+  return value == null ? "—" : formatEurocent(value);
+}
+
+function FasciaSwatch({ id }: { id: FasciaStatId }) {
+  if (id === "F23") {
+    return (
+      <span
+        className="inline-flex h-2.5 w-2.5 overflow-hidden rounded-[3px]"
+        aria-hidden
+      >
+        <span className="h-full w-1/2" style={{ background: FASCIA_COLOR.F2 }} />
+        <span className="h-full w-1/2" style={{ background: FASCIA_COLOR.F3 }} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-block h-2.5 w-2.5 rounded-[3px]"
+      style={{ background: FASCIA_LEGEND_COLOR[id] }}
+      aria-hidden
+    />
+  );
+}
+
+function visibleFasciaIds(layers: ChartLayers): FasciaStatId[] {
+  const ids: FasciaStatId[] = [];
+  if (layers.f1) ids.push("F1");
+  if (layers.f2) ids.push("F2");
+  if (layers.f3) ids.push("F3");
+  if (layers.f23) ids.push("F23");
+  if (layers.mono) ids.push("Fmonoraria");
+  return ids;
+}
+
+type PickedRow = { label: string; value: string; color: string };
+type PickedDot = { y: number; color: string };
 type PickedPoint = {
   label: string;
-  avgLabel: string;
-  minLabel?: string;
-  maxLabel?: string;
+  rows: PickedRow[];
   x: number;
-  y: number;
+  dots: PickedDot[];
 };
 
 function LookbackChart({
   windowPoints,
   windowHourly,
   rangeId,
+  layers,
 }: {
   windowPoints: LookbackDayPoint[];
   windowHourly: ZoneHourlyPayload[];
   rangeId: LookbackRangeId;
+  layers: ChartLayers;
 }) {
   const { chartW, chartH, pad, axisFontSize, unitFontSize } = useChartLayout();
   const [pickedIndex, setPickedIndex] = useState<number | null>(null);
   const hourly = rangeId === "1";
+  const showLine = layers.line;
+  const showMono = layers.mono;
+  const showF23 = layers.f23;
+  const showAnyFascia = layers.f1 || layers.f2 || layers.f3;
+  const fasciaOn: Record<FasciaId, boolean> = {
+    F1: layers.f1,
+    F2: layers.f2,
+    F3: layers.f3,
+  };
   const single = hourly ? windowHourly[windowHourly.length - 1] : null;
   const hourlyCent = useMemo(
     () => (single ? dayHourlyCentSeriesFromHours(single.hours) : []),
     [single],
   );
   const dailyPoints = hourly ? [] : windowPoints;
+  const fasciaByDate = useMemo(() => {
+    const map = new Map<string, FasciaAverages>();
+    for (const day of windowHourly) {
+      map.set(day.date, fasciaAveragesFromHourly(day.date, day.hours));
+    }
+    return map;
+  }, [windowHourly]);
+  const singleAvgs = useMemo(
+    () =>
+      single ? fasciaAveragesFromHourly(single.date, single.hours) : null,
+    [single],
+  );
+  const fasciaBands = useMemo(
+    () => (single ? fasciaHourBands(single.date) : []),
+    [single],
+  );
+  const f23Bands = useMemo(
+    () => (single ? fasciaF23Bands(single.date) : []),
+    [single],
+  );
 
   const series = hourly ? hourlyCent : dailyPoints.map((point) => point.avg);
   const bandMins = hourly ? [] : dailyPoints.map((point) => point.min);
   const bandMaxs = hourly ? [] : dailyPoints.map((point) => point.max);
-  const scaleValues = hourly ? hourlyCent : [...bandMins, ...series, ...bandMaxs];
+  const scaleValues: number[] = [];
+  if (hourly) {
+    if (showLine) scaleValues.push(...hourlyCent);
+    if (singleAvgs) {
+      for (const id of visibleFasciaIds(layers)) {
+        const value = singleAvgs[id];
+        if (value != null) scaleValues.push(value);
+      }
+    }
+  } else {
+    if (showLine) scaleValues.push(...bandMins, ...series, ...bandMaxs);
+    for (const curve of FASCIA_CURVES) {
+      if (!layers[curve.layer]) continue;
+      for (const point of dailyPoints) {
+        const value = fasciaByDate.get(point.date)?.[curve.id];
+        if (value != null) scaleValues.push(value);
+      }
+    }
+  }
   const scale = yScale(scaleValues.length > 0 ? scaleValues : [0]);
   const avgPoints = hourly
     ? toPoints(hourlyCent, scale.min, scale.max, chartH, chartW, pad)
@@ -126,9 +269,10 @@ function LookbackChart({
     pad,
   );
   const line = toSmoothPath(avgPoints);
-  const area = hourly ? "" : bandPath(maxPoints, minPoints);
+  const area = hourly || !showLine ? "" : bandPath(maxPoints, minPoints);
   const innerH = chartH - pad.t - pad.b;
   const range = scale.max - scale.min || 1;
+  const plotBottom = pad.t + innerH;
   const font = "var(--font-geist-sans), system-ui, sans-serif";
   const xTicks = hourly
     ? [0, 6, 12, 18, 24].map((hour) => ({
@@ -142,29 +286,109 @@ function LookbackChart({
           : "",
       }));
 
+  const fasciaPaths = hourly
+    ? []
+    : FASCIA_CURVES.filter((curve) => layers[curve.layer]).map((curve) => {
+        const values = dailyPoints.map(
+          (point) => fasciaByDate.get(point.date)?.[curve.id] ?? null,
+        );
+        const points = nullableValuesToPoints(
+          values,
+          scale.min,
+          scale.max,
+          chartH,
+          chartW,
+          pad,
+        );
+        return { curve, points, d: toBrokenLinearPath(points) };
+      });
+
   const picked: PickedPoint | null = (() => {
     if (pickedIndex == null) return null;
     if (hourly) {
       const point = avgPoints[pickedIndex];
       const price = hourlyCent[pickedIndex];
-      if (!point || price == null) return null;
+      if (!point && price == null) return null;
+      const x =
+        point?.x ?? hourToX(pickedIndex + 0.5, chartW, pad);
+      const rows: PickedRow[] = [];
+      const dots: PickedDot[] = [];
+      if (showLine && price != null && point) {
+        rows.push({
+          label: "prezzo",
+          value: formatEurocent(price),
+          color: BANANA,
+        });
+        dots.push({ y: point.y, color: BANANA });
+      }
+      if (single && singleAvgs) {
+        const hourFascia = fasciaForHour(single.date, pickedIndex);
+        for (const id of visibleFasciaIds(layers)) {
+          const value = singleAvgs[id];
+          rows.push({
+            label: id === "Fmonoraria" ? "Fmono" : id,
+            value: formatFasciaValue(value),
+            color: FASCIA_LEGEND_COLOR[id],
+          });
+          const coversHour =
+            id === "Fmonoraria" ||
+            (id === "F23" && hourFascia !== "F1") ||
+            id === hourFascia;
+          if (value != null && coversHour) {
+            dots.push({
+              y: priceToY(value, scale, pad, innerH),
+              color: FASCIA_LEGEND_COLOR[id],
+            });
+          }
+        }
+      }
+      if (rows.length === 0) return null;
       return {
         label: `${String(pickedIndex).padStart(2, "0")}:00`,
-        avgLabel: formatEurocent(price),
-        x: point.x,
-        y: point.y,
+        rows,
+        x,
+        dots,
       };
     }
     const day = dailyPoints[pickedIndex];
     const point = avgPoints[pickedIndex];
-    if (!day || !point) return null;
+    if (!day) return null;
+    const x = point?.x ?? pad.l;
+    const rows: PickedRow[] = [];
+    const dots: PickedDot[] = [];
+    if (showLine && point) {
+      rows.push({
+        label: "medio",
+        value: formatEurocent(day.avg),
+        color: BANANA,
+      });
+      rows.push({
+        label: "min–max",
+        value: `${formatEurocent(day.min)} · ${formatEurocent(day.max)}`,
+        color: "#d4d4d4",
+      });
+      dots.push({ y: point.y, color: BANANA });
+    }
+    const fasce = fasciaByDate.get(day.date);
+    for (const curve of FASCIA_CURVES) {
+      if (!layers[curve.layer]) continue;
+      const value = fasce?.[curve.id] ?? null;
+      rows.push({
+        label: curve.id === "Fmonoraria" ? "Fmono" : curve.id,
+        value: formatFasciaValue(value),
+        color: curve.color,
+      });
+      const curvePoint = fasciaPaths
+        .find((item) => item.curve.id === curve.id)
+        ?.points[pickedIndex];
+      if (curvePoint) dots.push({ y: curvePoint.y, color: curve.color });
+    }
+    if (rows.length === 0) return null;
     return {
       label: formatLookbackDate(day.date, true),
-      avgLabel: formatEurocent(day.avg),
-      minLabel: formatEurocent(day.min),
-      maxLabel: formatEurocent(day.max),
-      x: point.x,
-      y: point.y,
+      rows,
+      x,
+      dots,
     };
   })();
 
@@ -188,6 +412,13 @@ function LookbackChart({
     );
   }
 
+  const monoY =
+    hourly && showMono && singleAvgs?.Fmonoraria != null
+      ? priceToY(singleAvgs.Fmonoraria, scale, pad, innerH)
+      : null;
+  const monoFromX = hourToX(0, chartW, pad);
+  const monoToX = hourToX(24, chartW, pad);
+
   return (
     <div className="relative">
       <svg
@@ -196,8 +427,12 @@ function LookbackChart({
         role="img"
         aria-label={
           hourly
-            ? "Andamento orario del prezzo medio nell'ultimo giorno, in centesimi di euro per kilowattora."
-            : "Andamento del prezzo medio giornaliero nel periodo scelto, con banda tra minimo e massimo di ogni giorno."
+            ? `Andamento orario del prezzo medio nell'ultimo giorno, in centesimi di euro per kilowattora.${
+                showAnyFascia ? " Fasce F1, F2 e F3 visibili." : ""
+              }${showF23 ? " F23 visibile." : ""}${showMono ? " Fmonoraria visibile." : ""}`
+            : `Andamento del prezzo medio giornaliero nel periodo scelto, con banda tra minimo e massimo di ogni giorno.${
+                showAnyFascia ? " Medie giornaliere F1, F2 e F3 visibili." : ""
+              }${showF23 ? " Media F23 visibile." : ""}${showMono ? " Fmonoraria visibile." : ""}`
         }
         onPointerDown={(event) => {
           if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -271,18 +506,150 @@ function LookbackChart({
           </g>
         ))}
 
+        {hourly
+          ? fasciaBands.map((band) => {
+              if (!fasciaOn[band.id] || !singleAvgs) return null;
+              const price = singleAvgs[band.id];
+              if (price == null || !Number.isFinite(price)) return null;
+              const fromX = hourToX(band.start, chartW, pad);
+              const toX = hourToX(band.end, chartW, pad);
+              const width = Math.max(toX - fromX, 0);
+              const yTop = priceToY(price, scale, pad, innerH);
+              const height = plotBottom - yTop;
+              if (width <= 0 || height <= 0) return null;
+              const color = FASCIA_COLOR[band.id];
+              const labelY = yTop - 6 < pad.t + 10 ? yTop + 14 : yTop - 5;
+              return (
+                <g key={`fascia-${band.id}-${band.start}`} pointerEvents="none">
+                  <rect
+                    x={fromX}
+                    y={yTop}
+                    width={width}
+                    height={height}
+                    fill={color}
+                    fillOpacity="0.28"
+                    stroke={color}
+                    strokeWidth="2"
+                    shapeRendering="crispEdges"
+                  />
+                  <text
+                    x={(fromX + toX) / 2}
+                    y={labelY}
+                    textAnchor="middle"
+                    fill={color}
+                    fontSize={11}
+                    fontFamily={font}
+                    fontWeight="700"
+                  >
+                    {band.id}
+                  </text>
+                </g>
+              );
+            })
+          : null}
+
+        {hourly && showF23 && singleAvgs?.F23 != null
+          ? f23Bands.map((band) => {
+              const price = singleAvgs.F23;
+              if (price == null) return null;
+              const fromX = hourToX(band.start, chartW, pad);
+              const toX = hourToX(band.end, chartW, pad);
+              const width = Math.max(toX - fromX, 0);
+              const yTop = priceToY(price, scale, pad, innerH);
+              const height = plotBottom - yTop;
+              if (width <= 0 || height <= 0) return null;
+              const color = FASCIA_LEGEND_COLOR.F23;
+              const labelY = yTop - 6 < pad.t + 10 ? yTop + 14 : yTop - 5;
+              return (
+                <g key={`f23-${band.start}`} pointerEvents="none">
+                  <rect
+                    x={fromX}
+                    y={yTop}
+                    width={width}
+                    height={height}
+                    fill={color}
+                    fillOpacity={layers.f2 || layers.f3 ? 0.16 : 0.28}
+                    stroke={color}
+                    strokeWidth="2"
+                    shapeRendering="crispEdges"
+                  />
+                  <text
+                    x={(fromX + toX) / 2}
+                    y={labelY}
+                    textAnchor="middle"
+                    fill={color}
+                    fontSize={11}
+                    fontFamily={font}
+                    fontWeight="700"
+                  >
+                    F23
+                  </text>
+                </g>
+              );
+            })
+          : null}
+
+        {hourly && showMono && monoY != null ? (
+          <g pointerEvents="none">
+            <rect
+              x={monoFromX}
+              y={monoY}
+              width={monoToX - monoFromX}
+              height={plotBottom - monoY}
+              fill={FASCIA_LEGEND_COLOR.Fmonoraria}
+              fillOpacity={showAnyFascia || showF23 ? 0.1 : 0.28}
+            />
+            <line
+              x1={monoFromX}
+              x2={monoToX}
+              y1={monoY}
+              y2={monoY}
+              stroke={FASCIA_LEGEND_COLOR.Fmonoraria}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+            <text
+              x={monoFromX + 6}
+              y={monoY - 6 < pad.t + 10 ? monoY + 14 : monoY - 5}
+              fill={FASCIA_LEGEND_COLOR.Fmonoraria}
+              fontSize={11}
+              fontFamily={font}
+              fontWeight="700"
+            >
+              Fmono
+            </text>
+          </g>
+        ) : null}
+
         {area ? (
           <path d={area} fill={BANANA} opacity="0.16" />
         ) : null}
 
-        <path
-          d={line}
-          fill="none"
-          stroke={BANANA}
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {fasciaPaths.map((item) =>
+          item.d ? (
+            <path
+              key={item.curve.id}
+              d={item.d}
+              fill="none"
+              stroke={item.curve.color}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={item.curve.dash}
+            />
+          ) : null,
+        )}
+
+        {showLine ? (
+          <path
+            d={line}
+            fill="none"
+            stroke={BANANA}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : null}
 
         {picked ? (
           <g pointerEvents="none">
@@ -296,14 +663,17 @@ function LookbackChart({
               strokeDasharray="4 4"
               opacity="0.8"
             />
-            <circle
-              cx={picked.x}
-              cy={picked.y}
-              r="5"
-              fill={BANANA}
-              stroke="#111111"
-              strokeWidth="2"
-            />
+            {picked.dots.map((dot, index) => (
+              <circle
+                key={`${dot.color}-${index}`}
+                cx={picked.x}
+                cy={dot.y}
+                r="5"
+                fill={dot.color}
+                stroke="#111111"
+                strokeWidth="2"
+              />
+            ))}
           </g>
         ) : null}
       </svg>
@@ -312,19 +682,23 @@ function LookbackChart({
         <button
           type="button"
           className="absolute top-2.5 right-2.5 z-10 flex items-start gap-2 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-left text-white shadow-sm"
-          aria-label={`Chiudi lettura del ${picked.label}, ${picked.avgLabel}`}
+          aria-label={`Chiudi lettura del ${picked.label}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => setPickedIndex(null)}
         >
           <span>
             <span className="block text-xs font-semibold tabular-nums sm:text-sm">
-              {picked.label} · {picked.avgLabel}
+              {picked.label}
             </span>
-            {picked.minLabel && picked.maxLabel ? (
-              <span className="block text-[11px] tabular-nums text-white/70">
-                min {picked.minLabel} · max {picked.maxLabel}
+            {picked.rows.map((row) => (
+              <span
+                key={row.label}
+                className="block text-[11px] tabular-nums"
+                style={{ color: row.color }}
+              >
+                {row.label} {row.value}
               </span>
-            ) : null}
+            ))}
           </span>
           <span aria-hidden className="text-sm leading-none text-white/70">
             ×
@@ -340,13 +714,18 @@ export function LookbackInsight({
   hourly,
   region,
   onRegionChange,
+  tariff,
 }: {
   points: LookbackDayPoint[];
   hourly: ZoneHourlyPayload[];
   region: ItalianRegion;
   onRegionChange: (value: string) => void;
+  tariff: TariffPlanId;
 }) {
   const [rangeId, setRangeId] = useState<LookbackRangeId>(DEFAULT_LOOKBACK_RANGE);
+  const [layers, setLayers] = useState<ChartLayers>(() =>
+    layersForTariff(tariff),
+  );
   const endDate = lookbackEndDateFromDates(points.map((point) => point.date));
   const range = lookbackRangeById(rangeId);
   const windowDates = useMemo(() => {
@@ -366,11 +745,21 @@ export function LookbackInsight({
     return hourly.filter((day) => allowed.has(day.date));
   }, [hourly, windowDates]);
   const stats = lookbackWindowStatsFromHourly(windowHourly);
+  const fasciaAvgs = useMemo(
+    () => fasciaAveragesFromDays(windowHourly),
+    [windowHourly],
+  );
+  const visibleIds = visibleFasciaIds(layers);
+  const fasciaMarks = cheapPeakForTariff(tariff, fasciaAvgs, visibleIds);
   const caption = formatLookbackCaptionFromDates(windowDates);
   const latestRank = latestDayWindowRankFromPoints(windowPoints);
   const latestCopy = latestRank
     ? formatLatestDayRank(latestRank, romeToday())
     : null;
+
+  useEffect(() => {
+    setLayers(layersForTariff(tariff));
+  }, [tariff]);
 
   if (!endDate || windowPoints.length === 0 || !stats) return null;
 
@@ -387,7 +776,8 @@ export function LookbackInsight({
       </h3>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Il medio all&apos;ingrosso nella tua zona, da un giorno a tutto lo
-        storico.
+        storico. Accendi le fasce per vedere come F1, F2, F3 e F23 si sono
+        mosse nel tempo.
       </p>
 
       <RegionZoneBar region={region} onRegionChange={onRegionChange}>
@@ -418,16 +808,51 @@ export function LookbackInsight({
         </div>
       </RegionZoneBar>
 
-      <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
-        <LookbackChart
-          key={rangeId}
-          windowPoints={windowPoints}
-          windowHourly={windowHourly}
-          rangeId={rangeId}
-        />
+      <div className="mt-3">
+        <ChartLayerToggles layers={layers} onChange={setLayers} />
+        <div className="overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
+          <LookbackChart
+            key={rangeId}
+            windowPoints={windowPoints}
+            windowHourly={windowHourly}
+            rangeId={rangeId}
+            layers={layers}
+          />
+        </div>
       </div>
 
-      <div className="mt-5" aria-label="Minimo, medio e massimo del periodo">
+      <div className="mt-5" aria-label="Minimo, medio, massimo e medie di fascia del periodo">
+        {visibleIds.length > 0 ? (
+          <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {FASCIA_STATS.filter((stat) => visibleIds.includes(stat.id)).map(
+              (stat) => {
+                const color = FASCIA_LEGEND_COLOR[stat.id];
+                return (
+                  <div key={stat.id}>
+                    <p
+                      className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide uppercase"
+                      style={{ color }}
+                    >
+                      <FasciaSwatch id={stat.id} />
+                      {stat.id === fasciaMarks.cheap ? (
+                        <span aria-hidden>🍌 </span>
+                      ) : stat.id === fasciaMarks.peak ? (
+                        <span aria-hidden>🐵 </span>
+                      ) : null}
+                      {stat.label}
+                    </p>
+                    <p
+                      className="text-xl font-semibold tabular-nums tracking-tight"
+                      style={{ color }}
+                    >
+                      {formatFasciaValue(fasciaAvgs[stat.id])}
+                    </p>
+                  </div>
+                );
+              },
+            )}
+          </div>
+        ) : null}
         <div className="grid grid-cols-3 gap-2">
           {(
             [
@@ -448,6 +873,7 @@ export function LookbackInsight({
         </div>
         <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
           c€/kWh all&apos;ingrosso · {caption}
+          {visibleIds.length > 0 ? " · medie di fascia nel periodo" : ""}
         </p>
         {latestCopy ? (
           <p className="mt-3 text-sm font-medium text-foreground">

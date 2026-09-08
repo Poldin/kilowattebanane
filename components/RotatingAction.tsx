@@ -4,12 +4,17 @@ import { useSyncedTick } from "@/lib/use-synced-tick";
 import { useTypewriter } from "@/lib/use-typewriter";
 
 const ACTIONS = [
-  "attaccare la lavatrice🧼?",
-  "caricare l'auto elettrica🚗?",
-  "lanciare la lavastoviglie🍽️?",
-  "stirare i vestiti👚?",
-  "consumare il meno possibile💰?",
+  "Quanto costa l'energia elettrica 💡 oggi?",
+  "Quando devo attaccare la lavatrice🧼?",
+  "Quando devo caricare l'auto elettrica🚗?",
+  "Quando devo lanciare la lavastoviglie🍽️?",
+  "Quando devo stirare i vestiti👚?",
+  "Quando devo consumare il meno possibile💰?",
 ] as const;
+
+const LONGEST_ACTION = ACTIONS.reduce((longest, action) =>
+  action.length > longest.length ? action : longest,
+);
 
 export function RotatingAction() {
   const tick = useSyncedTick(10_000);
@@ -17,18 +22,15 @@ export function RotatingAction() {
   const { text: typed, isTyping } = useTypewriter(current, 38);
 
   return (
-    <span className="relative inline-grid align-baseline">
-      {ACTIONS.map((action) => (
-        <span
-          key={action}
-          className="invisible col-start-1 row-start-1 sm:whitespace-nowrap"
-          aria-hidden
-        >
-          {action}
-        </span>
-      ))}
+    <span className="relative grid w-full justify-items-center text-center">
       <span
-        className="col-start-1 row-start-1 underline decoration-neutral-300 underline-offset-4 sm:whitespace-nowrap dark:decoration-neutral-600"
+        className="invisible col-start-1 row-start-1 w-full text-balance"
+        aria-hidden
+      >
+        {LONGEST_ACTION}
+      </span>
+      <span
+        className="col-start-1 row-start-1 w-full text-balance underline decoration-neutral-300 underline-offset-4 dark:decoration-neutral-600"
         aria-live="polite"
       >
         {typed}

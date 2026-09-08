@@ -7,8 +7,8 @@ import {
   useState,
   useTransition,
   type PointerEvent,
-  type ReactNode,
 } from "react";
+import { ChartLayerToggles } from "@/components/ChartLayerToggles";
 import { RegionZoneBar } from "@/components/RegionZoneBar";
 import { TariffSelect } from "@/components/TariffSelect";
 import {
@@ -401,20 +401,7 @@ function DayStats({
 
   return (
     <div className="mt-5" aria-label="Minimo, medio, massimo e medie di fascia del giorno">
-      <div className="grid grid-cols-3 gap-2">
-        {stats.map((stat) => (
-          <div key={stat.label}>
-            <p className="text-[11px] font-medium tracking-wider text-neutral-500 uppercase">
-              {stat.label}
-            </p>
-            <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
-              {stat.value}
-            </p>
-            {stat.hint ? <StatHint>{stat.hint}</StatHint> : null}
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
         {FASCIA_STATS.map((stat) => {
           const range = fasciaRangeLabel(date, stat.id);
           const color = FASCIA_LEGEND_COLOR[stat.id];
@@ -442,6 +429,19 @@ function DayStats({
             </div>
           );
         })}
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {stats.map((stat) => (
+          <div key={stat.label}>
+            <p className="text-[11px] font-medium tracking-wider text-neutral-500 uppercase">
+              {stat.label}
+            </p>
+            <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+              {stat.value}
+            </p>
+            {stat.hint ? <StatHint>{stat.hint}</StatHint> : null}
+          </div>
+        ))}
       </div>
       <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
         c€/kWh all&apos;ingrosso
@@ -534,120 +534,6 @@ function pointerToHour(
   return Math.min(24, Math.max(0, ((x - pad.l) / innerW) * 24));
 }
 
-function ChartLayerToggle({
-  pressed,
-  labelOn,
-  labelOff,
-  onClick,
-  children,
-}: {
-  pressed: boolean;
-  labelOn: string;
-  labelOff: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      aria-label={pressed ? labelOff : labelOn}
-      title={pressed ? labelOff : labelOn}
-      className={`flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
-        pressed
-          ? "border-neutral-300 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900"
-          : "border-neutral-200 hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-900"
-      }`}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FasciaToggleIcon({
-  f1,
-  f2,
-  f3,
-}: {
-  f1: boolean;
-  f2: boolean;
-  f3: boolean;
-}) {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
-      <rect
-        x="1"
-        y="2"
-        width="4"
-        height="12"
-        rx="1"
-        fill={f3 ? FASCIA_COLOR.F3 : "#737373"}
-      />
-      <rect
-        x="6"
-        y="2"
-        width="4"
-        height="12"
-        rx="1"
-        fill={f2 ? FASCIA_COLOR.F2 : "#737373"}
-      />
-      <rect
-        x="11"
-        y="2"
-        width="4"
-        height="12"
-        rx="1"
-        fill={f1 ? FASCIA_COLOR.F1 : "#737373"}
-      />
-    </svg>
-  );
-}
-
-function LineToggleIcon({ on }: { on: boolean }) {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
-      <path
-        d="M1.5 12.5 L5 7.5 L8.5 9.5 L14.5 3.5"
-        fill="none"
-        stroke={on ? BANANA : "#737373"}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function F23ToggleIcon({ on }: { on: boolean }) {
-  const left = on ? FASCIA_COLOR.F2 : "#737373";
-  const right = on ? FASCIA_COLOR.F3 : "#737373";
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
-      <rect x="1" y="3" width="7" height="10" rx="1" fill={left} />
-      <rect x="8" y="3" width="7" height="10" rx="1" fill={right} />
-    </svg>
-  );
-}
-
-function MonoToggleIcon({ on }: { on: boolean }) {
-  const color = on ? FASCIA_LEGEND_COLOR.Fmonoraria : "#737373";
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
-      <rect x="2" y="8" width="12" height="6" fill={color} opacity="0.35" />
-      <line
-        x1="2"
-        x2="14"
-        y1="8"
-        y2="8"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function PriceChart({
   day,
   nowHour,
@@ -674,9 +560,6 @@ function PriceChart({
     F3: resolvedLayers.f3,
   };
 
-  function patchLayers(partial: Partial<ChartLayers>) {
-    onLayersChange?.({ ...resolvedLayers, ...partial });
-  }
   const hourly = useMemo(() => toHourlyAverages(day.prices), [day.prices]);
   const fasciaBands = useMemo(
     () => fasciaHourBands(day.deliveryDate),
@@ -766,50 +649,13 @@ function PriceChart({
 
   return (
     <div className="mt-3" data-price-chart>
-      <div className="mb-1.5 flex justify-end gap-1.5">
-        <ChartLayerToggle
-          pressed={showLine}
-          labelOn="Mostra linea del prezzo"
-          labelOff="Nascondi linea del prezzo"
-          onClick={() => {
-            patchLayers({ line: !showLine });
-            setPickedHour(null);
-          }}
-        >
-          <LineToggleIcon on={showLine} />
-        </ChartLayerToggle>
-        <ChartLayerToggle
-          pressed={showMono}
-          labelOn="Mostra Fmonoraria"
-          labelOff="Nascondi Fmonoraria"
-          onClick={() => patchLayers({ mono: !showMono })}
-        >
-          <MonoToggleIcon on={showMono} />
-        </ChartLayerToggle>
-        <ChartLayerToggle
-          pressed={showF23}
-          labelOn="Mostra F23"
-          labelOff="Nascondi F23"
-          onClick={() => patchLayers({ f23: !showF23 })}
-        >
-          <F23ToggleIcon on={showF23} />
-        </ChartLayerToggle>
-        <ChartLayerToggle
-          pressed={showAnyFascia}
-          labelOn="Mostra fasce F1 F2 F3"
-          labelOff="Nascondi fasce F1 F2 F3"
-          onClick={() => {
-            const next = !showAnyFascia;
-            patchLayers({ f1: next, f2: next, f3: next });
-          }}
-        >
-          <FasciaToggleIcon
-            f1={resolvedLayers.f1}
-            f2={resolvedLayers.f2}
-            f3={resolvedLayers.f3}
-          />
-        </ChartLayerToggle>
-      </div>
+      <ChartLayerToggles
+        layers={resolvedLayers}
+        onChange={(next) => {
+          if (next.line !== resolvedLayers.line) setPickedHour(null);
+          onLayersChange?.(next);
+        }}
+      />
       <div className="relative overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
         <svg
       viewBox={`0 0 ${chartW} ${chartH}`}
@@ -1736,12 +1582,12 @@ export function DailyInsight({
               onLayersChange={setLayers}
               tariff={tariff}
             />
+            <DayStats date={day.deliveryDate} prices={day.prices} tariff={tariff} />
             <PriceTips
               best={tips.bestTip}
               worst={tips.worstTip}
               nowLine={nowLine}
             />
-            <DayStats date={day.deliveryDate} prices={day.prices} tariff={tariff} />
             <SignupSlot className="mt-6 w-full scroll-mt-20" />
             <QuarterPriceTable day={day} />
           </div>
@@ -1752,6 +1598,7 @@ export function DailyInsight({
                 hourly={home.hourly}
                 region={region}
                 onRegionChange={handleRegionChange}
+                tariff={tariff}
               />
               <HourlyProfileInsight
                 hourly={home.hourly}
