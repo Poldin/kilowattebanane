@@ -13,7 +13,7 @@ export type PriceSlot = {
 
 export type ZonePullResult = {
   zone: MarketZoneId;
-  source: "entsoe" | "energy-charts";
+  source: "entsoe" | "energy-charts" | "skipped";
   slotCount: number;
 };
 

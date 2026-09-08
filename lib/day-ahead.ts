@@ -7,6 +7,7 @@ import {
   type PriceSlot,
   type ZonePullResult,
 } from "@/lib/entsoe";
+import { isCompleteDay } from "@/lib/insights";
 import { MARKET_ZONES, type MarketZoneId } from "@/lib/market-zones";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -78,6 +79,48 @@ async function upsertSlots(slots: PriceSlot[]) {
   return upserted;
 }
 
+function datesInclusive(from: string, to: string) {
+  const dates = [from];
+  for (let cursor = from; cursor < to; ) {
+    cursor = addCalendarDays(cursor, 1);
+    dates.push(cursor);
+  }
+  return dates;
+}
+
+function isEntsoeUnauthorized(error: unknown) {
+  return error instanceof Error && /HTTP 401/.test(error.message);
+}
+
+async function zonesCompleteForWindow(
+  from: string,
+  to: string,
+  zoneIds: MarketZoneId[],
+) {
+  const dates = datesInclusive(from, to);
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("day_ahead_day_stats")
+    .select("zone, delivery_date, slot_count")
+    .in("zone", zoneIds)
+    .gte("delivery_date", from)
+    .lte("delivery_date", to);
+  if (error) throw new Error(error.message);
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    counts.set(`${row.zone}:${row.delivery_date}`, Number(row.slot_count));
+  }
+
+  const complete = new Set<MarketZoneId>();
+  for (const zone of zoneIds) {
+    if (dates.every((date) => isCompleteDay(counts.get(`${zone}:${date}`) ?? 0))) {
+      complete.add(zone);
+    }
+  }
+  return complete;
+}
+
 async function pullZone(options: {
   zone: MarketZoneId;
   from: string;
@@ -99,7 +142,7 @@ async function pullZone(options: {
         return { zone: options.zone, source: "entsoe", slotCount: slots.length, slots };
       }
     } catch (error) {
-      if (error instanceof Error && /HTTP 401/.test(error.message)) throw error;
+      if (isEntsoeUnauthorized(error)) throw error;
     }
   }
 
@@ -148,9 +191,14 @@ async function pullDayAheadForWindow(
   const zones: ZonePullResult[] = [];
   const errors: PullSummary["errors"] = [];
   const allSlots: PriceSlot[] = [];
+  const alreadyComplete = await zonesCompleteForWindow(window.from, window.to, zoneIds);
   let skipEntsoe = false;
 
   for (const zone of zoneIds) {
+    if (alreadyComplete.has(zone)) {
+      zones.push({ zone, source: "skipped", slotCount: 0 });
+      continue;
+    }
     try {
       const result = await pullZone({
         zone,
@@ -161,7 +209,6 @@ async function pullDayAheadForWindow(
         apiKey,
         skipEntsoe,
       });
-      if (result.source !== "entsoe") skipEntsoe = true;
       zones.push({
         zone: result.zone,
         source: result.source,
@@ -170,7 +217,7 @@ async function pullDayAheadForWindow(
       allSlots.push(...result.slots);
       await sleep(400);
     } catch (error) {
-      skipEntsoe = true;
+      if (isEntsoeUnauthorized(error)) skipEntsoe = true;
       errors.push({
         zone,
         message: error instanceof Error ? error.message : String(error),
