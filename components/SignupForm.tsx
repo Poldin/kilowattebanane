@@ -39,9 +39,13 @@ export function useSignup() {
   return context;
 }
 
-export function SignupSlot() {
+export function SignupSlot({
+  className = "mx-auto mt-10 w-full max-w-md scroll-mt-20 sm:mt-12",
+}: {
+  className?: string;
+}) {
   return (
-    <div id="iscriviti" className="mx-auto mt-10 w-full max-w-md scroll-mt-20 sm:mt-12">
+    <div id="iscriviti" className={className}>
       <SignupForm />
     </div>
   );

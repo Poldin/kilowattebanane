@@ -13,6 +13,9 @@ type RegionSelectProps = {
   align?: "left" | "right";
 };
 
+const zoneBadgeClass =
+  "inline-flex shrink-0 items-center rounded-full bg-[#F5D547] px-2 py-0.5 text-[11px] font-medium text-[#111111]";
+
 export function RegionSelect({
   value,
   onChange,
@@ -107,6 +110,7 @@ export function RegionSelect({
   }
 
   const isBanana = variant === "banana";
+  const selectedZoneName = value ? zoneNameForRegion(value) : undefined;
 
   return (
     <div ref={rootRef} className={`relative ${compact ? "w-full sm:w-auto" : ""}`}>
@@ -164,16 +168,24 @@ export function RegionSelect({
               }`
         }
       >
-        <span
-          className={
-            isBanana
-              ? "truncate font-medium"
-              : value
-                ? "text-foreground"
-                : "text-neutral-400 dark:text-neutral-600"
-          }
-        >
-          {value || "Seleziona regione"}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            className={
+              isBanana
+                ? "truncate font-medium"
+                : value
+                  ? "truncate text-foreground"
+                  : "truncate text-neutral-400 dark:text-neutral-600"
+            }
+          >
+            {value || "Seleziona regione"}
+          </span>
+          {selectedZoneName && selectedZoneName !== value ? (
+            <span className={zoneBadgeClass}>
+              <span className="sr-only">zona </span>
+              {selectedZoneName}
+            </span>
+          ) : null}
         </span>
         <svg
           aria-hidden
@@ -265,7 +277,7 @@ export function RegionSelect({
                       <span
                         className={
                           isBanana
-                            ? "shrink-0 text-[11px] font-medium text-[#F5D547]"
+                            ? zoneBadgeClass
                             : "shrink-0 text-[11px] font-medium text-neutral-400 dark:text-neutral-500"
                         }
                       >

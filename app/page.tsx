@@ -1,6 +1,6 @@
 import { Header } from "@/components/Header";
 import { RotatingAction } from "@/components/RotatingAction";
-import { SignupProvider, SignupSlot } from "@/components/SignupForm";
+import { SignupProvider } from "@/components/SignupForm";
 import { DailyInsight } from "@/components/DailyInsight";
 import { Faq, FAQ_TOMORROW_ID, FAQ_TOMORROW_Q } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
@@ -50,8 +50,6 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               😯{FAQ_TOMORROW_Q.toLowerCase()}?
             </a>
           </section>
-
-          <SignupSlot />
 
           <div className="mx-auto mt-10 w-full max-w-xl sm:mt-12">
             <DailyInsight

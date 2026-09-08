@@ -35,15 +35,50 @@ export function formatEurocent(value: number, digits = 1) {
   });
 }
 
+const HOUR_VALUE_EPS = 0.0005;
+
+function hoursAtValue(pricesCent: number[], target: number) {
+  const hours: number[] = [];
+  for (let hour = 0; hour < pricesCent.length; hour++) {
+    if (Math.abs(pricesCent[hour] - target) <= HOUR_VALUE_EPS) hours.push(hour);
+  }
+  return hours;
+}
+
+export function formatHourClockSpans(hours: number[]) {
+  if (hours.length === 0) return "";
+  const sorted = [...new Set(hours)].sort((a, b) => a - b);
+  const parts: string[] = [];
+  let start = sorted[0];
+  let prev = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === prev + 1) {
+      prev = sorted[i];
+      continue;
+    }
+    parts.push(`${start}–${prev + 1}`);
+    start = sorted[i];
+    prev = sorted[i];
+  }
+  parts.push(`${start}–${prev + 1}`);
+  return parts.join(" · ");
+}
+
 export function dayHourlyCentStats(pricesEuroPerMwh: number[]) {
   const pricesCent = toHourlyAverages(pricesEuroPerMwh).map(toEurocentPerKwh);
   if (pricesCent.length === 0) {
-    return { min: 0, avg: 0, max: 0 };
+    return { min: 0, avg: 0, max: 0, minHours: "", maxHours: "" };
   }
   const min = Math.min(...pricesCent);
   const max = Math.max(...pricesCent);
   const avg = pricesCent.reduce((sum, value) => sum + value, 0) / pricesCent.length;
-  return { min, avg, max };
+  return {
+    min,
+    avg,
+    max,
+    minHours: formatHourClockSpans(hoursAtValue(pricesCent, min)),
+    maxHours: formatHourClockSpans(hoursAtValue(pricesCent, max)),
+  };
 }
 
 function niceNum(range: number, round: boolean) {

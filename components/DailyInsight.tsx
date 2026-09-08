@@ -7,8 +7,10 @@ import {
   useState,
   useTransition,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import { RegionZoneBar } from "@/components/RegionZoneBar";
+import { TariffSelect } from "@/components/TariffSelect";
 import {
   groupZoneDays,
   pickDefaultDeliveryDate,
@@ -21,6 +23,7 @@ import {
 import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
 import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { ShareButton } from "@/components/ShareButton";
+import { SignupSlot } from "@/components/SignupForm";
 import { HourlyProfileInsight } from "@/components/HourlyProfileInsight";
 import { LoadShiftSim } from "@/components/LoadShiftSim";
 import { LookbackInsight } from "@/components/LookbackInsight";
@@ -38,6 +41,7 @@ import {
   type MarketZoneId,
 } from "@/lib/market-zones";
 import { persistRegionPref, readRegionPref } from "@/lib/region-pref";
+import { persistTariffPref, readTariffPref } from "@/lib/tariff-pref";
 import {
   QUARTERS_PER_HOUR,
   formatQuarterSlot,
@@ -68,6 +72,23 @@ import {
   toLinearPath,
   yScale,
 } from "@/lib/insights";
+import {
+  DEFAULT_TARIFF_PLAN,
+  cheapPeakForTariff,
+  fasciaAveragesFromQuarters,
+  fasciaF23Bands,
+  fasciaHourBands,
+  fasciaRangeLabel,
+  FASCIA_COLOR,
+  FASCIA_LEGEND_COLOR,
+  layersForTariff,
+  visibleFasciaStatsFromLayers,
+  type ChartLayers,
+  type FasciaId,
+  type FasciaStatId,
+  type TariffPlanId,
+} from "@/lib/fasce";
+import { computeTariffTips, fasciaNowBadgeLabel, tariffNowAdvice } from "@/lib/tariff-tips";
 
 type DayInsight = {
   deliveryDate: string;
@@ -188,75 +209,34 @@ function expensivePercentile(prices: number[], current: number) {
   return (cheaper + ties * 0.5) / prices.length;
 }
 
-function nowMomentComment(percentile: number) {
-  if (percentile >= 0.95) {
-    return {
-      before: "tra i ",
-      mark: "5% più cari",
-      after: ": se puoi, non consumare",
-      color: PEAK,
-    };
-  }
-  if (percentile >= 0.9) {
-    return {
-      before: "tra i ",
-      mark: "10% più cari",
-      after: ": meglio evitare i consumi",
-      color: PEAK,
-    };
-  }
-  if (percentile >= 0.65) {
-    return {
-      before: "",
-      mark: "non è il momento più idilliaco",
-      after: " per consumare",
-      color: PEAK,
-    };
-  }
-  if (percentile >= 0.35) {
-    return {
-      before: "prezzi nella media, ",
-      mark: "il medione",
-      after: "",
-      color: MID,
-    };
-  }
-  if (percentile >= 0.1) {
-    return {
-      before: "",
-      mark: "momento discreto",
-      after: " per consumare",
-      color: BANANA,
-    };
-  }
-  if (percentile >= 0.05) {
-    return {
-      before: "tra i ",
-      mark: "10% più convenienti",
-      after: ": buon momento",
-      color: BANANA,
-    };
-  }
-  return {
-    before: "tra i ",
-    mark: "5% più convenienti",
-    after: ": se puoi, consuma ora",
-    color: BANANA,
-  };
-}
+const TIP_TONE_COLOR = {
+  cheap: BANANA,
+  peak: PEAK,
+  mid: MID,
+} as const;
 
 type NowLine = {
   hour: number;
   time: string;
   priceLabel: string;
-  cheap: boolean;
-  comment: ReturnType<typeof nowMomentComment>;
+  fruit: "🍌" | "🐵" | null;
+  fasciaId: FasciaStatId | null;
+  comment: {
+    before: string;
+    mark: string;
+    after: string;
+    color: string;
+  };
 };
 
 const NOW_BADGE =
   "mx-0.5 inline-flex translate-y-px items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 font-medium tabular-nums text-[#111111] dark:bg-neutral-800 dark:text-neutral-100";
 
-function nowLineForDay(day: DayInsight, now: RomeNow | null): NowLine | null {
+function nowLineForDay(
+  day: DayInsight,
+  now: RomeNow | null,
+  tariff: TariffPlanId,
+): NowLine | null {
   if (!now || now.date !== day.deliveryDate || day.prices.length === 0) {
     return null;
   }
@@ -264,12 +244,26 @@ function nowLineForDay(day: DayInsight, now: RomeNow | null): NowLine | null {
   const slot = currentSlotIndex(now.hour, now.minute, day.prices.length);
   const price = day.prices[slot];
   const percentile = expensivePercentile(day.prices, price);
+  const avgs = fasciaAveragesFromQuarters(day.deliveryDate, day.prices);
+  const advice = tariffNowAdvice(
+    day.deliveryDate,
+    now.hour,
+    tariff,
+    percentile,
+    avgs,
+  );
   return {
     hour: now.hour + now.minute / 60,
     time: formatClock(now.hour, now.minute),
     priceLabel: formatEurocent(toEurocentPerKwh(price)),
-    cheap: percentile < 0.5,
-    comment: nowMomentComment(percentile),
+    fruit: advice.fruit,
+    fasciaId: advice.fasciaId,
+    comment: {
+      before: advice.before,
+      mark: advice.mark,
+      after: advice.after,
+      color: TIP_TONE_COLOR[advice.tone],
+    },
   };
 }
 
@@ -297,13 +291,35 @@ function PriceTips({
           />
           Sono le{" "}
           <span className={NOW_BADGE}>{nowLine.time}</span>{" "}
-          <span className={NOW_BADGE}>prezzo a 
-            <span aria-hidden>{nowLine.cheap ? "🍌" : "🐵"}</span>
-            <span className="sr-only">
-              {nowLine.cheap ? "prezzo conveniente " : "prezzo alto "}
+          {nowLine.fasciaId ? (
+            <>
+              e sei in fascia{" "}
+              <span className={NOW_BADGE}>
+                {nowLine.fruit ? <span aria-hidden>{nowLine.fruit}</span> : null}
+                <span className="sr-only">
+                  {nowLine.fruit === "🍌"
+                    ? "fascia conveniente "
+                    : nowLine.fruit === "🐵"
+                      ? "fascia cara "
+                      : ""}
+                </span>
+                {fasciaNowBadgeLabel(nowLine.fasciaId)}
+              </span>
+            </>
+          ) : (
+            <span className={NOW_BADGE}>
+              prezzo a{" "}
+              {nowLine.fruit ? <span aria-hidden>{nowLine.fruit}</span> : null}
+              <span className="sr-only">
+                {nowLine.fruit === "🍌"
+                  ? "prezzo conveniente "
+                  : nowLine.fruit === "🐵"
+                    ? "prezzo alto "
+                    : ""}
+              </span>
+              {nowLine.priceLabel}
             </span>
-            {nowLine.priceLabel}
-          </span>{" "}
+          )}{" "}
           {nowLine.comment.before}
           {nowLine.comment.mark ? (
             <span
@@ -324,16 +340,67 @@ function PriceTips({
   );
 }
 
-function DayStats({ prices }: { prices: number[] }) {
-  const { min, avg, max } = dayHourlyCentStats(prices);
+const FASCIA_STATS: { id: FasciaStatId; label: string }[] = [
+  { id: "F1", label: "F1" },
+  { id: "F2", label: "F2" },
+  { id: "F3", label: "F3" },
+  { id: "F23", label: "F23" },
+  { id: "Fmonoraria", label: "Fmonoraria" },
+];
+
+function formatFasciaValue(value: number | null) {
+  return value == null ? "—" : formatEurocent(value);
+}
+
+function FasciaSwatch({ id }: { id: FasciaStatId }) {
+  if (id === "F23") {
+    return (
+      <span
+        className="inline-flex h-2.5 w-2.5 overflow-hidden rounded-[3px]"
+        aria-hidden
+      >
+        <span className="h-full w-1/2" style={{ background: FASCIA_COLOR.F2 }} />
+        <span className="h-full w-1/2" style={{ background: FASCIA_COLOR.F3 }} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-block h-2.5 w-2.5 rounded-[3px]"
+      style={{ background: FASCIA_LEGEND_COLOR[id] }}
+      aria-hidden
+    />
+  );
+}
+
+function StatHint({ children }: { children: string }) {
+  return (
+    <p className="mt-0.5 text-[11px] leading-tight tabular-nums text-neutral-400 dark:text-neutral-500">
+      {children}
+    </p>
+  );
+}
+
+function DayStats({
+  date,
+  prices,
+  tariff,
+}: {
+  date: string;
+  prices: number[];
+  tariff: TariffPlanId;
+}) {
+  const { min, avg, max, minHours, maxHours } = dayHourlyCentStats(prices);
+  const fasce = fasciaAveragesFromQuarters(date, prices);
+  const fasciaMarks = cheapPeakForTariff(tariff, fasce);
   const stats = [
-    { label: "min", value: formatEurocent(min) },
-    { label: "medio", value: formatEurocent(avg) },
-    { label: "max", value: formatEurocent(max) },
+    { label: "min", value: formatEurocent(min), hint: minHours },
+    { label: "medio", value: formatEurocent(avg), hint: "0–24" },
+    { label: "max", value: formatEurocent(max), hint: maxHours },
   ] as const;
 
   return (
-    <div className="mt-5" aria-label="Minimo, medio e massimo del giorno">
+    <div className="mt-5" aria-label="Minimo, medio, massimo e medie di fascia del giorno">
       <div className="grid grid-cols-3 gap-2">
         {stats.map((stat) => (
           <div key={stat.label}>
@@ -343,13 +410,109 @@ function DayStats({ prices }: { prices: number[] }) {
             <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
               {stat.value}
             </p>
+            {stat.hint ? <StatHint>{stat.hint}</StatHint> : null}
           </div>
         ))}
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
+        {FASCIA_STATS.map((stat) => {
+          const range = fasciaRangeLabel(date, stat.id);
+          const color = FASCIA_LEGEND_COLOR[stat.id];
+          return (
+            <div key={stat.id}>
+              <p
+                className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide uppercase"
+                style={{ color }}
+              >
+                <FasciaSwatch id={stat.id} />
+                {stat.id === fasciaMarks.cheap ? (
+                  <span aria-hidden>🍌 </span>
+                ) : stat.id === fasciaMarks.peak ? (
+                  <span aria-hidden>🐵 </span>
+                ) : null}
+                {stat.label}
+              </p>
+              <p
+                className="text-xl font-semibold tabular-nums tracking-tight"
+                style={{ color }}
+              >
+                {formatFasciaValue(fasce[stat.id])}
+              </p>
+              {range ? <StatHint>{range}</StatHint> : null}
+            </div>
+          );
+        })}
       </div>
       <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
         c€/kWh all&apos;ingrosso
       </p>
     </div>
+  );
+}
+
+function FasciaBandMark({
+  bandId,
+  fromX,
+  toX,
+  labelY,
+  width,
+  color,
+  cheapId,
+  peakId,
+}: {
+  bandId: FasciaId | "F23";
+  fromX: number;
+  toX: number;
+  labelY: number;
+  width: number;
+  color: string;
+  cheapId: FasciaStatId | null;
+  peakId: FasciaStatId | null;
+}) {
+  const mark =
+    cheapId === bandId ? "🍌" : peakId === bandId ? "🐵" : null;
+  const centerX = (fromX + toX) / 2;
+  const emojiY = labelY - 16;
+
+  if (width >= 28) {
+    return (
+      <>
+        {mark ? (
+          <text
+            x={centerX}
+            y={emojiY}
+            textAnchor="middle"
+            fontSize={MARKER_FONT_SIZE}
+          >
+            {mark}
+          </text>
+        ) : null}
+        <text
+          x={centerX}
+          y={labelY}
+          textAnchor="middle"
+          fill={color}
+          fontSize={11}
+          fontFamily="var(--font-geist-sans), system-ui, sans-serif"
+          fontWeight="700"
+        >
+          {bandId}
+        </text>
+      </>
+    );
+  }
+
+  if (!mark) return null;
+
+  return (
+    <text
+      x={centerX}
+      y={labelY}
+      textAnchor="middle"
+      fontSize={width < 18 ? 14 : MARKER_FONT_SIZE}
+    >
+      {mark}
+    </text>
   );
 }
 
@@ -371,16 +534,170 @@ function pointerToHour(
   return Math.min(24, Math.max(0, ((x - pad.l) / innerW) * 24));
 }
 
+function ChartLayerToggle({
+  pressed,
+  labelOn,
+  labelOff,
+  onClick,
+  children,
+}: {
+  pressed: boolean;
+  labelOn: string;
+  labelOff: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      aria-label={pressed ? labelOff : labelOn}
+      title={pressed ? labelOff : labelOn}
+      className={`flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+        pressed
+          ? "border-neutral-300 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900"
+          : "border-neutral-200 hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-900"
+      }`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FasciaToggleIcon({
+  f1,
+  f2,
+  f3,
+}: {
+  f1: boolean;
+  f2: boolean;
+  f3: boolean;
+}) {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
+      <rect
+        x="1"
+        y="2"
+        width="4"
+        height="12"
+        rx="1"
+        fill={f3 ? FASCIA_COLOR.F3 : "#737373"}
+      />
+      <rect
+        x="6"
+        y="2"
+        width="4"
+        height="12"
+        rx="1"
+        fill={f2 ? FASCIA_COLOR.F2 : "#737373"}
+      />
+      <rect
+        x="11"
+        y="2"
+        width="4"
+        height="12"
+        rx="1"
+        fill={f1 ? FASCIA_COLOR.F1 : "#737373"}
+      />
+    </svg>
+  );
+}
+
+function LineToggleIcon({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
+      <path
+        d="M1.5 12.5 L5 7.5 L8.5 9.5 L14.5 3.5"
+        fill="none"
+        stroke={on ? BANANA : "#737373"}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function F23ToggleIcon({ on }: { on: boolean }) {
+  const left = on ? FASCIA_COLOR.F2 : "#737373";
+  const right = on ? FASCIA_COLOR.F3 : "#737373";
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
+      <rect x="1" y="3" width="7" height="10" rx="1" fill={left} />
+      <rect x="8" y="3" width="7" height="10" rx="1" fill={right} />
+    </svg>
+  );
+}
+
+function MonoToggleIcon({ on }: { on: boolean }) {
+  const color = on ? FASCIA_LEGEND_COLOR.Fmonoraria : "#737373";
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
+      <rect x="2" y="8" width="12" height="6" fill={color} opacity="0.35" />
+      <line
+        x1="2"
+        x2="14"
+        y1="8"
+        y2="8"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function PriceChart({
   day,
   nowHour,
+  layers,
+  onLayersChange,
+  tariff = DEFAULT_TARIFF_PLAN,
 }: {
   day: DayInsight;
   nowHour?: number;
+  layers?: ChartLayers;
+  onLayersChange?: (next: ChartLayers) => void;
+  tariff?: TariffPlanId;
 }) {
   const { chartW, chartH, pad, axisFontSize, unitFontSize } = useChartLayout();
   const [pickedHour, setPickedHour] = useState<number | null>(null);
+  const resolvedLayers = layers ?? layersForTariff(DEFAULT_TARIFF_PLAN);
+  const showLine = resolvedLayers.line;
+  const showMono = resolvedLayers.mono;
+  const showF23 = resolvedLayers.f23;
+  const showAnyFascia = resolvedLayers.f1 || resolvedLayers.f2 || resolvedLayers.f3;
+  const fasciaOn: Record<FasciaId, boolean> = {
+    F1: resolvedLayers.f1,
+    F2: resolvedLayers.f2,
+    F3: resolvedLayers.f3,
+  };
+
+  function patchLayers(partial: Partial<ChartLayers>) {
+    onLayersChange?.({ ...resolvedLayers, ...partial });
+  }
   const hourly = useMemo(() => toHourlyAverages(day.prices), [day.prices]);
+  const fasciaBands = useMemo(
+    () => fasciaHourBands(day.deliveryDate),
+    [day.deliveryDate],
+  );
+  const f23Bands = useMemo(
+    () => fasciaF23Bands(day.deliveryDate),
+    [day.deliveryDate],
+  );
+  const fasciaAvgs = useMemo(
+    () => fasciaAveragesFromQuarters(day.deliveryDate, day.prices),
+    [day.deliveryDate, day.prices],
+  );
+  const visibleFasciaStats = useMemo(
+    () => visibleFasciaStatsFromLayers(resolvedLayers),
+    [resolvedLayers],
+  );
+  const fasciaMarks = useMemo(
+    () => cheapPeakForTariff(tariff, fasciaAvgs, visibleFasciaStats),
+    [tariff, fasciaAvgs, visibleFasciaStats],
+  );
   const pricesCent = useMemo(
     () => hourly.map(toEurocentPerKwh),
     [hourly],
@@ -432,19 +749,81 @@ function PriceChart({
     picked != null
       ? bananaToMonkeyPercent(picked.price, dayMinCent, dayMaxCent)
       : null;
+  const plotBottom = pad.t + innerH;
+  const monoPrice = fasciaAvgs.Fmonoraria;
+  const monoY =
+    monoPrice != null && Number.isFinite(monoPrice)
+      ? Math.min(
+          plotBottom,
+          Math.max(
+            pad.t,
+            pad.t + (1 - (monoPrice - scale.min) / range) * innerH,
+          ),
+        )
+      : null;
+  const monoFromX = hourToX(0, chartW, pad);
+  const monoToX = hourToX(24, chartW, pad);
 
   return (
-    <div className="relative" data-price-chart>
-    <svg
+    <div className="mt-3" data-price-chart>
+      <div className="mb-1.5 flex justify-end gap-1.5">
+        <ChartLayerToggle
+          pressed={showLine}
+          labelOn="Mostra linea del prezzo"
+          labelOff="Nascondi linea del prezzo"
+          onClick={() => {
+            patchLayers({ line: !showLine });
+            setPickedHour(null);
+          }}
+        >
+          <LineToggleIcon on={showLine} />
+        </ChartLayerToggle>
+        <ChartLayerToggle
+          pressed={showMono}
+          labelOn="Mostra Fmonoraria"
+          labelOff="Nascondi Fmonoraria"
+          onClick={() => patchLayers({ mono: !showMono })}
+        >
+          <MonoToggleIcon on={showMono} />
+        </ChartLayerToggle>
+        <ChartLayerToggle
+          pressed={showF23}
+          labelOn="Mostra F23"
+          labelOff="Nascondi F23"
+          onClick={() => patchLayers({ f23: !showF23 })}
+        >
+          <F23ToggleIcon on={showF23} />
+        </ChartLayerToggle>
+        <ChartLayerToggle
+          pressed={showAnyFascia}
+          labelOn="Mostra fasce F1 F2 F3"
+          labelOff="Nascondi fasce F1 F2 F3"
+          onClick={() => {
+            const next = !showAnyFascia;
+            patchLayers({ f1: next, f2: next, f3: next });
+          }}
+        >
+          <FasciaToggleIcon
+            f1={resolvedLayers.f1}
+            f2={resolvedLayers.f2}
+            f3={resolvedLayers.f3}
+          />
+        </ChartLayerToggle>
+      </div>
+      <div className="relative overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
+        <svg
       viewBox={`0 0 ${chartW} ${chartH}`}
-      className="h-auto w-full cursor-crosshair touch-manipulation"
+      className={`h-auto w-full touch-manipulation ${showLine ? "cursor-crosshair" : ""}`}
       role="img"
       aria-label={`Andamento orario del prezzo in centesimi di euro per kilowattora. Tocca o clicca un punto per vedere ora e prezzo.${
         nowHour != null
           ? ` L'ora attuale è alle ${formatTipHour(nowHour)}.`
           : ""
-      } Momenti più convenienti alle ${bananaHours || "n.d."}, picchi da evitare alle ${monkeyHours || "n.d."}.`}
+      } Momenti più convenienti alle ${bananaHours || "n.d."}, picchi da evitare alle ${monkeyHours || "n.d."}.${
+        showAnyFascia ? " Fasce F1, F2 e F3 visibili sul grafico." : ""
+      }${showF23 ? " F23 visibile." : ""}${showMono ? " Fmonoraria visibile." : ""}${showLine ? "" : " Linea del prezzo nascosta."}`}
       onPointerDown={(event) => {
+        if (!showLine) return;
         if (event.pointerType === "mouse" && event.button !== 0) return;
         setPickedHour(pointerToHour(event, chartW, pad));
       }}
@@ -511,74 +890,211 @@ function PriceChart({
               fontWeight="600"
             >
               {String(hour).padStart(2, "0")}
+              <tspan
+                fontSize={Math.round(axisFontSize * 0.6)}
+                fontWeight="500"
+                fill="#a3a3a3"
+              >
+                :00
+              </tspan>
             </text>
           </g>
         );
       })}
 
-      {cheapFills.map((band) => {
-        const fromX = hourToX(band.start / QUARTERS_PER_HOUR, chartW, pad);
-        const toX = hourToX((band.end + 1) / QUARTERS_PER_HOUR, chartW, pad);
-        return (
+      {showLine
+        ? cheapFills.map((band) => {
+            const fromX = hourToX(band.start / QUARTERS_PER_HOUR, chartW, pad);
+            const toX = hourToX((band.end + 1) / QUARTERS_PER_HOUR, chartW, pad);
+            return (
+              <rect
+                key={`cheap-${band.start}-${band.end}`}
+                x={fromX}
+                y={pad.t}
+                width={Math.max(toX - fromX, 8)}
+                height={innerH}
+                fill={BANANA}
+                opacity="0.08"
+              />
+            );
+          })
+        : null}
+      {showLine
+        ? peakFills.map((band) => {
+            const fromX = hourToX(band.start / QUARTERS_PER_HOUR, chartW, pad);
+            const toX = hourToX((band.end + 1) / QUARTERS_PER_HOUR, chartW, pad);
+            return (
+              <rect
+                key={`peak-${band.start}-${band.end}`}
+                x={fromX}
+                y={pad.t}
+                width={Math.max(toX - fromX, 8)}
+                height={innerH}
+                fill={PEAK}
+                opacity="0.16"
+              />
+            );
+          })
+        : null}
+
+      {fasciaBands.map((band) => {
+            if (!fasciaOn[band.id]) return null;
+            const price = fasciaAvgs[band.id];
+            if (price == null || !Number.isFinite(price)) return null;
+            const fromX = hourToX(band.start, chartW, pad);
+            const toX = hourToX(band.end, chartW, pad);
+            const width = Math.max(toX - fromX, 0);
+            const plotBottom = pad.t + innerH;
+            const yTop = Math.min(
+              plotBottom,
+              Math.max(
+                pad.t,
+                pad.t + (1 - (price - scale.min) / range) * innerH,
+              ),
+            );
+            const height = plotBottom - yTop;
+            if (width <= 0 || height <= 0) return null;
+            const color = FASCIA_COLOR[band.id];
+            const labelY = yTop - 6 < pad.t + 10 ? yTop + 14 : yTop - 5;
+            return (
+              <g key={`fascia-${band.id}-${band.start}`} pointerEvents="none">
+                <rect
+                  x={fromX}
+                  y={yTop}
+                  width={width}
+                  height={height}
+                  fill={color}
+                  fillOpacity="0.28"
+                  stroke={color}
+                  strokeWidth="2"
+                  shapeRendering="crispEdges"
+                />
+                <FasciaBandMark
+                  bandId={band.id}
+                  fromX={fromX}
+                  toX={toX}
+                  labelY={labelY}
+                  width={width}
+                  color={color}
+                  cheapId={fasciaMarks.cheap}
+                  peakId={fasciaMarks.peak}
+                />
+              </g>
+            );
+          })}
+
+      {showF23
+        ? f23Bands.map((band) => {
+            const price = fasciaAvgs.F23;
+            if (price == null || !Number.isFinite(price)) return null;
+            const fromX = hourToX(band.start, chartW, pad);
+            const toX = hourToX(band.end, chartW, pad);
+            const width = Math.max(toX - fromX, 0);
+            const yTop = Math.min(
+              plotBottom,
+              Math.max(
+                pad.t,
+                pad.t + (1 - (price - scale.min) / range) * innerH,
+              ),
+            );
+            const height = plotBottom - yTop;
+            if (width <= 0 || height <= 0) return null;
+            const color = FASCIA_LEGEND_COLOR.F23;
+            const labelY = yTop - 6 < pad.t + 10 ? yTop + 14 : yTop - 5;
+            return (
+              <g key={`f23-${band.start}`} pointerEvents="none">
+                <rect
+                  x={fromX}
+                  y={yTop}
+                  width={width}
+                  height={height}
+                  fill={color}
+                  fillOpacity={resolvedLayers.f2 || resolvedLayers.f3 ? 0.16 : 0.28}
+                  stroke={color}
+                  strokeWidth="2"
+                  shapeRendering="crispEdges"
+                />
+                <FasciaBandMark
+                  bandId="F23"
+                  fromX={fromX}
+                  toX={toX}
+                  labelY={labelY}
+                  width={width}
+                  color={color}
+                  cheapId={fasciaMarks.cheap}
+                  peakId={fasciaMarks.peak}
+                />
+              </g>
+            );
+          })
+        : null}
+
+      {showMono && monoY != null ? (
+        <g pointerEvents="none">
           <rect
-            key={`cheap-${band.start}-${band.end}`}
-            x={fromX}
-            y={pad.t}
-            width={Math.max(toX - fromX, 8)}
-            height={innerH}
-            fill={BANANA}
-            opacity="0.08"
+            x={monoFromX}
+            y={monoY}
+            width={monoToX - monoFromX}
+            height={plotBottom - monoY}
+            fill={FASCIA_LEGEND_COLOR.Fmonoraria}
+            fillOpacity={showAnyFascia || showF23 ? 0.1 : 0.28}
           />
-        );
-      })}
-      {peakFills.map((band) => {
-        const fromX = hourToX(band.start / QUARTERS_PER_HOUR, chartW, pad);
-        const toX = hourToX((band.end + 1) / QUARTERS_PER_HOUR, chartW, pad);
-        return (
-          <rect
-            key={`peak-${band.start}-${band.end}`}
-            x={fromX}
-            y={pad.t}
-            width={Math.max(toX - fromX, 8)}
-            height={innerH}
-            fill={PEAK}
-            opacity="0.16"
+          <line
+            x1={monoFromX}
+            x2={monoToX}
+            y1={monoY}
+            y2={monoY}
+            stroke={FASCIA_LEGEND_COLOR.Fmonoraria}
+            strokeWidth="2.5"
+            strokeLinecap="round"
           />
-        );
-      })}
+          <text
+            x={monoFromX + 6}
+            y={monoY - 6 < pad.t + 10 ? monoY + 14 : monoY - 5}
+            fill={FASCIA_LEGEND_COLOR.Fmonoraria}
+            fontSize={11}
+            fontFamily={font}
+            fontWeight="700"
+          >
+            Fmono
+          </text>
+        </g>
+      ) : null}
 
-      <path
-        d={line}
-        fill="none"
-        stroke={BANANA}
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {bananaMarks.map((mark) => (
-        <text
-          key={`banana-${mark.hour}`}
-          x={mark.x}
-          y={mark.y - 11}
-          textAnchor="middle"
-          fontSize={MARKER_FONT_SIZE}
-        >
-          🍌
-        </text>
-      ))}
-
-      {monkeyMarks.map((mark) => (
-        <text
-          key={`monkey-${mark.hour}`}
-          x={mark.x}
-          y={mark.y - 11}
-          textAnchor="middle"
-          fontSize={MARKER_FONT_SIZE}
-        >
-          🐵
-        </text>
-      ))}
+      {showLine ? (
+        <>
+          <path
+            d={line}
+            fill="none"
+            stroke={BANANA}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          {bananaMarks.map((mark) => (
+            <text
+              key={`banana-${mark.hour}`}
+              x={mark.x}
+              y={mark.y - 11}
+              textAnchor="middle"
+              fontSize={MARKER_FONT_SIZE}
+            >
+              🍌
+            </text>
+          ))}
+          {monkeyMarks.map((mark) => (
+            <text
+              key={`monkey-${mark.hour}`}
+              x={mark.x}
+              y={mark.y - 11}
+              textAnchor="middle"
+              fontSize={MARKER_FONT_SIZE}
+            >
+              🐵
+            </text>
+          ))}
+        </>
+      ) : null}
 
       {nowHour != null ? (
         <line
@@ -592,7 +1108,7 @@ function PriceChart({
         />
       ) : null}
 
-      {picked ? (
+      {showLine && picked ? (
         <g pointerEvents="none">
           <line
             x1={picked.x}
@@ -624,24 +1140,25 @@ function PriceChart({
           />
         </g>
       ) : null}
-    </svg>
-      {picked && pickedRank != null ? (
-        <button
-          type="button"
-          className="absolute top-2.5 right-2.5 z-10 flex items-center gap-2 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-white shadow-sm"
-          aria-label={`Chiudi lettura delle ${formatTipHour(picked.hour)}, ${formatEurocent(picked.price)}, ${pickedRank}%`}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => setPickedHour(null)}
-        >
-          <span className="text-xs font-semibold tabular-nums sm:text-sm">
-            {formatTipHour(picked.hour)} · {formatEurocent(picked.price)} ·{" "}
-            {pickedRank}% {pickedRank < 50 ? "🍌" : "🐵"}
-          </span>
-          <span aria-hidden className="text-sm leading-none text-white/70">
-            ×
-          </span>
-        </button>
-      ) : null}
+      </svg>
+        {showLine && picked && pickedRank != null ? (
+          <button
+            type="button"
+            className="absolute top-2.5 right-2.5 z-10 flex items-center gap-2 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-white shadow-sm"
+            aria-label={`Chiudi lettura delle ${formatTipHour(picked.hour)}, ${formatEurocent(picked.price)}, ${pickedRank}%`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setPickedHour(null)}
+          >
+            <span className="text-xs font-semibold tabular-nums sm:text-sm">
+              {formatTipHour(picked.hour)} · {formatEurocent(picked.price)} ·{" "}
+              {pickedRank}% {pickedRank < 50 ? "🍌" : "🐵"}
+            </span>
+            <span aria-hidden className="text-sm leading-none text-white/70">
+              ×
+            </span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -807,6 +1324,12 @@ function InsightSkeleton() {
 
   return (
     <div className="mt-3" aria-hidden>
+      <div className="mb-1.5 flex justify-end gap-1.5">
+        <SkeletonBone className="h-8 w-8" />
+        <SkeletonBone className="h-8 w-8" />
+        <SkeletonBone className="h-8 w-8" />
+        <SkeletonBone className="h-8 w-8" />
+      </div>
       <div className="overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
         <div className="relative h-90 w-full sm:h-65">
           <SkeletonBone chart className="absolute inset-0 rounded-none" />
@@ -834,10 +1357,22 @@ function InsightSkeleton() {
                 {label}
               </p>
               <SkeletonBone className="mt-1 h-6 w-16" />
+              <SkeletonBone className="mt-1 h-3 w-10" />
             </div>
           ))}
         </div>
-        <SkeletonBone className="mt-1 h-3 w-28" />
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
+          {["F1", "F2", "F3", "F23", "Fmonoraria"].map((label) => (
+            <div key={label}>
+              <p className="text-[11px] font-medium tracking-wide text-neutral-400 uppercase">
+                {label}
+              </p>
+              <SkeletonBone className="mt-1 h-6 w-16" />
+              <SkeletonBone className="mt-1 h-3 w-12" />
+            </div>
+          ))}
+        </div>
+        <SkeletonBone className="mt-1 h-3 w-52" />
       </div>
 
       <div className="mt-6">
@@ -885,6 +1420,10 @@ export function DailyInsight({
   initialHome?: ZoneHomePayload;
 } = {}) {
   const [region, setRegion] = useState(initialRegion);
+  const [tariff, setTariff] = useState<TariffPlanId>(DEFAULT_TARIFF_PLAN);
+  const [layers, setLayers] = useState<ChartLayers>(() =>
+    layersForTariff(DEFAULT_TARIFF_PLAN),
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(() => {
     const dates = initialHome?.dates ?? [];
     if (initialDate && (dates.length === 0 || dates.includes(initialDate))) {
@@ -992,12 +1531,19 @@ export function DailyInsight({
     () => (selected ? buildDayInsight(selected) : null),
     [selected],
   );
+  const tips = useMemo(
+    () =>
+      day
+        ? computeTariffTips(day.prices, day.deliveryDate, tariff)
+        : { bestTip: "", worstTip: "" },
+    [day, tariff],
+  );
   const dateIndex = selectedDate ? dates.indexOf(selectedDate) : 0;
   const isOldest = dateIndex < 0 || dateIndex === dates.length - 1;
   const isNewest = dateIndex <= 0;
   const today = romeToday();
   const now = useRomeNow();
-  const nowLine = day ? nowLineForDay(day, now) : null;
+  const nowLine = day ? nowLineForDay(day, now, tariff) : null;
   const showSkeleton = fetching || isRefreshing;
   const dateLabel = day
     ? formatDeliveryDate(day.deliveryDate, today)
@@ -1015,6 +1561,12 @@ export function DailyInsight({
     if (zoneForRegion(next) !== zone) setIsRefreshing(true);
     startTransition(() => setRegion(next as ItalianRegion));
     persistRegionPref(next);
+  }
+
+  function handleTariffChange(next: TariffPlanId) {
+    setTariff(next);
+    setLayers(layersForTariff(next));
+    persistTariffPref(next);
   }
 
   const selectedDateRef = useRef(selectedDate);
@@ -1054,6 +1606,12 @@ export function DailyInsight({
       startTransition(() => setSelectedDate(fromDate));
     }
 
+    const storedTariff = readTariffPref();
+    if (storedTariff) {
+      setTariff(storedTariff);
+      setLayers(layersForTariff(storedTariff));
+    }
+
     const hash = url.hash.replace(/^#/, "");
     const hadRegionParam = search.has(REGION_QUERY_PARAM);
     const hadDateParam = search.has(DATE_QUERY_PARAM);
@@ -1083,18 +1641,19 @@ export function DailyInsight({
           id="daily-insight-heading"
           className="text-lg font-medium tracking-tight text-foreground sm:text-xl"
         >
-          I prezzi all&apos;ingrosso nella tua zona
+          I prezzi dell&apos;energia nella tua zona
         </h2>
-        <ShareButton
-          getUrl={() => pricesShareUrl(window.location.origin, region)}
-          title={`kilowatt e banane🍌🍌🍌 prezzi in ${region}`}
-          text={`I prezzi dell'energia all'ingrosso in ${region}. Guarda quando conviene consumare.`}
-          ariaLabel={`Condividi i prezzi in ${region}`}
-        />
+        <span className="hidden sm:contents">
+          <ShareButton
+            getUrl={() => pricesShareUrl(window.location.origin, region)}
+            title={`kilowatt e banane🍌🍌🍌 prezzi in ${region}`}
+            text={`I prezzi dell'energia all'ingrosso in ${region}. Guarda quando conviene consumare.`}
+            ariaLabel={`Condividi i prezzi in ${region}`}
+          />
+        </span>
       </div>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-        Scegli il giorno e la regione: grafico e tabella ti dicono quando
-        conviene consumare.
+        Scegli giorno, regione e piano tariffario
         {dates.includes(today) ? (
           <>
             {" "}
@@ -1115,6 +1674,9 @@ export function DailyInsight({
         region={region}
         onRegionChange={handleRegionChange}
         className="mt-5"
+        afterSelect={
+          <TariffSelect value={tariff} onChange={handleTariffChange} />
+        }
       >
         <button
           type="button"
@@ -1167,11 +1729,20 @@ export function DailyInsight({
             key={`${zone}-${day.deliveryDate}`}
             className="insight-content-in"
           >
-            <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
-              <PriceChart day={day} nowHour={nowLine?.hour} />
-            </div>
-            <PriceTips best={day.bestTip} worst={day.worstTip} nowLine={nowLine} />
-            <DayStats prices={day.prices} />
+            <PriceChart
+              day={day}
+              nowHour={nowLine?.hour}
+              layers={layers}
+              onLayersChange={setLayers}
+              tariff={tariff}
+            />
+            <PriceTips
+              best={tips.bestTip}
+              worst={tips.worstTip}
+              nowLine={nowLine}
+            />
+            <DayStats date={day.deliveryDate} prices={day.prices} tariff={tariff} />
+            <SignupSlot className="mt-6 w-full scroll-mt-20" />
             <QuarterPriceTable day={day} />
           </div>
           {home ? (
