@@ -199,6 +199,9 @@ export async function fetchEntsoePrices(options: {
     headers: { Accept: "application/xml, text/xml, */*", "User-Agent": "kilowattebanane/1.0" },
     cache: "no-store",
     signal: AbortSignal.timeout(12_000),
+  }).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : "fetch failed";
+    throw new Error(`ENTSO-E timeout: ${message}`);
   });
   const xml = await readResponseText(res);
   return parsePublicationXml(xml, options.zone);
@@ -228,7 +231,17 @@ export async function fetchEnergyChartsPrices(options: {
     throw new Error(`energy-charts HTTP ${res.status}`);
   }
 
-  const data = (await res.json()) as EnergyChartsResponse;
+  const text = await res.text();
+  if (!text || /^no content available/i.test(text.trim())) {
+    return [];
+  }
+
+  let data: EnergyChartsResponse;
+  try {
+    data = JSON.parse(text) as EnergyChartsResponse;
+  } catch {
+    throw new Error("energy-charts invalid JSON");
+  }
   const times = data.unix_seconds ?? [];
   const prices = data.price ?? [];
   const slots: PriceSlot[] = [];

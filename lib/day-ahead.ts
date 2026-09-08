@@ -22,6 +22,7 @@ export type PullSummary = {
   from: string;
   to: string;
   upserted: number;
+  incompleteDates: string[];
   zones: ZonePullResult[];
   errors: { zone: MarketZoneId; message: string }[];
 };
@@ -88,11 +89,30 @@ function datesInclusive(from: string, to: string) {
   return dates;
 }
 
-function isEntsoeUnauthorized(error: unknown) {
-  return error instanceof Error && /HTTP 401/.test(error.message);
+function isEntsoeUnavailable(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const haystack = `${error.name} ${error.message}`;
+  return /HTTP (401|403|404)|TimeoutError|Timeout|aborted|fetch failed/i.test(haystack);
 }
 
-async function zonesCompleteForWindow(
+function slotKey(zone: MarketZoneId, date: string) {
+  return `${zone}:${date}`;
+}
+
+function completeDatesInSlots(slots: PriceSlot[], from: string, to: string) {
+  const requested = datesInclusive(from, to);
+  const counts = new Map<string, number>();
+  for (const slot of slots) {
+    counts.set(slot.deliveryDate, (counts.get(slot.deliveryDate) ?? 0) + 1);
+  }
+  return requested.filter((date) => isCompleteDay(counts.get(date) ?? 0));
+}
+
+function windowIsComplete(slots: PriceSlot[], from: string, to: string) {
+  return completeDatesInSlots(slots, from, to).length === datesInclusive(from, to).length;
+}
+
+async function existingCompleteKeys(
   from: string,
   to: string,
   zoneIds: MarketZoneId[],
@@ -107,18 +127,20 @@ async function zonesCompleteForWindow(
     .lte("delivery_date", to);
   if (error) throw new Error(error.message);
 
-  const counts = new Map<string, number>();
+  const completeKeys = new Set<string>();
   for (const row of data ?? []) {
-    counts.set(`${row.zone}:${row.delivery_date}`, Number(row.slot_count));
-  }
-
-  const complete = new Set<MarketZoneId>();
-  for (const zone of zoneIds) {
-    if (dates.every((date) => isCompleteDay(counts.get(`${zone}:${date}`) ?? 0))) {
-      complete.add(zone);
+    if (isCompleteDay(Number(row.slot_count))) {
+      completeKeys.add(slotKey(row.zone as MarketZoneId, String(row.delivery_date)));
     }
   }
-  return complete;
+
+  const completeZones = new Set<MarketZoneId>();
+  for (const zone of zoneIds) {
+    if (dates.every((date) => completeKeys.has(slotKey(zone, date)))) {
+      completeZones.add(zone);
+    }
+  }
+  return { dates, completeKeys, completeZones };
 }
 
 async function pullZone(options: {
@@ -129,7 +151,10 @@ async function pullZone(options: {
   periodEnd: Date;
   apiKey: string;
   skipEntsoe: boolean;
-}): Promise<ZonePullResult & { slots: PriceSlot[] }> {
+}): Promise<ZonePullResult & { slots: PriceSlot[]; disableEntsoe?: boolean }> {
+  let disableEntsoe = false;
+  let best: { source: "entsoe" | "energy-charts"; slots: PriceSlot[] } | undefined;
+
   if (!options.skipEntsoe) {
     try {
       const slots = await fetchEntsoePrices({
@@ -138,11 +163,12 @@ async function pullZone(options: {
         periodEnd: options.periodEnd,
         apiKey: options.apiKey,
       });
-      if (slots.length > 0) {
+      if (windowIsComplete(slots, options.from, options.to)) {
         return { zone: options.zone, source: "entsoe", slotCount: slots.length, slots };
       }
+      if (slots.length > 0) best = { source: "entsoe", slots };
     } catch (error) {
-      if (isEntsoeUnauthorized(error)) throw error;
+      if (isEntsoeUnavailable(error)) disableEntsoe = true;
     }
   }
 
@@ -154,13 +180,34 @@ async function pullZone(options: {
         startDate: options.from,
         endDate: options.to,
       });
-      return { zone: options.zone, source: "energy-charts", slotCount: slots.length, slots };
+      if (
+        windowIsComplete(slots, options.from, options.to) ||
+        slots.length >= (best?.slots.length ?? 0)
+      ) {
+        return {
+          zone: options.zone,
+          source: "energy-charts",
+          slotCount: slots.length,
+          slots,
+          disableEntsoe,
+        };
+      }
     } catch (error) {
       lastError = error;
       const retryable = error instanceof Error && /HTTP 429/.test(error.message);
       if (!retryable || attempt === 4) break;
       await sleep(2500 * 2 ** attempt);
     }
+  }
+
+  if (best) {
+    return {
+      zone: options.zone,
+      source: best.source,
+      slotCount: best.slots.length,
+      slots: best.slots,
+      disableEntsoe,
+    };
   }
   throw lastError instanceof Error ? lastError : new Error("energy-charts failed");
 }
@@ -191,11 +238,15 @@ async function pullDayAheadForWindow(
   const zones: ZonePullResult[] = [];
   const errors: PullSummary["errors"] = [];
   const allSlots: PriceSlot[] = [];
-  const alreadyComplete = await zonesCompleteForWindow(window.from, window.to, zoneIds);
+  const { dates, completeKeys, completeZones } = await existingCompleteKeys(
+    window.from,
+    window.to,
+    zoneIds,
+  );
   let skipEntsoe = false;
 
   for (const zone of zoneIds) {
-    if (alreadyComplete.has(zone)) {
+    if (completeZones.has(zone)) {
       zones.push({ zone, source: "skipped", slotCount: 0 });
       continue;
     }
@@ -209,6 +260,7 @@ async function pullDayAheadForWindow(
         apiKey,
         skipEntsoe,
       });
+      if (result.disableEntsoe) skipEntsoe = true;
       zones.push({
         zone: result.zone,
         source: result.source,
@@ -217,7 +269,7 @@ async function pullDayAheadForWindow(
       allSlots.push(...result.slots);
       await sleep(400);
     } catch (error) {
-      if (isEntsoeUnauthorized(error)) skipEntsoe = true;
+      if (isEntsoeUnavailable(error)) skipEntsoe = true;
       errors.push({
         zone,
         message: error instanceof Error ? error.message : String(error),
@@ -225,11 +277,33 @@ async function pullDayAheadForWindow(
     }
   }
 
-  const upserted = await upsertSlots(allSlots);
+  const fetchedCounts = new Map<string, number>();
+  for (const slot of allSlots) {
+    const key = slotKey(slot.zone, slot.deliveryDate);
+    fetchedCounts.set(key, (fetchedCounts.get(key) ?? 0) + 1);
+  }
+
+  const incompleteDates = [
+    ...new Set(
+      zoneIds.flatMap((zone) =>
+        dates.filter((date) => {
+          const key = slotKey(zone, date);
+          if (completeKeys.has(key)) return false;
+          return !isCompleteDay(fetchedCounts.get(key) ?? 0);
+        }),
+      ),
+    ),
+  ].sort();
+
+  const slotsToUpsert = allSlots.filter(
+    (slot) => !completeKeys.has(slotKey(slot.zone, slot.deliveryDate)),
+  );
+  const upserted = await upsertSlots(slotsToUpsert);
   return {
     from: window.from,
     to: window.to,
     upserted,
+    incompleteDates,
     zones,
     errors,
   };

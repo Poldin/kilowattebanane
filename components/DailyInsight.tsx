@@ -1532,6 +1532,7 @@ export function DailyInsight({
         region={region}
         onRegionChange={handleRegionChange}
         className="mt-5"
+        stacked
         afterSelect={
           <TariffSelect value={tariff} onChange={handleTariffChange} />
         }

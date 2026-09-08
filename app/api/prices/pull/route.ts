@@ -32,6 +32,14 @@ async function handle(request: NextRequest) {
     const summary = from && to
       ? await pullDayAheadRange(from, to, zoneIds)
       : await pullDayAheadPrices(daysBack, 1, zoneIds);
+    console.log("prices pull", {
+      from: summary.from,
+      to: summary.to,
+      upserted: summary.upserted,
+      incompleteDates: summary.incompleteDates,
+      zones: summary.zones,
+      errors: summary.errors,
+    });
     if (summary.upserted > 0) {
       revalidatePriceArchive();
     }
