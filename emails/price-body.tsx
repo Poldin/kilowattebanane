@@ -1,6 +1,23 @@
 import { Button, Column, Img, Link, Row, Section, Text } from "react-email";
 import type { PriceMailModel } from "@/lib/mail/content";
 import { MAIL_CHART_DISPLAY_H, MAIL_CHART_DISPLAY_W } from "@/lib/mail/chart";
+import { LOOKBACK_SECTION_ID } from "@/lib/lookback";
+
+const YEAR_TONE = {
+  expensive: "#EF4444",
+  cheap: "#F5D547",
+  mid: "#A3A3A3",
+} as const;
+
+function lookbackHref(ctaUrl: string) {
+  try {
+    const url = new URL(ctaUrl);
+    url.hash = LOOKBACK_SECTION_ID;
+    return url.toString();
+  } catch {
+    return `${ctaUrl.split("#")[0]}#${LOOKBACK_SECTION_ID}`;
+  }
+}
 
 export function PriceDigestBody({
   model,
@@ -26,6 +43,26 @@ export function PriceDigestBody({
       </Link>
       <Text style={styles.tip}>{model.bestTip}</Text>
       {model.worstTip ? <Text style={styles.worst}>{model.worstTip}</Text> : null}
+
+      {model.yearPercentile ? (
+        <Text style={styles.yearLine}>
+          {model.yearPercentile.before}
+          <span style={styles.yearBadge}>{model.yearPercentile.badge}</span>
+          {" dell'ultimo anno: "}
+          <span
+            style={{
+              ...styles.yearMark,
+              textDecorationColor: YEAR_TONE[model.yearPercentile.tone],
+            }}
+          >
+            {model.yearPercentile.mark}
+          </span>
+          {model.yearPercentile.after}{" "}
+          <Link href={lookbackHref(model.ctaUrl)} style={styles.yearLink}>
+            Approfondisci
+          </Link>
+        </Text>
+      ) : null}
 
       {model.fasciaStats.length > 0 ? (
         <Row style={styles.stats}>
@@ -118,7 +155,33 @@ const styles = {
     color: "#525252",
     fontSize: "15px",
     lineHeight: "22px",
-    margin: "0 0 20px",
+    margin: "0 0 12px",
+  },
+  yearLine: {
+    color: "#111111",
+    fontSize: "15px",
+    fontWeight: 600,
+    lineHeight: "24px",
+    margin: "0 0 16px",
+  },
+  yearBadge: {
+    backgroundColor: "#F5D547",
+    borderRadius: "999px",
+    color: "#111111",
+    display: "inline-block",
+    fontWeight: 600,
+    padding: "1px 8px",
+  },
+  yearMark: {
+    textDecoration: "underline",
+    textDecorationThickness: "2px",
+    textUnderlineOffset: "2px",
+  },
+  yearLink: {
+    color: "#737373",
+    fontWeight: 500,
+    textDecoration: "underline",
+    textUnderlineOffset: "2px",
   },
   stats: {
     margin: "8px 0 0",

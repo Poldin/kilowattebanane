@@ -36,6 +36,7 @@ import {
   formatLatestDayRank,
   formatLookbackCaptionFromDates,
   formatLookbackDate,
+  LOOKBACK_SECTION_ID,
   latestDayWindowRankFromPoints,
   lookbackEndDateFromDates,
   lookbackRangeById,
@@ -765,6 +766,7 @@ export function LookbackInsight({
 
   return (
     <section
+      id={LOOKBACK_SECTION_ID}
       aria-labelledby="lookback-heading"
       className="mt-10 scroll-mt-20 border-t border-neutral-200 pt-8 dark:border-neutral-800"
     >

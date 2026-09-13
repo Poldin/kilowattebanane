@@ -28,6 +28,13 @@ import {
 } from "@/lib/fasce";
 import { computeTariffTips } from "@/lib/tariff-tips";
 import { resolveMailTariff } from "@/lib/tariff-pref";
+import {
+  formatYearPercentile,
+  yearWindowPercentileForTariff,
+  type YearPercentileCopy,
+} from "@/lib/lookback";
+import { loadZoneSeries } from "@/lib/zone-home";
+import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
 
 export type ZoneMailDay = {
   deliveryDate: string;
@@ -61,6 +68,7 @@ export type ZoneMailContent = {
   fasciaStats: MailFasciaStat[];
   hourly: { hour: number; label: string; priceLabel: string }[];
   chartUrl: string;
+  yearPercentile: YearPercentileCopy | null;
 };
 
 export type PriceMailModel = ZoneMailContent & {
@@ -123,9 +131,34 @@ export async function loadZoneMailDay(
   };
 }
 
+function mergeMailDayHourly(
+  hourly: ZoneHourlyPayload[],
+  day: ZoneMailDay,
+): ZoneHourlyPayload[] {
+  const hours = toHourlyAverages(day.prices);
+  return [
+    ...hourly.filter((row) => row.date !== day.deliveryDate),
+    { date: day.deliveryDate, hours },
+  ];
+}
+
+function yearPercentileForMail(
+  day: ZoneMailDay,
+  tariff: TariffPlanId,
+  history: ZoneHourlyPayload[],
+) {
+  const context = yearWindowPercentileForTariff(
+    mergeMailDayHourly(history, day),
+    day.deliveryDate,
+    tariff,
+  );
+  return context ? formatYearPercentile(context, romeToday()) : null;
+}
+
 export function zoneMailContentFromDay(
   day: ZoneMailDay,
   tariff: TariffPlanId = MAIL_DEFAULT_TARIFF_PLAN,
+  history: ZoneHourlyPayload[] = [],
 ): ZoneMailContent {
   const resolved = resolveMailTariff(tariff);
   const tips = computeTariffTips(day.prices, day.deliveryDate, resolved);
@@ -152,7 +185,13 @@ export function zoneMailContentFromDay(
       priceLabel: formatEurocent(price),
     })),
     chartUrl: mailChartUrl(day.zone, day.deliveryDate, resolved),
+    yearPercentile: yearPercentileForMail(day, resolved, history),
   };
+}
+
+export async function loadZoneMailHistory(zone: MarketZoneId) {
+  const series = await loadZoneSeries(zone);
+  return series.hourly;
 }
 
 export async function buildZoneMailContent(
@@ -160,9 +199,12 @@ export async function buildZoneMailContent(
   deliveryDate: string,
   tariff: TariffPlanId = MAIL_DEFAULT_TARIFF_PLAN,
 ): Promise<ZoneMailContent | null> {
-  const day = await loadZoneMailDay(zone, deliveryDate);
+  const [day, history] = await Promise.all([
+    loadZoneMailDay(zone, deliveryDate),
+    loadZoneMailHistory(zone),
+  ]);
   if (!day) return null;
-  return zoneMailContentFromDay(day, tariff);
+  return zoneMailContentFromDay(day, tariff, history);
 }
 
 export function priceMailModelForRegion(

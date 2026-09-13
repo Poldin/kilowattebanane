@@ -1,5 +1,6 @@
 import { addCalendarDays } from "@/lib/entsoe";
 import type { ZoneDay } from "@/lib/day-ahead-query";
+import { fasciaAveragesFromHourly, type TariffPlanId } from "@/lib/fasce";
 import { isCompleteDay, toEurocentPerKwh } from "@/lib/insights";
 import { toHourlyAverages } from "@/lib/prices";
 
@@ -15,6 +16,9 @@ export const LOOKBACK_RANGES = [
 
 export type LookbackRangeId = (typeof LOOKBACK_RANGES)[number]["id"];
 export const DEFAULT_LOOKBACK_RANGE: LookbackRangeId = "30";
+export const LOOKBACK_SECTION_ID = "lookback";
+export const YEAR_LOOKBACK_DAYS = 365;
+const YEAR_PERCENTILE_MIN_DAYS = 7;
 
 export type LookbackDayPoint = {
   date: string;
@@ -390,4 +394,128 @@ export function formatLatestDayRank(
     return { before, mark: "tra i più convenienti", after, tone: "cheap" };
   }
   return { before, mark: "nella media", after, tone: "mid" };
+}
+
+function finiteNumber(value: number | null | undefined): value is number {
+  return value != null && Number.isFinite(value);
+}
+
+function meanOf(values: Array<number | null>): number | null {
+  const nums = values.filter(finiteNumber);
+  if (nums.length === 0) return null;
+  return nums.reduce((sum, value) => sum + value, 0) / nums.length;
+}
+
+export function lookbackDayValueForTariff(
+  date: string,
+  hours: (number | null)[],
+  tariff: TariffPlanId,
+): number | null {
+  const avgs = fasciaAveragesFromHourly(date, hours);
+  switch (tariff) {
+    case "fasce":
+      return meanOf([avgs.F1, avgs.F2, avgs.F3]);
+    case "bioraria":
+      return meanOf([avgs.F1, avgs.F23]);
+    case "monoraria":
+    case "dinamica":
+      return avgs.Fmonoraria;
+  }
+}
+
+export function expensiveValuePercentile(values: number[], current: number) {
+  if (values.length === 0) return null;
+  const cheaper = values.filter((value) => value < current - AVG_TIE_EPS).length;
+  const ties = values.filter((value) => Math.abs(value - current) <= AVG_TIE_EPS).length;
+  return (cheaper + ties * 0.5) / values.length;
+}
+
+export type YearPercentile = {
+  date: string;
+  value: number;
+  percentile: number;
+  count: number;
+};
+
+export function yearWindowPercentileForTariff(
+  hourly: { date: string; hours: (number | null)[] }[],
+  date: string,
+  tariff: TariffPlanId,
+): YearPercentile | null {
+  const endDate = lookbackEndDateFromDates(hourly.map((day) => day.date));
+  if (!endDate) return null;
+  const windowDates = new Set(
+    sliceLookbackDates(
+      hourly.map((day) => day.date),
+      YEAR_LOOKBACK_DAYS,
+      endDate,
+    ),
+  );
+  const values: number[] = [];
+  let current: number | null = null;
+  for (const day of hourly) {
+    const value = lookbackDayValueForTariff(day.date, day.hours, tariff);
+    if (value == null) continue;
+    if (day.date === date) current = value;
+    if (windowDates.has(day.date)) values.push(value);
+  }
+  if (current == null || values.length < YEAR_PERCENTILE_MIN_DAYS) return null;
+  const percentile = expensiveValuePercentile(values, current);
+  if (percentile == null) return null;
+  return { date, value: current, percentile, count: values.length };
+}
+
+function yearPercentileGloss(percentile: number): {
+  text: string;
+  tone: "expensive" | "cheap" | "mid";
+} {
+  if (percentile >= 0.95) {
+    return { text: "l'energia costa moltissimo", tone: "expensive" };
+  }
+  if (percentile >= 0.9) {
+    return { text: "l'energia ha un costo molto elevato", tone: "expensive" };
+  }
+  if (percentile >= 0.8) {
+    return { text: "l'energia ha un costo piuttosto elevato", tone: "expensive" };
+  }
+  if (percentile >= 0.65) {
+    return { text: "l'energia costa più del solito", tone: "expensive" };
+  }
+  if (percentile >= 0.35) {
+    return { text: "l'energia ha un costo nella media", tone: "mid" };
+  }
+  if (percentile >= 0.2) {
+    return { text: "l'energia costa meno del solito", tone: "cheap" };
+  }
+  if (percentile >= 0.1) {
+    return { text: "l'energia ha un costo piuttosto basso", tone: "cheap" };
+  }
+  if (percentile >= 0.05) {
+    return { text: "l'energia ha un costo molto basso", tone: "cheap" };
+  }
+  return { text: "l'energia costa pochissimo", tone: "cheap" };
+}
+
+export type YearPercentileCopy = {
+  before: string;
+  badge: string;
+  mark: string;
+  after: string;
+  tone: "expensive" | "cheap" | "mid";
+};
+
+export function formatYearPercentile(
+  context: YearPercentile,
+  today: string,
+): YearPercentileCopy {
+  const n = Math.min(100, Math.max(0, Math.round(context.percentile * 100)));
+  const subject = latestDaySubject(context.date, today);
+  const gloss = yearPercentileGloss(context.percentile);
+  return {
+    before: `${subject} il prezzo è `,
+    badge: `${n}° percentile`,
+    mark: gloss.text,
+    after: ".",
+    tone: gloss.tone,
+  };
 }

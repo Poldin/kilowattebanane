@@ -89,6 +89,12 @@ import {
   type TariffPlanId,
 } from "@/lib/fasce";
 import { computeTariffTips, fasciaNowBadgeLabel, tariffNowAdvice } from "@/lib/tariff-tips";
+import {
+  LOOKBACK_SECTION_ID,
+  formatYearPercentile,
+  yearWindowPercentileForTariff,
+} from "@/lib/lookback";
+import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
 
 type DayInsight = {
   deliveryDate: string;
@@ -231,6 +237,8 @@ type NowLine = {
 
 const NOW_BADGE =
   "mx-0.5 inline-flex translate-y-px items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 font-medium tabular-nums text-[#111111] dark:bg-neutral-800 dark:text-neutral-100";
+const YEAR_PERCENTILE_BADGE =
+  "mx-0.5 inline-flex translate-y-px items-center rounded-full bg-[#F5D547] px-2 py-0.5 font-medium tabular-nums text-[#111111]";
 
 function nowLineForDay(
   day: DayInsight,
@@ -385,22 +393,56 @@ function DayStats({
   date,
   prices,
   tariff,
+  hourly,
+  today,
 }: {
   date: string;
   prices: number[];
   tariff: TariffPlanId;
+  hourly: ZoneHourlyPayload[];
+  today: string;
 }) {
   const { min, avg, max, minHours, maxHours } = dayHourlyCentStats(prices);
   const fasce = fasciaAveragesFromQuarters(date, prices);
   const fasciaMarks = cheapPeakForTariff(tariff, fasce);
+  const yearCopy = useMemo(() => {
+    const context = yearWindowPercentileForTariff(hourly, date, tariff);
+    return context ? formatYearPercentile(context, today) : null;
+  }, [hourly, date, tariff, today]);
   const stats = [
     { label: "min", value: formatEurocent(min), hint: minHours },
     { label: "medio", value: formatEurocent(avg), hint: "0–24" },
     { label: "max", value: formatEurocent(max), hint: maxHours },
   ] as const;
+  const yearTone =
+    yearCopy?.tone === "expensive"
+      ? PEAK
+      : yearCopy?.tone === "cheap"
+        ? BANANA
+        : MID;
 
   return (
     <div className="mt-5" aria-label="Minimo, medio, massimo e medie di fascia del giorno">
+      {yearCopy ? (
+        <p className="mb-4 text-sm font-medium text-foreground sm:text-base">
+          {yearCopy.before}
+          <span className={YEAR_PERCENTILE_BADGE}>{yearCopy.badge}</span>
+          {" dell'ultimo anno: "}
+          <span
+            className="underline decoration-2 underline-offset-2"
+            style={{ textDecorationColor: yearTone }}
+          >
+            {yearCopy.mark}
+          </span>
+          {yearCopy.after}{" "}
+          <a
+            href={`#${LOOKBACK_SECTION_ID}`}
+            className="font-medium text-neutral-500 underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground hover:decoration-neutral-500 dark:text-neutral-400 dark:decoration-neutral-600 dark:hover:decoration-neutral-400"
+          >
+            Approfondisci
+          </a>
+        </p>
+      ) : null}
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
         {FASCIA_STATS.map((stat) => {
           const range = fasciaRangeLabel(date, stat.id);
@@ -1600,7 +1642,13 @@ export function DailyInsight({
               worst={tips.worstTip}
               nowLine={nowLine}
             />
-            <DayStats date={day.deliveryDate} prices={day.prices} tariff={tariff} />
+            <DayStats
+              date={day.deliveryDate}
+              prices={day.prices}
+              tariff={tariff}
+              hourly={home?.hourly ?? []}
+              today={today}
+            />
             <SignupSlot className="mt-6 w-full scroll-mt-20" />
             <QuarterPriceTable day={day} />
           </div>

@@ -5,6 +5,7 @@ import { WelcomeEmail } from "@/emails/welcome";
 import { resendFrom, unsubscribeApiUrl, unsubscribePageUrl } from "@/lib/app-url";
 import {
   digestSubjectLine,
+  loadZoneMailHistory,
   priceMailModelForRegion,
   zoneMailContentFromDay,
   type PriceMailModel,
@@ -68,10 +69,11 @@ export async function sendZoneDigest(
   day: ZoneMailDay,
 ) {
   const resend = getResend();
+  const history = await loadZoneMailHistory(zone);
   const payload = [];
 
   for (const subscriber of recipients) {
-    const content = zoneMailContentFromDay(day, subscriber.tariff);
+    const content = zoneMailContentFromDay(day, subscriber.tariff, history);
     const model = priceMailModelForRegion(content, subscriber.region);
     const pageUrl = unsubscribePageUrl(subscriber.unsubscribe_token);
     const html = await render(

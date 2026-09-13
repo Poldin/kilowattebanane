@@ -64,6 +64,11 @@ export function Footer() {
               </button>
             </li>
             <li>
+              <Link href="/#offerte" className={itemClass}>
+                Confronta offerte luce
+              </Link>
+            </li>
+            <li>
               <Link href="/prezzi" className={itemClass}>
                 Archivio prezzi, giorno per giorno
               </Link>

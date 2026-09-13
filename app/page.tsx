@@ -1,3 +1,4 @@
+import { OfferteModule } from "@/components/offerte/OfferteModule";
 import { Header } from "@/components/Header";
 import { RotatingAction } from "@/components/RotatingAction";
 import { SignupProvider } from "@/components/SignupForm";
@@ -58,6 +59,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               initialDate={initialDate ?? initialHome?.date ?? undefined}
               initialHome={initialHome}
             />
+          </div>
+
+          <div className="mx-auto mt-16 w-full max-w-xl sm:mt-20">
+            <OfferteModule />
           </div>
 
           <div className="mt-16 sm:mt-20">

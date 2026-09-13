@@ -43,13 +43,28 @@ export function Header() {
           </span>
         </Link>
 
-        <button
-          type="button"
-          onClick={openSignup}
-          className="shrink-0 rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-        >
-          Iscriviti gratis
-        </button>
+        <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+          <Link
+            href="/#offerte"
+            onClick={(event) => {
+              if (window.location.pathname !== "/") return;
+              event.preventDefault();
+              document.getElementById("offerte")?.scrollIntoView({
+                behavior: "smooth",
+              });
+            }}
+            className="text-sm text-neutral-700 transition-colors hover:text-foreground dark:text-neutral-300 dark:hover:text-neutral-200"
+          >
+            offerte
+          </Link>
+          <button
+            type="button"
+            onClick={openSignup}
+            className="rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            Iscriviti gratis
+          </button>
+        </div>
       </div>
     </header>
   );
