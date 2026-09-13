@@ -5,11 +5,11 @@ import { useTypewriter } from "@/lib/use-typewriter";
 
 const ACTIONS = [
   "Quanto costa l'energia elettrica 💡 oggi?",
-  "Quando devo attaccare la lavatrice🧼?",
-  "Quando devo caricare l'auto elettrica🚗?",
+  "Quando è meglio attaccare la lavatrice🧼?",
+  "Quando mi conviene caricare l'auto elettrica🚗?",
   "Quando devo lanciare la lavastoviglie🍽️?",
-  "Quando devo stirare i vestiti👚?",
-  "Quando devo consumare il meno possibile💰?",
+  "Quando dovrei stirare i vestiti👚?",
+  "Quando dovrei consumare meno energia per risparmiare💰?",
 ] as const;
 
 const LONGEST_ACTION = ACTIONS.reduce((longest, action) =>
@@ -30,7 +30,7 @@ export function RotatingAction() {
         {LONGEST_ACTION}
       </span>
       <span
-        className="col-start-1 row-start-1 w-full text-balance underline decoration-neutral-300 underline-offset-4 dark:decoration-neutral-600"
+        className="col-start-1 row-start-1 w-full text-balance"
         aria-live="polite"
       >
         {typed}
