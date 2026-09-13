@@ -1,7 +1,5 @@
-import { FASCIA_COLOR, FASCIA_LEGEND_COLOR } from "@/lib/fasce";
+import { DINAMICA_COLOR, FASCIA_COLOR, FASCIA_LEGEND_COLOR } from "@/lib/fasce";
 import type { OfferteFasciaPlan } from "@/lib/offerte/metrics";
-
-const DINAMICA_COLOR = "#F59E0B";
 
 export function FasciaPlanIcon({ plan }: { plan: OfferteFasciaPlan }) {
   if (plan === "dinamica") {

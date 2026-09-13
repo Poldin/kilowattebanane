@@ -1,24 +1,44 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { OfferteStats } from "@/components/offerte/OfferteStats";
 import { SignupProvider } from "@/components/SignupForm";
 import { PORTALE_OFFERTE_URL } from "@/lib/offerte/public-types";
+import { loadOfferteClusterStats } from "@/lib/offerte/stats";
 import { publicSiteUrl } from "@/lib/app-url";
+
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Statistiche offerte luce",
   description:
-    "Statistiche sulle offerte elettriche pubblicate nel Portale Offerte. In arrivo.",
+    "Quante offerte luce ci sono sul Portale Offerte, e come si dividono: casa o partita IVA, fisso o variabile, PLACET o libero.",
   alternates: { canonical: `${publicSiteUrl()}/offer-stats` },
 };
 
-export default function OfferStatsPage() {
+export default async function OfferStatsPage() {
+  const stats = await loadOfferteClusterStats();
+
   return (
     <SignupProvider>
       <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
         <Header />
-        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-12 sm:px-6 sm:pt-16">
-          <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">
+        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12">
+          <nav
+            aria-label="Percorso"
+            className="text-xs text-neutral-500 dark:text-neutral-400"
+          >
+            <Link href="/" className="transition-colors hover:text-foreground">
+              Home
+            </Link>
+            <span aria-hidden className="mx-1.5">
+              /
+            </span>
+            <span className="text-foreground">Statistiche offerte</span>
+          </nav>
+
+          <p className="mt-5 text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">
             Dati{" "}
             <a
               href={PORTALE_OFFERTE_URL}
@@ -33,11 +53,7 @@ export default function OfferStatsPage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
             Statistiche offerte
           </h1>
-          <p className="mt-4 max-w-xl text-base leading-relaxed text-neutral-600 dark:text-neutral-400">
-            Qui arriverà il quadro nel tempo: quante offerte entrano ed escono,
-            chi pubblica di più, quanto restano visibili. Per ora il confronto
-            vive nel modulo in home.
-          </p>
+          <OfferteStats stats={stats} />
         </main>
         <Footer />
       </div>

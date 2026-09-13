@@ -26,6 +26,14 @@ export function Footer() {
     window.location.href = `/#${PRICES_SECTION_ID}`;
   }
 
+  function showOfferte(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (window.location.pathname !== "/") return;
+    event.preventDefault();
+    document.getElementById("offerte")?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }
+
   return (
     <footer className="mt-auto border-t border-neutral-200 dark:border-neutral-800">
       <div className="mx-auto grid w-full max-w-3xl gap-8 px-1 py-8 sm:px-6 md:grid-cols-3 md:items-start md:gap-6 md:py-10">
@@ -55,6 +63,16 @@ export function Footer() {
               </button>
             </li>
             <li>
+              <Link href="/#offerte" onClick={showOfferte} className={itemClass}>
+                offerte
+              </Link>
+            </li>
+            <li>
+              <Link href="/offer-stats" className={itemClass}>
+                statistiche offerte
+              </Link>
+            </li>
+            <li>
               <button
                 type="button"
                 onClick={showTodayPrices}
@@ -62,11 +80,6 @@ export function Footer() {
               >
                 Vedi prezzi di oggi
               </button>
-            </li>
-            <li>
-              <Link href="/#offerte" className={itemClass}>
-                Confronta offerte luce
-              </Link>
             </li>
             <li>
               <Link href="/prezzi" className={itemClass}>

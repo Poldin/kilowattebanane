@@ -47,6 +47,8 @@ export const FASCIA_LEGEND_COLOR: Record<FasciaStatId, string> = {
   Fmonoraria: "#34D399",
 };
 
+export const DINAMICA_COLOR = "#F59E0B";
+
 export function fasciaBadgesForPlan(id: TariffPlanId): FasciaStatId[] {
   switch (id) {
     case "fasce":

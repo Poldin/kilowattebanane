@@ -97,3 +97,17 @@ export type OfferteHeadlineStats = {
   fisso: number;
   variabile: number;
 };
+
+export type OfferteClusterBucket = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+export type OfferteClusterStats = OfferteHeadlineStats & {
+  cliente: OfferteClusterBucket[];
+  prezzo: OfferteClusterBucket[];
+  mercato: OfferteClusterBucket[];
+  copertura: OfferteClusterBucket[];
+  fascia: OfferteClusterBucket[];
+};
