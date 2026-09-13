@@ -1,3 +1,4 @@
+import { OFFERTE_SEARCH_PAGE_SIZE } from "@/lib/offerte/public-types";
 import { clampPotenzaKw } from "@/lib/offerte/potenza";
 import { lookupCap, searchOfferte, type OfferteSearchQuery } from "@/lib/offerte/search";
 
@@ -27,6 +28,8 @@ function asQuery(params: URLSearchParams): OfferteSearchQuery | Response {
       : "tutti";
   const consumoKwh = Number(params.get("consumo") ?? "2700");
   const potenzaKw = Number(params.get("potenza") ?? "3");
+  const offsetRaw = Number(params.get("offset") ?? "0");
+  const limitRaw = Number(params.get("limit") ?? String(OFFERTE_SEARCH_PAGE_SIZE));
   return {
     cap,
     cliente,
@@ -35,6 +38,10 @@ function asQuery(params: URLSearchParams): OfferteSearchQuery | Response {
     fascia,
     consumoKwh: Number.isFinite(consumoKwh) ? Math.min(20000, Math.max(500, consumoKwh)) : 2700,
     potenzaKw: clampPotenzaKw(potenzaKw, cliente),
+    offset: Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0,
+    limit: Number.isFinite(limitRaw)
+      ? Math.min(OFFERTE_SEARCH_PAGE_SIZE, Math.max(1, Math.floor(limitRaw)))
+      : OFFERTE_SEARCH_PAGE_SIZE,
   };
 }
 

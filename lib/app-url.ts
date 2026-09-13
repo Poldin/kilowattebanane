@@ -19,6 +19,10 @@ export function resendFrom() {
   return process.env.RESEND_FROM ?? "Paolo <onboarding@resend.dev>";
 }
 
+export function opsAlertEmail() {
+  return process.env.OPS_ALERT_EMAIL?.trim() || "oloapiccoli@gmail.com";
+}
+
 export function mailChartUrl(zone: string, date: string, tariff?: string) {
   const url = new URL("/api/mail/chart", publicSiteUrl());
   url.searchParams.set("zona", zone);

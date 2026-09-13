@@ -23,7 +23,7 @@ export async function fetchAllRows<T extends Record<string, unknown>>(
       .select(columns)
       .range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
-    const page = (data ?? []) as T[];
+    const page = (data ?? []) as unknown as T[];
     rows.push(...page);
     if (page.length < pageSize) break;
   }

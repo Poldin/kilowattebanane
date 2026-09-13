@@ -178,6 +178,43 @@ html:has(.offerte-dialog[open]) {
   background-color: #737373;
 }
 
+.offerte-hit[open] {
+  border-radius: 0.375rem;
+  margin-inline: -0.5rem;
+  padding: 0.25rem 0.75rem 0.75rem;
+  background: #171717;
+  color: #f5f5f5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .offerte-hit[open] {
+    background: #f5f5f5;
+    color: #171717;
+  }
+}
+
+.offerte-hit[open] .offerte-hit-muted {
+  color: color-mix(in srgb, currentColor 62%, transparent);
+}
+
+.offerte-hit[open] .offerte-hit-pill {
+  border-color: color-mix(in srgb, currentColor 28%, transparent);
+  color: inherit;
+}
+
+.offerte-hit[open] .offerte-hit-pill:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.offerte-hit[open] .offerte-hit-link {
+  color: inherit;
+  text-decoration-color: color-mix(in srgb, currentColor 42%, transparent);
+}
+
+.offerte-hit[open] .offerte-hit-chevron {
+  color: color-mix(in srgb, currentColor 58%, transparent);
+}
+
 @media (prefers-color-scheme: dark) {
   .offerte-dialog-scroll {
     scrollbar-color: #525252 transparent;

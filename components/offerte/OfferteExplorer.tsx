@@ -14,6 +14,7 @@ import {
   prezzoLabel,
 } from "@/components/offerte/OfferteTraitIcons";
 import {
+  OFFERTE_SEARCH_PAGE_SIZE,
   PORTALE_OFFERTE_CERCA,
   PORTALE_OFFERTE_URL,
   type CapPlace,
@@ -24,6 +25,7 @@ import {
   type OffertePrezzo,
   type OfferteSearchHit,
 } from "@/lib/offerte/public-types";
+import { romeToday } from "@/lib/offerte/dates";
 import {
   POTENZA_STANDARD_CASA_KW,
   clampPotenzaKw,
@@ -350,6 +352,33 @@ export function OfferteExplorer({
                 </div>
               </fieldset>
 
+              <fieldset>
+                <legend className="text-sm text-neutral-500 dark:text-neutral-400">Prezzo</legend>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Chip
+                    active={prefs.prezzo === "tutti"}
+                    onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "tutti" }))}
+                    icon={<PrezzoIcon kind="tutti" />}
+                  >
+                    Tutti
+                  </Chip>
+                  <Chip
+                    active={prefs.prezzo === "prezzo fisso"}
+                    onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "prezzo fisso" }))}
+                    icon={<PrezzoIcon kind="prezzo fisso" />}
+                  >
+                    Fisso
+                  </Chip>
+                  <Chip
+                    active={prefs.prezzo === "prezzo variabile"}
+                    onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "prezzo variabile" }))}
+                    icon={<PrezzoIcon kind="prezzo variabile" />}
+                  >
+                    Variabile
+                  </Chip>
+                </div>
+              </fieldset>
+
               <PotenzaSelect
                 cliente={prefs.cliente}
                 value={prefs.potenzaKw}
@@ -390,7 +419,7 @@ export function OfferteExplorer({
                       : "rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
                   }
                 >
-                  Usa tutti i filtri
+                  {advanced ? "Nascondi filtri avanzati" : "Usa tutti i filtri"}
                 </button>
               </div>
 
@@ -419,32 +448,6 @@ export function OfferteExplorer({
                         icon={<MercatoIcon kind="ml" />}
                       >
                         Mercato libero
-                      </Chip>
-                    </div>
-                  </fieldset>
-                  <fieldset>
-                    <legend className="text-sm text-neutral-500 dark:text-neutral-400">Prezzo</legend>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Chip
-                        active={prefs.prezzo === "tutti"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "tutti" }))}
-                        icon={<PrezzoIcon kind="tutti" />}
-                      >
-                        Tutti
-                      </Chip>
-                      <Chip
-                        active={prefs.prezzo === "prezzo fisso"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "prezzo fisso" }))}
-                        icon={<PrezzoIcon kind="prezzo fisso" />}
-                      >
-                        Fisso
-                      </Chip>
-                      <Chip
-                        active={prefs.prezzo === "prezzo variabile"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "prezzo variabile" }))}
-                        icon={<PrezzoIcon kind="prezzo variabile" />}
-                      >
-                        Variabile
                       </Chip>
                     </div>
                   </fieldset>
@@ -524,6 +527,7 @@ export function OfferteExplorer({
                   total={result?.totalMatched ?? 0}
                   loading={loading}
                   fascia={prefs.fascia}
+                  prefs={prefs}
                 />
               )}
             </div>
@@ -834,18 +838,63 @@ function fasciaHint(fascia: OfferteFascia) {
   return "";
 }
 
+function buildSearchParams(prefs: Prefs, offset = 0) {
+  return new URLSearchParams({
+    cap: prefs.cap,
+    cliente: prefs.cliente,
+    mercato: prefs.mercato,
+    prezzo: prefs.prezzo,
+    fascia: prefs.fascia,
+    consumo: String(prefs.consumoKwh),
+    potenza: String(prefs.potenzaKw),
+    offset: String(offset),
+    limit: String(OFFERTE_SEARCH_PAGE_SIZE),
+  });
+}
+
 function ResultsList({
   hits,
   total,
   loading,
   fascia,
+  prefs,
 }: {
   hits: OfferteSearchHit[];
   total: number;
   loading: boolean;
   fascia: OfferteFascia;
+  prefs: Prefs;
 }) {
-  if (hits.length === 0) {
+  const [displayedHits, setDisplayedHits] = useState(hits);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDisplayedHits(hits);
+    setLoadMoreError(null);
+  }, [hits]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const response = await fetch(
+        `/api/offerte/search?${buildSearchParams(prefs, displayedHits.length)}`,
+      );
+      const payload = (await response.json()) as SearchPayload;
+      if (!response.ok) {
+        setLoadMoreError(payload.error ?? "Non riesco a caricare altre offerte.");
+        return;
+      }
+      setDisplayedHits((prev) => [...prev, ...payload.hits]);
+    } catch {
+      setLoadMoreError("Non riesco a caricare altre offerte. Riprova.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  if (displayedHits.length === 0 && hits.length === 0) {
     return (
       <p className="text-sm text-neutral-500">
         {fascia === "dinamica"
@@ -859,33 +908,33 @@ function ResultsList({
     <div>
       <p className="text-sm text-neutral-500 dark:text-neutral-400">
         {formatIt(total)} offerte
-        {total > hits.length ? ` · prime ${hits.length}` : ""}
+        {total > displayedHits.length ? ` · prime ${displayedHits.length}` : ""}
         {loading ? " · aggiorno…" : ""}
       </p>
       <ul className="mt-3 divide-y divide-neutral-200 dark:divide-neutral-800">
-        {hits.map((hit) => {
+        {displayedHits.map((hit) => {
           const clienteKind = clienteKindFromTipo(hit.tipoCliente);
           const prezzoKind = prezzoKindFromTipo(hit.tipoOfferta);
           const mercatoKind = hit.source === "placet" ? "placet" : "ml";
 
           return (
           <li key={`${hit.source}-${hit.codOfferta}`}>
-            <details className="group">
+            <details className="group offerte-hit">
               <summary className="flex cursor-pointer list-none items-start gap-3 py-3 marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-500 [&::-webkit-details-marker]:hidden">
                 <div className="min-w-0 flex-1">
                   <p className="min-w-0 font-medium">
                     <span className="truncate">{hit.nome}</span>
-                    <span className="font-normal text-neutral-500 dark:text-neutral-400">
+                    <span className="offerte-hit-muted font-normal text-neutral-500 dark:text-neutral-400">
                       {" · "}
                       <OfferCodeLink hit={hit} />
                     </span>
                   </p>
                   {formatOfferPeriod(hit) ? (
-                    <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                    <p className="offerte-hit-muted mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
                       {formatOfferPeriod(hit)}
                     </p>
                   ) : null}
-                  <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  <p className="offerte-hit-muted mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-500 dark:text-neutral-400">
                     <VendorName hit={hit} />
                     {clienteKind ? (
                       <TraitPill
@@ -906,18 +955,22 @@ function ResultsList({
                   </p>
                   <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
                     <div>
-                      <dt className="text-xs text-neutral-500 dark:text-neutral-400">Fisso</dt>
+                      <dt className="offerte-hit-muted text-xs text-neutral-500 dark:text-neutral-400">
+                        Fisso
+                      </dt>
                       <dd className="mt-0.5 font-medium">{formatMonthly(hit.monthlyEur)}</dd>
                     </div>
                     <div>
-                      <dt className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                      <dt className="offerte-hit-muted flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                         {prezzoKind ? <PrezzoIcon kind={prezzoKind} className="h-3 w-3" /> : null}
                         {hit.tipoOfferta.includes("variabile") ? "Spread" : "Energia"}
                       </dt>
                       <dd className="mt-0.5 font-medium">{formatSpread(hit)}</dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-neutral-500 dark:text-neutral-400">Profilo</dt>
+                      <dt className="offerte-hit-muted text-xs text-neutral-500 dark:text-neutral-400">
+                        Profilo
+                      </dt>
                       <dd className="mt-0.5 flex items-center gap-1.5 font-medium">
                         {hit.plan ? (
                           <>
@@ -939,6 +992,21 @@ function ResultsList({
           );
         })}
       </ul>
+      {displayedHits.length < total ? (
+        <div className="mt-4 flex flex-col items-start gap-2">
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
+            className="h-10 rounded-md border border-neutral-200 bg-transparent px-4 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            {loadingMore ? "Carico altre offerte…" : "Carica altro"}
+          </button>
+          {loadMoreError ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{loadMoreError}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -947,7 +1015,7 @@ function ChevronIcon() {
   return (
     <svg
       viewBox="0 0 16 16"
-      className="mt-1 h-4 w-4 shrink-0 text-neutral-400 transition-transform duration-200 group-open:rotate-180 dark:text-neutral-500"
+      className="offerte-hit-chevron mt-1 h-4 w-4 shrink-0 text-neutral-400 transition-transform duration-200 group-open:rotate-180 dark:text-neutral-500"
       aria-hidden
     >
       <path
@@ -972,31 +1040,30 @@ function OfferDettaglio({ hit }: { hit: OfferteSearchHit }) {
     d.sconti.length > 0;
 
   return (
-    <div className="border-t border-neutral-200 pb-4 pt-3 dark:border-neutral-800">
+    <div className="pb-1 pt-3">
       {hasBody ? (
         <div className="flex flex-col gap-3 text-sm">
           {d.descrizione ? (
-            <p className="whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">
-              {d.descrizione}
-            </p>
+            <p className="whitespace-pre-wrap">{d.descrizione}</p>
           ) : null}
           {d.garanzie ? (
             <div>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">Garanzie</p>
-              <p className="mt-0.5 text-neutral-700 dark:text-neutral-300">{d.garanzie}</p>
+              <p className="offerte-hit-muted text-xs text-neutral-500 dark:text-neutral-400">
+                Garanzie
+              </p>
+              <p className="mt-0.5">{d.garanzie}</p>
             </div>
           ) : null}
           {rows.length > 0 ? (
             <dl className="grid gap-2 sm:grid-cols-2">
               {rows.map((row) => (
                 <div key={row.label}>
-                  <dt className="text-xs text-neutral-500 dark:text-neutral-400">{row.label}</dt>
-                  <dd className="mt-0.5 text-neutral-800 dark:text-neutral-200">
+                  <dt className="offerte-hit-muted text-xs text-neutral-500 dark:text-neutral-400">
+                    {row.label}
+                  </dt>
+                  <dd className="mt-0.5">
                     {row.href ? (
-                      <a
-                        href={row.href}
-                        className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600"
-                      >
+                      <a href={row.href} className="offerte-hit-link underline underline-offset-2">
                         {row.value}
                       </a>
                     ) : (
@@ -1009,21 +1076,23 @@ function OfferDettaglio({ hit }: { hit: OfferteSearchHit }) {
           ) : null}
           {d.sconti.length > 0 ? (
             <div>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">Sconti</p>
+              <p className="offerte-hit-muted text-xs text-neutral-500 dark:text-neutral-400">
+                Sconti
+              </p>
               <ul className="mt-1 flex flex-col gap-2">
                 {d.sconti.map((sconto, index) => (
                   <li key={`${sconto.nome}-${index}`}>
                     <p className="font-medium">
                       {sconto.nome}
                       {sconto.valore ? (
-                        <span className="font-normal text-neutral-500 dark:text-neutral-400">
+                        <span className="offerte-hit-muted font-normal text-neutral-500 dark:text-neutral-400">
                           {" · "}
                           {sconto.valore}
                         </span>
                       ) : null}
                     </p>
                     {sconto.descrizione ? (
-                      <p className="mt-0.5 text-neutral-600 dark:text-neutral-400">
+                      <p className="offerte-hit-muted mt-0.5 text-neutral-600 dark:text-neutral-400">
                         {sconto.descrizione}
                       </p>
                     ) : null}
@@ -1034,7 +1103,7 @@ function OfferDettaglio({ hit }: { hit: OfferteSearchHit }) {
           ) : null}
         </div>
       ) : (
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+        <p className="offerte-hit-muted text-sm text-neutral-500 dark:text-neutral-400">
           Nessun dettaglio aggiuntivo per questa offerta.
         </p>
       )}
@@ -1108,7 +1177,7 @@ function formatBound(
 
 function TraitPill({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-neutral-200 px-2 py-0.5 text-sm text-neutral-700 dark:border-neutral-800 dark:text-neutral-300">
+    <span className="offerte-hit-pill inline-flex max-w-full items-center gap-1 rounded-md border border-neutral-200 px-2 py-0.5 text-sm text-neutral-700 dark:border-neutral-800 dark:text-neutral-300">
       {icon}
       <span className="truncate">{label}</span>
     </span>
@@ -1129,7 +1198,7 @@ function OfferCodeLink({ hit }: { hit: OfferteSearchHit }) {
       rel="noreferrer"
       title={title}
       onClick={(event) => event.stopPropagation()}
-      className="inline-flex max-w-full items-center gap-1 font-mono text-xs tracking-normal text-neutral-600 underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground dark:text-neutral-400 dark:decoration-neutral-600"
+      className="offerte-hit-link inline-flex max-w-full items-center gap-1 font-mono text-xs tracking-normal text-neutral-600 underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground dark:text-neutral-400 dark:decoration-neutral-600"
     >
       <span className="truncate">{hit.codOfferta}</span>
       <NewTabIcon />
@@ -1151,7 +1220,7 @@ function VendorName({ hit }: { hit: OfferteSearchHit }) {
       rel="noreferrer"
       title={`${hit.venditore} — si apre in una nuova scheda`}
       onClick={(event) => event.stopPropagation()}
-      className="inline-flex max-w-full items-center gap-1 rounded-md border border-neutral-200 px-2 py-0.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+      className="offerte-hit-pill inline-flex max-w-full items-center gap-1 rounded-md border border-neutral-200 px-2 py-0.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
     >
       <span className="truncate">{hit.venditore}</span>
       <NewTabIcon />
@@ -1207,10 +1276,19 @@ function formatIt(value: number) {
 
 function formatOfferPeriod(hit: OfferteSearchHit) {
   const parts: string[] = [];
+  const today = romeToday();
   const from = formatItDate(hit.validFrom);
   const to = formatItDate(hit.validTo);
-  if (from && to) parts.push(`${from} – ${to}`);
-  else if (from) parts.push(`dal ${from}`);
+  const started = hit.validFrom <= today;
+
+  if (from && to) {
+    parts.push(started ? `acquistabile (${from} – ${to})` : `${from} – ${to}`);
+  } else if (from) {
+    parts.push(started ? `acquistabile (dal ${from})` : `dal ${from}`);
+  } else if (to) {
+    parts.push(started ? `acquistabile (fino al ${to})` : `fino al ${to}`);
+  }
+
   if (hit.durataMesi != null) {
     parts.push(`${formatIt(hit.durataMesi)} mesi di contratto`);
   }

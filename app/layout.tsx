@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s · kilowatt e banane",
   },
   description:
-    "Ti mostriamo ogni giorno il costo dell'energia all'ingrosso nella tua zona. Così sai come risparmiare sulla bolletta. Gratis.",
+    "Informazioni e strumenti per risparmiare sulla bolletta. Gratis.",
   openGraph: {
     locale: "it_IT",
     type: "website",

@@ -8,13 +8,14 @@ import {
   mlOfferDettaglio,
   placetOfferDettaglio,
 } from "@/lib/offerte/portal-labels";
-import type {
-  CapPlace,
-  OfferteFascia,
-  OfferteSearchHit,
-  OfferteSearchQuery,
-  OfferteSearchResult,
-  OfferteSconto,
+import {
+  OFFERTE_SEARCH_PAGE_SIZE,
+  type CapPlace,
+  type OfferteFascia,
+  type OfferteSearchHit,
+  type OfferteSearchQuery,
+  type OfferteSearchResult,
+  type OfferteSconto,
 } from "@/lib/offerte/public-types";
 
 export type {
@@ -300,7 +301,12 @@ export async function searchOfferte(
     return a.nome.localeCompare(b.nome, "it");
   });
 
-  const ranked = filtered.slice(0, 40);
+  const offset = Math.max(0, query.offset ?? 0);
+  const limit = Math.min(
+    OFFERTE_SEARCH_PAGE_SIZE,
+    Math.max(1, query.limit ?? OFFERTE_SEARCH_PAGE_SIZE),
+  );
+  const ranked = filtered.slice(offset, offset + limit);
   const scontiByOffer = await loadSconti(
     ranked.flatMap((hit) => (hit.mlOfferId != null ? [hit.mlOfferId] : [])),
   );

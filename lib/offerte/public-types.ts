@@ -10,6 +10,8 @@ export type OfferteMercato = "tutti" | "placet" | "ml";
 export type OffertePrezzo = "tutti" | "prezzo fisso" | "prezzo variabile";
 export type OfferteFascia = "tutti" | "monoraria" | "bioraria" | "fasce" | "dinamica";
 
+export const OFFERTE_SEARCH_PAGE_SIZE = 40;
+
 export type OfferteSearchQuery = {
   cap: string;
   cliente: OfferteCliente;
@@ -18,6 +20,8 @@ export type OfferteSearchQuery = {
   fascia: OfferteFascia;
   consumoKwh: number;
   potenzaKw: number;
+  offset?: number;
+  limit?: number;
 };
 
 export type CapPlace = {

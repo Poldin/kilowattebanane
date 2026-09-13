@@ -40,8 +40,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             </h1>
 
             <p className="mt-6 max-w-xl text-pretty text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-400">
-              Ogni giorno il costo dell&apos;energia all'ingrosso 
-              nella tua zona. <br />Così sai come risparmiare sulla bolletta e rispettare l'ambiente🌍 Gratis.
+              Informazioni e strumenti per risparmiare sulla bolletta. Gratis.
             </p>
 
             <a
