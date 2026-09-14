@@ -179,6 +179,8 @@ html:has(.offerte-dialog[open]) {
 }
 
 .offerte-hit[open] {
+  --foreground: #f5f5f5;
+  --color-foreground: #f5f5f5;
   border-radius: 0.375rem;
   margin-inline: -0.5rem;
   padding: 0.25rem 0.75rem 0.75rem;
@@ -188,6 +190,8 @@ html:has(.offerte-dialog[open]) {
 
 @media (prefers-color-scheme: dark) {
   .offerte-hit[open] {
+    --foreground: #171717;
+    --color-foreground: #171717;
     background: #f5f5f5;
     color: #171717;
   }

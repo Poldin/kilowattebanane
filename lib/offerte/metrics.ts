@@ -99,6 +99,7 @@ export type MlFactsInput = {
 function planFromTipologia(tipologia: string | null): OfferteBandPlan | null {
   if (tipologia === "01") return "monoraria";
   if (tipologia === "91" || tipologia === "92" || tipologia === "93") return "bioraria";
+  if (tipologia === "03") return "fasce";
   return null;
 }
 
@@ -114,9 +115,8 @@ function isMlEnergyComponent(component: MlComponentInput, variabile: boolean) {
   if (component.unita_misura !== "03" || isGreenEnergyComponent(component)) return false;
   if (component.macroarea === "04") return true;
   if (variabile) {
-    return (
-      (component.macroarea === "06" || component.macroarea === "02") && isSpreadComponent(component)
-    );
+    if (component.macroarea === "06") return true;
+    return component.macroarea === "02" && isSpreadComponent(component);
   }
   return component.macroarea === "06" && !isSpreadComponent(component);
 }
@@ -170,13 +170,11 @@ export function mlFacts({ tipo_offerta, tipologia_fasce, components }: MlFactsIn
   const bands = bandMeans(energy);
   const tipologiaPlan = planFromTipologia(tipologia_fasce);
 
-  let plan: OfferteFasciaPlan | null = energy.length === 0 ? tipologiaPlan : "monoraria";
-  if (tipologiaPlan === "bioraria") {
-    plan = "bioraria";
-  } else if (bands.length >= 2 && !allApproxEqual(bands)) {
+  let plan: OfferteFasciaPlan | null = tipologiaPlan;
+  if (bands.length >= 2 && !allApproxEqual(bands)) {
     plan = bands.length === 2 ? "bioraria" : "fasce";
-  } else if (plan == null && tipologia_fasce === "01") {
-    plan = "monoraria";
+  } else if (plan == null) {
+    plan = energy.length === 0 ? null : "monoraria";
   }
 
   const spreads = bands.length > 0 ? bands : energy.map((row) => row.prezzo);

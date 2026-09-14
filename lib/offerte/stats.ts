@@ -5,12 +5,13 @@ import { romeToday } from "@/lib/offerte/dates";
 import { mlFacts, placetFacts, type OfferteFasciaPlan } from "@/lib/offerte/metrics";
 import { OFFERTE_CACHE_REVALIDATE, OFFERTE_CACHE_TAG } from "@/lib/offerte/revalidate";
 import { POTENZA_STANDARD_CASA_KW } from "@/lib/offerte/potenza";
-import { formatScontoValore } from "@/lib/offerte/portal-labels";
+import { formatScontoValore, mlOfferDettaglio, placetOfferDettaglio } from "@/lib/offerte/portal-labels";
 import type {
   OfferteClusterBucket,
   OfferteClusterStats,
   OfferteFasciaBucket,
   OfferteHeadlineStats,
+  OfferteSconto,
   OfferteScontoApplicazione,
   OfferteScontoBoard,
   OfferteScontoFascia,
@@ -25,6 +26,7 @@ import type { MlComponentInput } from "@/lib/offerte/estimate";
 
 const SCONTO_RANK_CONSUMO_KWH = 2700;
 const SCONTO_RANK_TOP = 5;
+const PLACET_DURATA_MESI = 12;
 
 export type { OfferteClusterStats, OfferteHeadlineStats } from "@/lib/offerte/public-types";
 
@@ -41,6 +43,11 @@ type PlacetClusterRow = HeadlineRow & {
   nome_offerta: string | null;
   url_sito_venditore: string | null;
   url_offerta: string | null;
+  telefono: string | null;
+  modalita_attivazione: string | null;
+  modalita_pagamento: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
   cod_offerta: string;
   p_fix_f: number | null;
   p_fix_v: number | null;
@@ -58,8 +65,26 @@ type MlClusterRow = HeadlineRow & {
   tipo_cliente: string | null;
   coverage: string | null;
   nome_offerta: string | null;
+  descrizione: string | null;
   url_sito_venditore: string | null;
   url_offerta: string | null;
+  telefono: string | null;
+  garanzie: string | null;
+  tipologia_att_contr: string[] | string | null;
+  modalita_attivazione: string[] | string | null;
+  modalita_pagamento: string[] | string | null;
+  domestico_residente: string | null;
+  offerta_singola: string | null;
+  offerta_onnicomprensiva: string | null;
+  idx_prezzo_energia: string | null;
+  coefficiente: number | string | null;
+  durata: number | null;
+  consumo_min: number | string | null;
+  consumo_max: number | string | null;
+  potenza_min: number | string | null;
+  potenza_max: number | string | null;
+  valid_from: string | null;
+  valid_to: string | null;
   cod_offerta: string;
   tipologia_fasce: string | null;
 };
@@ -107,7 +132,7 @@ export const loadOfferteClusterStats = unstable_cache(
         offerteReadClient()
           .from("po_placet_e_live")
           .select(
-            "p_iva, tipo_offerta, tipo_cliente, coverage, denominazione, nome_offerta, url_sito_venditore, url_offerta, last_seen_on, cod_offerta, p_fix_f, p_fix_v, p_vol_f1, p_vol_f2, p_vol_f3, p_vol_bf1, p_vol_bf23, p_vol_mono, alpha",
+            "p_iva, tipo_offerta, tipo_cliente, coverage, denominazione, nome_offerta, url_sito_venditore, url_offerta, telefono, modalita_attivazione, modalita_pagamento, last_seen_on, valid_from, valid_to, cod_offerta, p_fix_f, p_fix_v, p_vol_f1, p_vol_f2, p_vol_f3, p_vol_bf1, p_vol_bf23, p_vol_mono, alpha",
           )
           .lte("valid_from", today)
           .gte("valid_to", today)
@@ -117,7 +142,7 @@ export const loadOfferteClusterStats = unstable_cache(
         offerteReadClient()
           .from("po_ml_e_live")
           .select(
-            "id, p_iva, tipo_offerta, tipo_cliente, coverage, nome_offerta, url_sito_venditore, url_offerta, last_seen_on, cod_offerta, tipologia_fasce",
+            "id, p_iva, tipo_offerta, tipo_cliente, coverage, nome_offerta, descrizione, url_sito_venditore, url_offerta, telefono, garanzie, tipologia_att_contr, modalita_attivazione, modalita_pagamento, domestico_residente, offerta_singola, offerta_onnicomprensiva, idx_prezzo_energia, coefficiente, durata, consumo_min, consumo_max, potenza_min, potenza_max, last_seen_on, valid_from, valid_to, cod_offerta, tipologia_fasce",
           )
           .lte("valid_from", today)
           .gte("valid_to", today)
@@ -212,7 +237,7 @@ export const loadOfferteClusterStats = unstable_cache(
       fornitori: vendorStats(rows),
     };
   },
-  ["offerte-cluster-stats-v12"],
+  ["offerte-cluster-stats-v13"],
   { revalidate: OFFERTE_CACHE_REVALIDATE, tags: [OFFERTE_CACHE_TAG] },
 );
 
@@ -407,6 +432,11 @@ function paretoInputs(
       plan: planKey === "altro" ? null : (planKey as NonNullable<ParetoPointInput["plan"]>),
       monthlyEur,
       energyEurKwh,
+      codOfferta: row.cod_offerta,
+      validFrom: row.valid_from,
+      validTo: row.valid_to,
+      durataMesi: PLACET_DURATA_MESI,
+      dettaglio: placetOfferDettaglio(row),
     });
   }
 
@@ -443,6 +473,11 @@ function paretoInputs(
       monthlyEur,
       energyEurKwh,
       sconti: scontiByOffer.get(row.id),
+      codOfferta: row.cod_offerta,
+      validFrom: row.valid_from,
+      validTo: row.valid_to,
+      durataMesi: normalizeDurata(row.durata),
+      dettaglio: mlOfferDettaglio(row, scontiDettaglio(scontiByOffer.get(row.id))),
     });
   }
 
@@ -932,6 +967,24 @@ function vendorStats(rows: ClusterRow[]): OfferteVendorStats {
     top10Offerte: ranked.slice(0, 10).reduce((sum, row) => sum + row.offerte, 0),
     top: ranked.slice(0, 10),
   };
+}
+
+function scontiDettaglio(rows: ParetoScontoRow[] | undefined): OfferteSconto[] {
+  if (!rows?.length) return [];
+  return rows.map((row) => {
+    const nome = row.nome?.replace(/\s+/g, " ").trim() || "Sconto";
+    const descrizione = row.descrizione?.replace(/\s+/g, " ").trim() || null;
+    return {
+      nome,
+      descrizione: descrizione && descrizione !== nome ? descrizione : null,
+      valore: formatScontoValore(row.valore, row.unita_misura),
+    };
+  });
+}
+
+function normalizeDurata(value: number | null) {
+  if (value == null || value <= 0) return null;
+  return value;
 }
 
 function absoluteVendorUrl(url: string | null) {

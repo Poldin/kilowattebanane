@@ -1,6 +1,7 @@
 import { POTENZA_STANDARD_CASA_KW } from "@/lib/offerte/potenza";
 import type { OfferteFasciaPlan } from "@/lib/offerte/metrics";
 import type {
+  OfferteHitDettaglio,
   OfferteParetoBoard,
   OfferteParetoHit,
   OfferteParetoSpot,
@@ -42,6 +43,11 @@ export type ParetoPointInput = {
   monthlyEur: number;
   energyEurKwh: number;
   sconti?: ParetoScontoRow[];
+  codOfferta: string;
+  validFrom: string | null;
+  validTo: string | null;
+  durataMesi: number | null;
+  dettaglio: OfferteHitDettaglio;
 };
 
 type ScontoMode = "listino" | "primoAnno";
@@ -234,6 +240,11 @@ function toHit(
     scontoNota: point.scontoNota,
     daKwh: range?.daKwh ?? 0,
     finoAKwh: range?.finoAKwh ?? null,
+    codOfferta: point.input.codOfferta,
+    validFrom: point.input.validFrom,
+    validTo: point.input.validTo,
+    durataMesi: point.input.durataMesi,
+    dettaglio: point.input.dettaglio,
   };
 }
 
@@ -304,18 +315,20 @@ function scontoDelta(row: ParetoScontoRow, potenzaKw: number) {
     const cap = parseKwhCap(text);
     const span = parseMonthSpan(text);
     const hours = parseHourShare(text);
+    const fascia = parseFasciaShare(text);
     const monthShare = span ? span.months / 12 : 1;
     const hourShare = hours ? hours.share : 1;
+    const fasciaShare = fascia ? fascia.share : 1;
     if (cap != null) {
       return {
-        monthlyEur: (eurKwh * cap.kwh * monthShare * hourShare) / 12,
+        monthlyEur: (eurKwh * cap.kwh * monthShare * hourShare * fasciaShare) / 12,
         energyEurKwh: 0,
         nota,
       };
     }
     return {
       monthlyEur: 0,
-      energyEurKwh: eurKwh * monthShare * hourShare,
+      energyEurKwh: eurKwh * monthShare * hourShare * fasciaShare,
       nota,
     };
   }
@@ -381,6 +394,20 @@ function parseKwhCap(text: string) {
   if (sogliaMese) return { kwh: Number(sogliaMese[1]) * 12 };
   const first = t.match(/primi\s+(\d+(?:\.\d+)?)\s*kwh/);
   if (first) return { kwh: Number(first[1]) };
+  return null;
+}
+
+function parseFasciaShare(text: string) {
+  const t = text.toLowerCase();
+  if (t.includes("f23") || t.includes("fuori punta") || /\bf2\s+e\s+f3\b/.test(t)) {
+    return { share: 0.67 };
+  }
+  const f1 = /\bf1\b|fascia\s*1/.test(t);
+  const f2 = /\bf2\b|fascia\s*2/.test(t);
+  const f3 = /\bf3\b|fascia\s*3/.test(t);
+  if (f1 && !f2 && !f3) return { share: 0.33 };
+  if (f2 && !f1 && !f3) return { share: 0.31 };
+  if (f3 && !f1 && !f2) return { share: 0.36 };
   return null;
 }
 

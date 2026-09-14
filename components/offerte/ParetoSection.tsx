@@ -3,6 +3,11 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { FasciaPlanIcon } from "@/components/offerte/FasciaPlanIcon";
 import {
+  OfferCodeLink,
+  OfferDettaglio,
+  formatOfferPeriod,
+} from "@/components/offerte/OfferHitDettaglio";
+import {
   ClienteIcon,
   MercatoIcon,
   PrezzoIcon,
@@ -125,8 +130,10 @@ function ParetoBody({ stats }: { stats: OfferteParetoStats }) {
       <p className="mt-6 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
         Primo anno include gli sconti automatici e quelli per SDD, bolletta web o fattura
         elettronica, se valgono all’ingresso o entro 12 mesi — sul canone o sull’energia. A tempo,
-        sui primi kWh o solo a certe ore sono ricalcolati. Restano fuori porta-un-amico, sconti dopo
-        i 12 mesi, utenze ad alta potenza e condizioni non classificate.
+        sui primi kWh, a fascia o solo a certe ore sono ricalcolati. Restano fuori porta-un-amico,
+        sconti dopo i 12 mesi, utenze ad alta potenza e condizioni non classificate. Spread a 0 c€
+        è PUN senza maggiorazione: sta nella scheda del Portale Offerte, di solito con un canone più
+        alto.
       </p>
     </section>
   );
@@ -236,55 +243,88 @@ function ParetoHitRow({
   index: number;
   prezzo: OfferteParetoPrezzo;
 }) {
+  const period = formatOfferPeriod(hit);
+
   return (
-    <li className="py-2.5">
-      <div className="flex items-baseline gap-3">
-        <span className="w-5 shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-500">
-          {index + 1}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-          {hit.urlOfferta ? (
-            <a
-              href={hit.urlOfferta}
-              target="_blank"
-              rel="noreferrer"
-              className="underline decoration-neutral-300 underline-offset-2 hover:decoration-neutral-500 dark:decoration-neutral-600 dark:hover:decoration-neutral-400"
-            >
-              {hit.nome}
-            </a>
-          ) : (
-            hit.nome
-          )}
-        </span>
-        <span className="shrink-0 text-sm tabular-nums text-foreground">
-          {formatMonthly(hit.monthlyEur)}
-          {" · "}
-          {formatCentes(hit.energyEurKwh)}
-        </span>
-      </div>
-      <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-8 text-xs text-neutral-500 dark:text-neutral-400">
-        <span>{rangeLabel(hit)}</span>
-        <span aria-hidden>·</span>
-        <span className="inline-flex items-center gap-1">
-          <MercatoIcon kind={hit.source === "placet" ? "placet" : "ml"} />
-          {hit.source === "placet" ? "PLACET" : "libero"}
-        </span>
-        {hit.plan ? (
-          <span className="inline-flex items-center gap-1">
-            <FasciaPlanIcon plan={hit.plan} />
-            {planLabel(hit.plan)}
+    <li>
+      <details className="group offerte-hit">
+        <summary className="flex cursor-pointer list-none items-start gap-3 py-2.5 marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-500 [&::-webkit-details-marker]:hidden">
+          <span className="offerte-hit-muted mt-0.5 w-5 shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-500">
+            {index + 1}
           </span>
-        ) : null}
-        <span className="inline-flex items-center gap-1">
-          <PrezzoIcon kind={prezzo === "fisso" ? "prezzo fisso" : "prezzo variabile"} />
-          {prezzo === "variabile" ? "spread" : "energia"}
-        </span>
-        {hit.venditore ? <span>{hit.venditore}</span> : null}
-      </p>
-      {hit.scontoNota ? (
-        <p className="mt-0.5 pl-8 text-xs text-neutral-500 dark:text-neutral-400">{hit.scontoNota}</p>
-      ) : null}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-3">
+              <p className="min-w-0 flex-1 text-sm font-medium">
+                <span>{hit.nome}</span>
+                {hit.codOfferta ? (
+                  <span className="offerte-hit-muted font-normal text-neutral-500 dark:text-neutral-400">
+                    {" · "}
+                    <OfferCodeLink hit={hit} />
+                  </span>
+                ) : null}
+              </p>
+              <span className="shrink-0 text-sm tabular-nums">
+                {formatMonthly(hit.monthlyEur)}
+                {" · "}
+                {formatCentes(hit.energyEurKwh)}
+              </span>
+            </div>
+            {period ? (
+              <p className="offerte-hit-muted mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                {period}
+              </p>
+            ) : null}
+            <p className="offerte-hit-muted mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
+              <span>{rangeLabel(hit)}</span>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                <MercatoIcon kind={hit.source === "placet" ? "placet" : "ml"} />
+                {hit.source === "placet" ? "PLACET" : "libero"}
+              </span>
+              {hit.plan ? (
+                <span className="inline-flex items-center gap-1">
+                  <FasciaPlanIcon plan={hit.plan} />
+                  {planLabel(hit.plan)}
+                </span>
+              ) : null}
+              <span className="inline-flex items-center gap-1">
+                <PrezzoIcon kind={prezzo === "fisso" ? "prezzo fisso" : "prezzo variabile"} />
+                {prezzo === "variabile" ? "spread" : "energia"}
+              </span>
+              {hit.venditore ? <span>{hit.venditore}</span> : null}
+            </p>
+            {hit.scontoNota ? (
+              <p className="offerte-hit-muted mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                {hit.scontoNota}
+              </p>
+            ) : null}
+          </div>
+          <ParetoChevron />
+        </summary>
+        <div className="pl-8">
+          <OfferDettaglio dettaglio={hit.dettaglio} />
+        </div>
+      </details>
     </li>
+  );
+}
+
+function ParetoChevron() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="offerte-hit-chevron mt-1 h-4 w-4 shrink-0 text-neutral-400 transition-transform duration-200 group-open:rotate-180 dark:text-neutral-500"
+      aria-hidden
+    >
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 6.5 8 10.5 12 6.5"
+      />
+    </svg>
   );
 }
 
@@ -374,6 +414,7 @@ function formatMonthly(value: number) {
 }
 
 function formatCentes(eurKwh: number) {
+  if (Math.abs(eurKwh) < 1e-12) return "0 c€";
   return `${new Intl.NumberFormat("it-IT", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 2,

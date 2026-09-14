@@ -186,6 +186,11 @@ export type OfferteParetoHit = {
   scontoNota: string | null;
   daKwh: number;
   finoAKwh: number | null;
+  codOfferta: string;
+  validFrom: string | null;
+  validTo: string | null;
+  durataMesi: number | null;
+  dettaglio: OfferteHitDettaglio;
 };
 
 export type OfferteParetoSpot = {
