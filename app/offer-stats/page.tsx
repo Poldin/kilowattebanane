@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { OfferteModule } from "@/components/offerte/OfferteModule";
 import { OfferteStats } from "@/components/offerte/OfferteStats";
-import { SignupProvider } from "@/components/SignupForm";
+import { SignupProvider, SignupSlot } from "@/components/SignupForm";
+import { publicSiteUrl } from "@/lib/app-url";
 import { PORTALE_OFFERTE_URL } from "@/lib/offerte/public-types";
 import { loadOfferteClusterStats } from "@/lib/offerte/stats";
-import { publicSiteUrl } from "@/lib/app-url";
 
 export const revalidate = 86400;
 
@@ -54,6 +55,12 @@ export default async function OfferStatsPage() {
             Statistiche offerte
           </h1>
           <OfferteStats stats={stats} />
+
+          <div className="mx-auto mt-16 w-full max-w-xl sm:mt-20">
+            <OfferteModule />
+          </div>
+
+          <SignupSlot className="mx-auto mt-16 w-full max-w-md scroll-mt-20 sm:mt-20" />
         </main>
         <Footer />
       </div>

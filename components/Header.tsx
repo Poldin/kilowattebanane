@@ -47,11 +47,10 @@ export function Header() {
           <Link
             href="/#offerte"
             onClick={(event) => {
-              if (window.location.pathname !== "/") return;
+              const el = document.getElementById("offerte");
+              if (!el) return;
               event.preventDefault();
-              document.getElementById("offerte")?.scrollIntoView({
-                behavior: "smooth",
-              });
+              el.scrollIntoView({ behavior: "smooth" });
             }}
             className="text-sm text-neutral-700 transition-colors hover:text-foreground dark:text-neutral-300 dark:hover:text-neutral-200"
           >

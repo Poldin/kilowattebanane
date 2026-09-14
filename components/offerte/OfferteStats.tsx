@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FasciaPlanIcon } from "@/components/offerte/FasciaPlanIcon";
 import { ScontiRankings } from "@/components/offerte/ScontiRankings";
+import { ParetoSection } from "@/components/offerte/ParetoSection";
 import {
   CanoneIcon,
   ClienteIcon,
@@ -104,6 +105,7 @@ export function OfferteStats({ stats }: { stats: OfferteClusterStats }) {
         </section>
       </div>
 
+      {stats.pareto ? <ParetoSection stats={stats.pareto} /> : null}
       {stats.sconti ? <ScontiSection stats={stats.sconti} /> : null}
       <VendorSection stats={stats.fornitori} total={stats.total} venditori={stats.venditori} />
     </>

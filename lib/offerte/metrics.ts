@@ -8,6 +8,7 @@ export type OfferPriceFacts = {
   spreadEurKwh: number | null;
   spreadMinEurKwh: number | null;
   spreadMaxEurKwh: number | null;
+  spreadMeanEurKwh?: number | null;
   plan: OfferteFasciaPlan | null;
 };
 
@@ -41,6 +42,7 @@ function fromValues(monthlyEur: number | null, spreads: number[], plan: OfferteF
       spreadEurKwh: null,
       spreadMinEurKwh: null,
       spreadMaxEurKwh: null,
+      spreadMeanEurKwh: null,
       plan,
     };
   }
@@ -51,6 +53,7 @@ function fromValues(monthlyEur: number | null, spreads: number[], plan: OfferteF
     spreadEurKwh: min,
     spreadMinEurKwh: min,
     spreadMaxEurKwh: max,
+    spreadMeanEurKwh: mean(spreads),
     plan,
   };
 }

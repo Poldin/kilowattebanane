@@ -16,22 +16,20 @@ export function Footer() {
   const { openSignup } = useSignup();
 
   function showTodayPrices() {
-    if (window.location.pathname === "/") {
+    const el = document.getElementById(PRICES_SECTION_ID);
+    if (el) {
       window.dispatchEvent(new Event(SHOW_TODAY_PRICES_EVENT));
-      document.getElementById(PRICES_SECTION_ID)?.scrollIntoView({
-        behavior: "smooth",
-      });
+      el.scrollIntoView({ behavior: "smooth" });
       return;
     }
     window.location.href = `/#${PRICES_SECTION_ID}`;
   }
 
   function showOfferte(event: React.MouseEvent<HTMLAnchorElement>) {
-    if (window.location.pathname !== "/") return;
+    const el = document.getElementById("offerte");
+    if (!el) return;
     event.preventDefault();
-    document.getElementById("offerte")?.scrollIntoView({
-      behavior: "smooth",
-    });
+    el.scrollIntoView({ behavior: "smooth" });
   }
 
   return (

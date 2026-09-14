@@ -169,6 +169,58 @@ export type OfferteScontoStats = {
   boards: OfferteScontoBoard[];
 };
 
+export type OfferteParetoCliente = "domestico" | "non domestico";
+export type OfferteParetoPrezzo = "fisso" | "variabile";
+export type OfferteParetoSconti = "listino" | "primoAnno";
+
+export type OfferteParetoHit = {
+  key: string;
+  source: "placet" | "ml";
+  nome: string;
+  venditore: string;
+  urlVenditore: string | null;
+  urlOfferta: string | null;
+  plan: "monoraria" | "bioraria" | "fasce" | "dinamica" | null;
+  monthlyEur: number;
+  energyEurKwh: number;
+  scontoNota: string | null;
+  daKwh: number;
+  finoAKwh: number | null;
+};
+
+export type OfferteParetoSpot = {
+  kwh: number;
+  key: string;
+  nome: string;
+};
+
+export type OfferteParetoCloud = {
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+  cols: number;
+  rows: number;
+  counts: number[];
+};
+
+export type OfferteParetoBoard = {
+  cliente: OfferteParetoCliente;
+  prezzo: OfferteParetoPrezzo;
+  sconti: OfferteParetoSconti;
+  compared: number;
+  hull: number;
+  dominated: number;
+  hits: OfferteParetoHit[];
+  spots: OfferteParetoSpot[];
+  cloud: OfferteParetoCloud;
+};
+
+export type OfferteParetoStats = {
+  spotsKwh: number[];
+  boards: OfferteParetoBoard[];
+};
+
 export type OfferteClusterStats = OfferteHeadlineStats & {
   cliente: OfferteClusterBucket[];
   prezzo: OfferteClusterBucket[];
@@ -176,5 +228,6 @@ export type OfferteClusterStats = OfferteHeadlineStats & {
   copertura: OfferteClusterBucket[];
   fascia: OfferteFasciaBucket[];
   sconti: OfferteScontoStats;
+  pareto: OfferteParetoStats;
   fornitori: OfferteVendorStats;
 };

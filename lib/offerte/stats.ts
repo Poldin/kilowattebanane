@@ -2,7 +2,7 @@ import { unstable_cache } from "next/cache";
 import { areraPrezzoOrarioKind, resolveOffertePlan } from "@/lib/offerte/codice";
 import { offerteReadClient, paginateSelect } from "@/lib/offerte/db";
 import { romeToday } from "@/lib/offerte/dates";
-import { placetFacts, type OfferteFasciaPlan } from "@/lib/offerte/metrics";
+import { mlFacts, placetFacts, type OfferteFasciaPlan } from "@/lib/offerte/metrics";
 import { OFFERTE_CACHE_REVALIDATE, OFFERTE_CACHE_TAG } from "@/lib/offerte/revalidate";
 import { POTENZA_STANDARD_CASA_KW } from "@/lib/offerte/potenza";
 import { formatScontoValore } from "@/lib/offerte/portal-labels";
@@ -20,6 +20,8 @@ import type {
   OfferteVendorRank,
   OfferteVendorStats,
 } from "@/lib/offerte/public-types";
+import { buildParetoStats, type ParetoPointInput, type ParetoScontoRow } from "@/lib/offerte/pareto";
+import type { MlComponentInput } from "@/lib/offerte/estimate";
 
 const SCONTO_RANK_CONSUMO_KWH = 2700;
 const SCONTO_RANK_TOP = 5;
@@ -36,7 +38,9 @@ type PlacetClusterRow = HeadlineRow & {
   tipo_cliente: string | null;
   coverage: string | null;
   denominazione: string | null;
+  nome_offerta: string | null;
   url_sito_venditore: string | null;
+  url_offerta: string | null;
   cod_offerta: string;
   p_fix_f: number | null;
   p_fix_v: number | null;
@@ -53,10 +57,14 @@ type MlClusterRow = HeadlineRow & {
   id: number;
   tipo_cliente: string | null;
   coverage: string | null;
+  nome_offerta: string | null;
   url_sito_venditore: string | null;
+  url_offerta: string | null;
   cod_offerta: string;
   tipologia_fasce: string | null;
 };
+
+type MlCompRow = MlComponentInput & { offer_id: number };
 
 type MlScontoStatRow = {
   offer_id: number;
@@ -99,7 +107,7 @@ export const loadOfferteClusterStats = unstable_cache(
         offerteReadClient()
           .from("po_placet_e_live")
           .select(
-            "p_iva, tipo_offerta, tipo_cliente, coverage, denominazione, url_sito_venditore, last_seen_on, cod_offerta, p_fix_f, p_fix_v, p_vol_f1, p_vol_f2, p_vol_f3, p_vol_bf1, p_vol_bf23, p_vol_mono, alpha",
+            "p_iva, tipo_offerta, tipo_cliente, coverage, denominazione, nome_offerta, url_sito_venditore, url_offerta, last_seen_on, cod_offerta, p_fix_f, p_fix_v, p_vol_f1, p_vol_f2, p_vol_f3, p_vol_bf1, p_vol_bf23, p_vol_mono, alpha",
           )
           .lte("valid_from", today)
           .gte("valid_to", today)
@@ -109,7 +117,7 @@ export const loadOfferteClusterStats = unstable_cache(
         offerteReadClient()
           .from("po_ml_e_live")
           .select(
-            "id, p_iva, tipo_offerta, tipo_cliente, coverage, url_sito_venditore, last_seen_on, cod_offerta, tipologia_fasce",
+            "id, p_iva, tipo_offerta, tipo_cliente, coverage, nome_offerta, url_sito_venditore, url_offerta, last_seen_on, cod_offerta, tipologia_fasce",
           )
           .lte("valid_from", today)
           .gte("valid_to", today)
@@ -153,11 +161,17 @@ export const loadOfferteClusterStats = unstable_cache(
     ];
 
     const headline = headlineFromRows(rows, today);
-    const sconti = scontoStats(mlRows, await loadLiveSconti(mlRows.map((row) => row.id)));
+    const scontoRows = await loadLiveSconti(mlRows.map((row) => row.id));
+    const sconti = scontoStats(mlRows, scontoRows);
+    const componenti = await loadLiveComponenti(mlRows.map((row) => row.id));
+    const pareto = buildParetoStats(
+      paretoInputs(placetRows, mlRows, componenti, scontoRows),
+    );
 
     return {
       ...headline,
       sconti,
+      pareto,
       cliente: buckets(
         rows,
         (row) => row.cliente,
@@ -198,7 +212,7 @@ export const loadOfferteClusterStats = unstable_cache(
       fornitori: vendorStats(rows),
     };
   },
-  ["offerte-cluster-stats-v11"],
+  ["offerte-cluster-stats-v12"],
   { revalidate: OFFERTE_CACHE_REVALIDATE, tags: [OFFERTE_CACHE_TAG] },
 );
 
@@ -324,6 +338,115 @@ async function loadLiveSconti(offerIds: number[]) {
     rows.push(...page);
   }
   return rows;
+}
+
+async function loadLiveComponenti(offerIds: number[]) {
+  const rows: MlCompRow[] = [];
+  if (offerIds.length === 0) return rows;
+  const client = offerteReadClient();
+  for (let i = 0; i < offerIds.length; i += 200) {
+    const slice = offerIds.slice(i, i + 200);
+    const page = await paginateSelect<MlCompRow>((from, to) =>
+      client
+        .from("po_ml_e_componenti")
+        .select("offer_id, macroarea, unita_misura, fascia, prezzo, nome")
+        .in("offer_id", slice)
+        .range(from, to),
+    );
+    rows.push(...page);
+  }
+  return rows;
+}
+
+function paretoInputs(
+  placetRows: PlacetClusterRow[],
+  mlRows: MlClusterRow[],
+  componenti: MlCompRow[],
+  sconti: MlScontoStatRow[],
+): ParetoPointInput[] {
+  const componentsByOffer = new Map<number, MlCompRow[]>();
+  for (const row of componenti) {
+    const list = componentsByOffer.get(row.offer_id) ?? [];
+    list.push(row);
+    componentsByOffer.set(row.offer_id, list);
+  }
+  const scontiByOffer = new Map<number, ParetoScontoRow[]>();
+  for (const row of sconti) {
+    const list = scontiByOffer.get(row.offer_id) ?? [];
+    list.push(row);
+    scontiByOffer.set(row.offer_id, list);
+  }
+
+  const points: ParetoPointInput[] = [];
+
+  for (const row of placetRows) {
+    const cliente = clienteKey(row.tipo_cliente);
+    const prezzo = prezzoKey(row.tipo_offerta);
+    if (cliente !== "domestico" && cliente !== "non domestico") continue;
+    if (prezzo !== "fisso" && prezzo !== "variabile") continue;
+    const facts = placetFacts(row);
+    const monthlyEur = facts.monthlyEur;
+    const energyEurKwh = facts.spreadMeanEurKwh ?? facts.spreadEurKwh;
+    if (monthlyEur == null || energyEurKwh == null) continue;
+    const planKey = fasciaKey({
+      source: "placet",
+      tipoOfferta: row.tipo_offerta ?? "",
+      codOfferta: row.cod_offerta,
+      plan: facts.plan,
+    });
+    points.push({
+      key: `placet:${row.cod_offerta}`,
+      source: "placet",
+      nome: row.nome_offerta?.replace(/\s+/g, " ").trim() || "Offerta PLACET",
+      venditore: row.denominazione?.replace(/\s+/g, " ").trim() || vendorFromUrl(row.url_sito_venditore, row.p_iva) || "Venditore",
+      urlVenditore: absoluteVendorUrl(row.url_sito_venditore),
+      urlOfferta: absoluteVendorUrl(row.url_offerta),
+      cliente,
+      prezzo,
+      coverage: coverageKey(row.coverage),
+      plan: planKey === "altro" ? null : (planKey as NonNullable<ParetoPointInput["plan"]>),
+      monthlyEur,
+      energyEurKwh,
+    });
+  }
+
+  for (const row of mlRows) {
+    const cliente = clienteKey(row.tipo_cliente);
+    const prezzo = prezzoKey(row.tipo_offerta);
+    if (cliente !== "domestico" && cliente !== "non domestico") continue;
+    if (prezzo !== "fisso" && prezzo !== "variabile") continue;
+    const facts = mlFacts({
+      tipo_offerta: row.tipo_offerta,
+      tipologia_fasce: row.tipologia_fasce,
+      components: componentsByOffer.get(row.id) ?? [],
+    });
+    const monthlyEur = facts.monthlyEur;
+    const energyEurKwh = facts.spreadMeanEurKwh ?? facts.spreadEurKwh;
+    if (monthlyEur == null || energyEurKwh == null) continue;
+    const planKey = fasciaKey({
+      source: "ml",
+      tipoOfferta: row.tipo_offerta ?? "",
+      codOfferta: row.cod_offerta,
+      plan: facts.plan,
+    });
+    points.push({
+      key: `ml:${row.cod_offerta}`,
+      source: "ml",
+      nome: row.nome_offerta?.replace(/\s+/g, " ").trim() || "Offerta mercato libero",
+      venditore: vendorFromUrl(row.url_sito_venditore, row.p_iva) || "Venditore",
+      urlVenditore: absoluteVendorUrl(row.url_sito_venditore),
+      urlOfferta: absoluteVendorUrl(row.url_offerta),
+      cliente,
+      prezzo,
+      coverage: coverageKey(row.coverage),
+      plan: planKey === "altro" ? null : (planKey as NonNullable<ParetoPointInput["plan"]>),
+      monthlyEur,
+      energyEurKwh,
+      sconti: scontiByOffer.get(row.id),
+    });
+  }
+
+  return points;
 }
 
 function scontoStats(mlRows: MlClusterRow[], sconti: MlScontoStatRow[]): OfferteScontoStats {
