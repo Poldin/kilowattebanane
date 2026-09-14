@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { authorizeCron } from "@/lib/cron-auth";
 import { pullOfferte, type PullOfferteOptions } from "@/lib/offerte/pull";
+import { revalidateOfferte } from "@/lib/offerte/revalidate";
 import type { ImportKind } from "@/lib/offerte/types";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,13 @@ async function handle(request: NextRequest) {
 
   try {
     const result = await pullOfferte({ sources, snapshotDate, refreshGeo });
+    if (
+      result.summaries.some(
+        (summary) => summary.kind === "placet_e" || summary.kind === "ml_e",
+      )
+    ) {
+      revalidateOfferte();
+    }
     return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Offerte pull failed";

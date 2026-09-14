@@ -1,6 +1,6 @@
 import { loadOfferteHeadlineStats } from "@/lib/offerte/stats";
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export async function GET() {
   try {

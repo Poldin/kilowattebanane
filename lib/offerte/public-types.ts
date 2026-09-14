@@ -104,10 +104,77 @@ export type OfferteClusterBucket = {
   count: number;
 };
 
+export type OfferteFasciaBucket = OfferteClusterBucket & {
+  fisso: number | null;
+  variabile: number;
+};
+
+export type OfferteVendorRank = {
+  key: string;
+  nome: string;
+  url: string | null;
+  offerte: number;
+  placet: number;
+  ml: number;
+  fisso: number;
+  variabile: number;
+};
+
+export type OfferteVendorStats = {
+  media: number;
+  mediana: number;
+  soloUna: number;
+  entrambi: number;
+  soloPlacet: number;
+  soloMl: number;
+  top10Offerte: number;
+  top: OfferteVendorRank[];
+};
+
+export type OfferteScontoFascia = "monoraria" | "bioraria" | "fasce" | "dinamica";
+export type OfferteScontoPrezzo = "fisso" | "variabile";
+export type OfferteScontoApplicazione = "sempre" | "condizionato" | "altro";
+
+export type OfferteScontoRank = {
+  key: string;
+  nome: string;
+  valoreLabel: string;
+  annualEur: number;
+  applicazione: OfferteScontoApplicazione;
+  condizione: string | null;
+  quando: string | null;
+  suCosa: string | null;
+  nota: string | null;
+  venditore: string | null;
+  offerte: number;
+};
+
+export type OfferteScontoBoard = {
+  fascia: OfferteScontoFascia;
+  prezzo: OfferteScontoPrezzo;
+  top: OfferteScontoRank[];
+};
+
+export type OfferteScontoStats = {
+  offerteMl: number;
+  offerteConSconto: number;
+  righe: number;
+  applicazione: OfferteClusterBucket[];
+  quando: OfferteClusterBucket[];
+  tipologia: OfferteClusterBucket[];
+  medianaFissoEurAnno: number | null;
+  medianaVenditaEurKwh: number | null;
+  rankingConsumoKwh: number;
+  rankingPotenzaKw: number;
+  boards: OfferteScontoBoard[];
+};
+
 export type OfferteClusterStats = OfferteHeadlineStats & {
   cliente: OfferteClusterBucket[];
   prezzo: OfferteClusterBucket[];
   mercato: OfferteClusterBucket[];
   copertura: OfferteClusterBucket[];
-  fascia: OfferteClusterBucket[];
+  fascia: OfferteFasciaBucket[];
+  sconti: OfferteScontoStats;
+  fornitori: OfferteVendorStats;
 };

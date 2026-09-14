@@ -103,6 +103,35 @@ function MercatoLiberoIcon({ className = ICON }: { className?: string }) {
   );
 }
 
+function CanoneIcon({ className = ICON }: { className?: string }) {
+  return (
+    <StrokeIcon className={className}>
+      <rect
+        x="3"
+        y="3.5"
+        width="10"
+        height="10"
+        rx="1.1"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
+      <path d="M3 6.6h10" stroke="currentColor" strokeWidth="1.25" />
+      <path
+        d="M6.1 2.5v2.2M9.9 2.5v2.2"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6.2 9.4h1.15M8.45 9.4h1.15M10.7 9.4H11.8M6.2 11.35h1.15M8.45 11.35h1.15"
+        stroke="currentColor"
+        strokeWidth="1.15"
+        strokeLinecap="round"
+      />
+    </StrokeIcon>
+  );
+}
+
 function PrezzoFissoIcon({ className = ICON }: { className?: string }) {
   return (
     <StrokeIcon className={className}>
@@ -149,6 +178,8 @@ export function MercatoIcon({
   if (kind === "ml") return <MercatoLiberoIcon className={className} />;
   return <TuttiIcon className={className} />;
 }
+
+export { CanoneIcon };
 
 export function PrezzoIcon({
   kind,

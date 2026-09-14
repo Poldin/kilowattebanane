@@ -251,11 +251,15 @@ function parseOneOffer(offer: string, fallbackDate: string): ParsedMl | null {
   }));
 
   const sconti = xmlBlocks(offer, "Sconto").flatMap((block) => {
+    const condizione = xmlBlocks(block, "Condizione")[0] ?? "";
     const head = {
       nome: xmlText(block, "NOME"),
       tipo_sconto: xmlText(block, "TIPO_SCONTO"),
       descrizione: xmlText(block, "DESCRIZIONE"),
       validita: xmlText(block, "VALIDITA"),
+      iva_sconto: xmlText(block, "IVA_SCONTO"),
+      condizione_applicazione: xmlText(condizione, "CONDIZIONE_APPLICAZIONE"),
+      descrizione_condizione: xmlText(condizione, "DESCRIZIONE_CONDIZIONE"),
     };
     const prices = xmlBlocks(block, "PrezziSconto");
     if (prices.length === 0) {

@@ -8,7 +8,7 @@ import { PORTALE_OFFERTE_URL } from "@/lib/offerte/public-types";
 import { loadOfferteClusterStats } from "@/lib/offerte/stats";
 import { publicSiteUrl } from "@/lib/app-url";
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: "Statistiche offerte luce",
