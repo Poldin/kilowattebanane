@@ -1,5 +1,10 @@
 import { addCalendarDays } from "@/lib/entsoe";
-import { fetchZoneDayPrices, groupZoneDays, romeToday } from "@/lib/day-ahead-query";
+import {
+  fetchZoneDayPrices,
+  fetchZoneHourlyStatsSince,
+  groupZoneDays,
+  romeToday,
+} from "@/lib/day-ahead-query";
 import {
   dayHourlyCentStats,
   formatEurocent,
@@ -30,10 +35,10 @@ import { computeTariffTips } from "@/lib/tariff-tips";
 import { resolveMailTariff } from "@/lib/tariff-pref";
 import {
   formatYearPercentile,
+  YEAR_LOOKBACK_DAYS,
   yearWindowPercentileForTariff,
   type YearPercentileCopy,
 } from "@/lib/lookback";
-import { loadZoneSeries } from "@/lib/zone-home";
 import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
 
 export type ZoneMailDay = {
@@ -189,9 +194,15 @@ export function zoneMailContentFromDay(
   };
 }
 
-export async function loadZoneMailHistory(zone: MarketZoneId) {
-  const series = await loadZoneSeries(zone);
-  return series.hourly;
+export async function loadZoneMailHistory(
+  zone: MarketZoneId,
+  aroundDate: string,
+): Promise<ZoneHourlyPayload[]> {
+  const from = addCalendarDays(aroundDate, -(YEAR_LOOKBACK_DAYS + 7));
+  const rows = await fetchZoneHourlyStatsSince(zone, from);
+  return rows
+    .filter((row) => row.hours.length === 24)
+    .map((row) => ({ date: row.deliveryDate, hours: row.hours }));
 }
 
 export async function buildZoneMailContent(
@@ -201,7 +212,7 @@ export async function buildZoneMailContent(
 ): Promise<ZoneMailContent | null> {
   const [day, history] = await Promise.all([
     loadZoneMailDay(zone, deliveryDate),
-    loadZoneMailHistory(zone),
+    loadZoneMailHistory(zone, deliveryDate),
   ]);
   if (!day) return null;
   return zoneMailContentFromDay(day, tariff, history);

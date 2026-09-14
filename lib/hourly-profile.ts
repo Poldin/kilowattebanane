@@ -1,4 +1,4 @@
-import type { ZoneDay } from "@/lib/day-ahead-query";
+import type { ZoneDay } from "@/lib/day-ahead-core";
 import { joinItalian, toEurocentPerKwh } from "@/lib/insights";
 import { toHourlyAverages } from "@/lib/prices";
 

@@ -197,12 +197,22 @@ function mapHourlyArray(value: unknown): (number | null)[] {
 }
 
 export async function fetchZoneHourlyStats(zone: MarketZoneId): Promise<ZoneHourlyRow[]> {
+  return fetchZoneHourlyStatsSince(zone);
+}
+
+export async function fetchZoneHourlyStatsSince(
+  zone: MarketZoneId,
+  fromDate?: string,
+): Promise<ZoneHourlyRow[]> {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("day_ahead_hourly_stats")
     .select("delivery_date, avg_eur_mwh")
     .eq("zone", zone)
     .order("delivery_date", { ascending: true });
+  if (fromDate) query = query.gte("delivery_date", fromDate);
+
+  const { data, error } = await query;
 
   if (error) throw new Error(error.message);
   if (!data?.length) return [];

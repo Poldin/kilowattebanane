@@ -1,5 +1,5 @@
 import { addCalendarDays } from "@/lib/entsoe";
-import type { ZoneDay } from "@/lib/day-ahead-query";
+import type { ZoneDay } from "@/lib/day-ahead-core";
 import { fasciaAveragesFromHourly, type TariffPlanId } from "@/lib/fasce";
 import { isCompleteDay, toEurocentPerKwh } from "@/lib/insights";
 import { toHourlyAverages } from "@/lib/prices";

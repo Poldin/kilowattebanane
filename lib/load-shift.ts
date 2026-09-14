@@ -1,4 +1,4 @@
-import type { ZoneDay } from "@/lib/day-ahead-query";
+import type { ZoneDay } from "@/lib/day-ahead-core";
 import { isCompleteDay, toEurocentPerKwh } from "@/lib/insights";
 import { QUARTERS_PER_HOUR } from "@/lib/prices";
 import type { ZoneHourlyPayload } from "@/lib/zone-home-types";

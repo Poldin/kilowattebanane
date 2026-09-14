@@ -69,7 +69,7 @@ export async function sendZoneDigest(
   day: ZoneMailDay,
 ) {
   const resend = getResend();
-  const history = await loadZoneMailHistory(zone);
+  const history = await loadZoneMailHistory(zone, deliveryDate);
   const payload = [];
 
   for (const subscriber of recipients) {
