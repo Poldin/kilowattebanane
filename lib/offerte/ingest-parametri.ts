@@ -6,11 +6,14 @@ import {
   startImportRun,
 } from "@/lib/offerte/client";
 import { contentHash } from "@/lib/offerte/hash";
-import { downloadOfferteFile } from "@/lib/offerte/source";
+import { downloadOfferteFile, type DownloadedFile } from "@/lib/offerte/source";
 import type { IngestSummary } from "@/lib/offerte/types";
 
-export async function ingestParametriE(snapshotDate?: string): Promise<IngestSummary> {
-  const file = await downloadOfferteFile("parametri_e", snapshotDate);
+export async function ingestParametriE(
+  snapshotDate?: string,
+  uploaded?: DownloadedFile,
+): Promise<IngestSummary> {
+  const file = uploaded ?? (await downloadOfferteFile("parametri_e", snapshotDate));
   const client = offerteClient();
   const runId = await startImportRun(client, "parametri_e", file.snapshotDate, {
     sourceUrl: file.url,

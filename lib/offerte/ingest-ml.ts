@@ -8,7 +8,7 @@ import {
 import { mergeCoverage, splitCodes } from "@/lib/offerte/coverage";
 import { parseIntLoose, parseNumber, parsePortalDate } from "@/lib/offerte/dates";
 import { contentHash } from "@/lib/offerte/hash";
-import { downloadOfferteFile } from "@/lib/offerte/source";
+import { downloadOfferteFile, type DownloadedFile } from "@/lib/offerte/source";
 import type { CoverageHit, IngestSummary } from "@/lib/offerte/types";
 import { xmlBlocks, xmlText, xmlTexts } from "@/lib/offerte/xml";
 
@@ -44,8 +44,11 @@ type ParsedMl = {
   sconti: Record<string, unknown>[];
 };
 
-export async function ingestMlE(snapshotDate?: string): Promise<IngestSummary> {
-  const file = await downloadOfferteFile("ml_e", snapshotDate);
+export async function ingestMlE(
+  snapshotDate?: string,
+  uploaded?: DownloadedFile,
+): Promise<IngestSummary> {
+  const file = uploaded ?? (await downloadOfferteFile("ml_e", snapshotDate));
   const client = offerteClient();
   const runId = await startImportRun(client, "ml_e", file.snapshotDate, {
     sourceUrl: file.url,

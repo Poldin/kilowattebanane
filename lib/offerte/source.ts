@@ -16,7 +16,7 @@ export type DownloadedFile = {
   text: string;
 };
 
-function fileUrl(kind: OfferteKind, isoDate: string) {
+export function openDataFileUrl(kind: OfferteKind, isoDate: string) {
   const { year, month, ymd } = pathParts(isoDate);
   const stamp = `${year}_${month}`;
   if (kind === "placet_e") {
@@ -26,6 +26,17 @@ function fileUrl(kind: OfferteKind, isoDate: string) {
     return `${HOST}/portaleOfferte/resources/opendata/csv/parametri/${stamp}/PO_Parametri_E_${ymd}.csv`;
   }
   return `${HOST}/portaleOfferte/resources/opendata/csv/offerteML/${stamp}/PO_Offerte_E_MLIBERO_${ymd}.xml`;
+}
+
+export function openDataFileLabel(kind: OfferteKind, isoDate: string) {
+  const { ymd } = pathParts(isoDate);
+  if (kind === "placet_e") return `PO_Offerte_E_PLACET_${ymd}.csv`;
+  if (kind === "parametri_e") return `PO_Parametri_E_${ymd}.csv`;
+  return `PO_Offerte_E_MLIBERO_${ymd}.xml`;
+}
+
+function fileUrl(kind: OfferteKind, isoDate: string) {
+  return openDataFileUrl(kind, isoDate);
 }
 
 async function getFile(url: string) {

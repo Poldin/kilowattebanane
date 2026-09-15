@@ -9,7 +9,7 @@ import {
 import { coverageFromPortalFields, mergeCoverage } from "@/lib/offerte/coverage";
 import { parseNumber, parsePortalDate } from "@/lib/offerte/dates";
 import { contentHash } from "@/lib/offerte/hash";
-import { downloadOfferteFile } from "@/lib/offerte/source";
+import { downloadOfferteFile, type DownloadedFile } from "@/lib/offerte/source";
 import type { CoverageHit, IngestSummary } from "@/lib/offerte/types";
 
 type ExistingRow = {
@@ -26,8 +26,11 @@ type ParsedPlacet = {
   row: Record<string, unknown>;
 };
 
-export async function ingestPlacetE(snapshotDate?: string): Promise<IngestSummary> {
-  const file = await downloadOfferteFile("placet_e", snapshotDate);
+export async function ingestPlacetE(
+  snapshotDate?: string,
+  uploaded?: DownloadedFile,
+): Promise<IngestSummary> {
+  const file = uploaded ?? (await downloadOfferteFile("placet_e", snapshotDate));
   const client = offerteClient();
   const runId = await startImportRun(client, "placet_e", file.snapshotDate, {
     sourceUrl: file.url,
