@@ -17,6 +17,33 @@ export function addIsoDays(isoDate: string, days: number) {
   return new Date(utc).toISOString().slice(0, 10);
 }
 
+export function monthStart(isoDate: string) {
+  if (!ISO_DATE.test(isoDate)) throw new Error(`Invalid date ${isoDate}`);
+  return `${isoDate.slice(0, 7)}-01`;
+}
+
+export function addIsoMonths(isoDate: string, months: number) {
+  if (!ISO_DATE.test(isoDate)) throw new Error(`Invalid date ${isoDate}`);
+  const [year, month] = isoDate.split("-").map(Number);
+  const utc = new Date(Date.UTC(year, month - 1 + months, 1));
+  return `${utc.getUTCFullYear()}-${String(utc.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
+export function calendarMonthStarts(fromIso: string, count: number) {
+  const start = monthStart(fromIso);
+  return Array.from({ length: count }, (_, i) => addIsoMonths(start, i));
+}
+
+export function formatMonthShortIt(isoDate: string) {
+  if (!ISO_DATE.test(isoDate)) return isoDate;
+  const [year, month] = isoDate.split("-").map(Number);
+  return new Intl.DateTimeFormat("it-IT", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
 export function pathParts(isoDate: string) {
   const [year, month, day] = isoDate.split("-");
   return {

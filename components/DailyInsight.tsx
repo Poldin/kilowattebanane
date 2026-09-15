@@ -24,7 +24,6 @@ import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
 import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { ShareButton } from "@/components/ShareButton";
 import { SignupSlot } from "@/components/SignupForm";
-import { HourlyProfileInsight } from "@/components/HourlyProfileInsight";
 import { LoadShiftSim } from "@/components/LoadShiftSim";
 import { LookbackInsight } from "@/components/LookbackInsight";
 import {
@@ -1148,6 +1147,41 @@ function QuarterColumn({
   );
 }
 
+function QuarterEnergyIcon() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      fill="none"
+      className="h-4 w-4 shrink-0 text-[#F5D547]"
+    >
+      <path
+        d="M9.25 1.75 5.25 8.75h2.75l-1.25 5.5 5.25-7.25H8.75l.5-5.25Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function QuarterTableChevron() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="h-4 w-4 shrink-0 text-neutral-400 transition-transform duration-200 group-open:rotate-180 dark:text-neutral-500"
+    >
+      <path
+        fillRule="evenodd"
+        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 function QuarterPriceTable({ day }: { day: DayInsight }) {
   const bananaSlots = cheapestSlotsInBands(day.prices, day.cheapBands);
   const monkeySlots = priciestSlotsInBands(day.prices, day.peakBands);
@@ -1160,10 +1194,14 @@ function QuarterPriceTable({ day }: { day: DayInsight }) {
   ];
 
   return (
-    <div className="mt-6">
-      <h3 className="text-sm font-medium tracking-tight text-foreground">
-        Prezzi ogni quarto d&apos;ora
-      </h3>
+    <details className="group mt-6">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:focus-visible:ring-neutral-500 [&::-webkit-details-marker]:hidden">
+        <QuarterEnergyIcon />
+        <span className="min-w-0 flex-1 text-left font-medium tracking-tight">
+          Vedi il dettaglio della tabella quartoraria
+        </span>
+        <QuarterTableChevron />
+      </summary>
       <div className="mt-2 min-w-0 overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
         <div className="grid min-w-0 grid-cols-2">
           {columns.map((column, i) => (
@@ -1188,7 +1226,7 @@ function QuarterPriceTable({ day }: { day: DayInsight }) {
           ))}
         </div>
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -1660,11 +1698,6 @@ export function DailyInsight({
                 region={region}
                 onRegionChange={handleRegionChange}
                 tariff={tariff}
-              />
-              <HourlyProfileInsight
-                hourly={home.hourly}
-                region={region}
-                onRegionChange={handleRegionChange}
               />
               <LoadShiftSim
                 hourly={home.hourly}

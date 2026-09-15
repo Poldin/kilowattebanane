@@ -27,6 +27,79 @@ const TIPOLOGIA_CONTRATTO: Record<string, string> = {
   "99": "Qualsiasi attivazione",
 };
 
+export const PAGAMENTO_FILTERS = [
+  { id: "01", label: PAGAMENTO["01"] },
+  { id: "02", label: PAGAMENTO["02"] },
+  { id: "03", label: PAGAMENTO["03"] },
+  { id: "04", label: PAGAMENTO["04"] },
+] as const;
+
+export const ATTIVAZIONE_FILTERS = [
+  { id: "01", label: ATTIVAZIONE["01"] },
+  { id: "02", label: ATTIVAZIONE["02"] },
+  { id: "03", label: ATTIVAZIONE["03"] },
+  { id: "04", label: ATTIVAZIONE["04"] },
+  { id: "05", label: ATTIVAZIONE["05"] },
+] as const;
+
+export const CONTRATTO_FILTERS = [
+  { id: "01", label: TIPOLOGIA_CONTRATTO["01"] },
+  { id: "02", label: TIPOLOGIA_CONTRATTO["02"] },
+  { id: "03", label: TIPOLOGIA_CONTRATTO["03"] },
+  { id: "04", label: TIPOLOGIA_CONTRATTO["04"] },
+] as const;
+
+const ATTIVAZIONE_ANY = ["Qualsiasi canale"];
+const CONTRATTO_ANY = ["Qualsiasi attivazione"];
+
+export function parsePortalFilterIds(
+  raw: string | string[] | null | undefined,
+  allowed: readonly { id: string }[],
+) {
+  const allowedIds = new Set(allowed.map((row) => row.id));
+  const parts = Array.isArray(raw) ? raw : raw?.split(",") ?? [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of parts) {
+    const key = part.trim().replace(/\s+/g, "");
+    const id = /^\d+$/.test(key) ? key.padStart(2, "0") : key;
+    if (!allowedIds.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+export function matchesPortalFilter(
+  offerLabels: string[],
+  selectedIds: string[] | undefined,
+  options: readonly { id: string; label: string }[],
+  anyLabels: string[] = [],
+) {
+  if (!selectedIds || selectedIds.length === 0) return true;
+  if (offerLabels.length === 0) return true;
+  if (anyLabels.some((label) => offerLabels.includes(label))) return true;
+  const wanted = new Set(
+    selectedIds
+      .map((id) => options.find((row) => row.id === id)?.label)
+      .filter((label): label is string => Boolean(label)),
+  );
+  if (wanted.size === 0) return true;
+  return offerLabels.some((label) => wanted.has(label));
+}
+
+export function matchesPagamentoFilter(labels: string[], selectedIds?: string[]) {
+  return matchesPortalFilter(labels, selectedIds, PAGAMENTO_FILTERS);
+}
+
+export function matchesAttivazioneFilter(labels: string[], selectedIds?: string[]) {
+  return matchesPortalFilter(labels, selectedIds, ATTIVAZIONE_FILTERS, ATTIVAZIONE_ANY);
+}
+
+export function matchesContrattoFilter(labels: string[], selectedIds?: string[]) {
+  return matchesPortalFilter(labels, selectedIds, CONTRATTO_FILTERS, CONTRATTO_ANY);
+}
+
 const RESIDENTE: Record<string, string> = {
   "01": "Domestico residente",
   "02": "Domestico non residente",

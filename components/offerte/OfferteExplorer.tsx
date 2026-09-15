@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { FasciaPlanIcon, fasciaPlanLabel } from "@/components/offerte/FasciaPlanIcon";
 import {
   NewTabIcon,
@@ -21,14 +22,23 @@ import {
   prezzoLabel,
 } from "@/components/offerte/OfferteTraitIcons";
 import {
+  ATTIVAZIONE_FILTERS,
+  CONTRATTO_FILTERS,
+  PAGAMENTO_FILTERS,
+  parsePortalFilterIds,
+} from "@/lib/offerte/portal-labels";
+import {
   OFFERTE_SEARCH_PAGE_SIZE,
+  CME_ITB_PAGE_URL,
   PORTALE_OFFERTE_URL,
   type CapPlace,
   type OfferteCliente,
+  type OfferteConsumoProfilo,
   type OfferteFascia,
   type OfferteHeadlineStats,
   type OfferteMercato,
   type OffertePrezzo,
+  type OfferteMonthPoint,
   type OfferteSearchHit,
 } from "@/lib/offerte/public-types";
 import {
@@ -49,6 +59,11 @@ type Prefs = {
   fascia: OfferteFascia;
   consumoKwh: number;
   potenzaKw: number;
+  residente: boolean;
+  profilo: OfferteConsumoProfilo;
+  pagamento: string[];
+  attivazione: string[];
+  contratto: string[];
 };
 
 const DEFAULTS: Prefs = {
@@ -59,11 +74,18 @@ const DEFAULTS: Prefs = {
   fascia: "tutti",
   consumoKwh: 2700,
   potenzaKw: POTENZA_STANDARD_CASA_KW,
+  residente: true,
+  profilo: "standard",
+  pagamento: [],
+  attivazione: [],
+  contratto: [],
 };
 
 type SearchPayload = {
   places: CapPlace[];
   punEurKwh: number | null;
+  forwardAsOf: string | null;
+  forwardSource: string | null;
   hits: OfferteSearchHit[];
   totalMatched: number;
   error?: string;
@@ -71,17 +93,20 @@ type SearchPayload = {
 
 export function OfferteExplorer({
   stats,
+  initialCap = "",
   className,
 }: {
   stats: OfferteHeadlineStats;
+  initialCap?: string;
   className?: string;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const router = useRouter();
   const capInputRef = useRef<HTMLInputElement>(null);
-  const dialogCapRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
-  const [prefs, setPrefs] = useState<Prefs>(DEFAULTS);
-  const [open, setOpen] = useState(false);
+  const [prefs, setPrefs] = useState<Prefs>({
+    ...DEFAULTS,
+    cap: initialCap.replace(/\D/g, "").slice(0, 5),
+  });
   const [capError, setCapError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SearchPayload | null>(null);
@@ -97,11 +122,22 @@ export function OfferteExplorer({
           parsed.cliente === "non domestico" || parsed.cliente === "domestico"
             ? parsed.cliente
             : prev.cliente;
+        const pagamento = parsePortalFilterIds(parsed.pagamento, PAGAMENTO_FILTERS);
+        const attivazione = parsePortalFilterIds(parsed.attivazione, ATTIVAZIONE_FILTERS);
+        const contratto = parsePortalFilterIds(parsed.contratto, CONTRATTO_FILTERS);
+        if (pagamento.length > 0 || attivazione.length > 0 || contratto.length > 0) {
+          setAdvanced(true);
+        }
         return {
           ...prev,
           ...parsed,
-          cap: String(parsed.cap ?? "").replace(/\D/g, "").slice(0, 5),
+          cap: (initialCap || String(parsed.cap ?? "")).replace(/\D/g, "").slice(0, 5),
           cliente,
+          residente: parsed.residente !== false,
+          profilo: parsed.profilo === "oculato" ? "oculato" : "standard",
+          pagamento,
+          attivazione,
+          contratto,
           potenzaKw: clampPotenzaKw(Number(parsed.potenzaKw ?? prev.potenzaKw), cliente),
         };
       });
@@ -115,34 +151,37 @@ export function OfferteExplorer({
   }, [prefs]);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-    if (open) queueMicrotask(() => dialogCapRef.current?.focus());
-  }, [open]);
+    if (prefs.cap.length !== 5) return;
+    const params = new URLSearchParams({
+      cap: prefs.cap,
+      cliente: prefs.cliente,
+      potenza: String(prefs.potenzaKw),
+      consumo: String(prefs.consumoKwh),
+      residente: prefs.residente ? "1" : "0",
+    });
+    router.replace(`/offer-compare?${params}`, { scroll: false });
+  }, [prefs, router]);
 
   useEffect(() => {
-    if (!open || prefs.cap.length !== 5) return;
+    if (prefs.cap.length !== 5) return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const params = new URLSearchParams({
-          cap: prefs.cap,
-          cliente: prefs.cliente,
-          mercato: prefs.mercato,
-          prezzo: prefs.prezzo,
-          fascia: prefs.fascia,
-          consumo: String(prefs.consumoKwh),
-          potenza: String(prefs.potenzaKw),
-        });
-        const response = await fetch(`/api/offerte/search?${params}`, {
+        const response = await fetch(`/api/offerte/search?${buildSearchParams(prefs)}`, {
           signal: controller.signal,
         });
         const payload = (await response.json()) as SearchPayload & { error?: string };
         if (!response.ok) {
-          setResult({ places: [], punEurKwh: null, hits: [], totalMatched: 0, error: payload.error });
+          setResult({
+            places: [],
+            punEurKwh: null,
+            forwardAsOf: null,
+            forwardSource: null,
+            hits: [],
+            totalMatched: 0,
+            error: payload.error,
+          });
           return;
         }
         setResult(payload);
@@ -152,6 +191,8 @@ export function OfferteExplorer({
         setResult({
           places: [],
           punEurKwh: null,
+          forwardAsOf: null,
+          forwardSource: null,
           hits: [],
           totalMatched: 0,
           error: "Non riesco a caricare le offerte. Riprova.",
@@ -164,7 +205,7 @@ export function OfferteExplorer({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [open, prefs]);
+  }, [prefs]);
 
   const placeLabel = useMemo(() => {
     const names = [...new Set((result?.places ?? []).map((place) => place.comuneNome))];
@@ -173,38 +214,8 @@ export function OfferteExplorer({
     return region ? `${names.join(", ")} · ${region}` : names.join(", ");
   }, [result]);
 
-  async function submitCap(cap: string) {
-    const next = cap.replace(/\D/g, "").slice(0, 5);
-    setPrefs((prev) => ({ ...prev, cap: next }));
-    if (next.length !== 5) {
-      setCapError(null);
-      return;
-    }
-    try {
-      const response = await fetch(`/api/offerte/search?lookup=1&cap=${next}`);
-      const payload = (await response.json()) as { places?: CapPlace[]; error?: string };
-      if (!payload.places?.length) {
-        setCapError("Questo CAP non è in anagrafica.");
-        return;
-      }
-      setCapError(null);
-      setResult({ places: payload.places, punEurKwh: null, hits: [], totalMatched: 0 });
-      setOpen(true);
-    } catch {
-      setCapError("Non riesco a verificare il CAP. Riprova.");
-    }
-  }
-
-  function closeDialog() {
-    setOpen(false);
-    queueMicrotask(() => capInputRef.current?.focus());
-  }
-
   return (
-    <section
-      id="offerte"
-      className={className ? `${className} scroll-mt-20` : "scroll-mt-20"}
-    >
+    <section className={className ? `${className} mt-5` : "mt-5"}>
       <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">
         Dati{" "}
         <a
@@ -217,344 +228,413 @@ export function OfferteExplorer({
         </a>
         <span className="normal-case tracking-normal"> · open data CC-BY</span>
       </p>
-      <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-        Trova l&apos;offerta luce
-      </h2>
-
-      <p className="mt-5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        {" "}
+      <h1 id={titleId} className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+        Confronta offerte luce
+      </h1>
+      <p className="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
         <strong className="font-medium text-foreground">{formatIt(stats.total)} offerte</strong>
         {" · "}
         {formatIt(stats.venditori)} venditori
         {" · "}
-        {formatIt(stats.placet)} PLACET e {formatIt(stats.ml)} mercato libero.
-        Apri le{" "}
-        <a
-          href={STATS_HREF}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-md border border-neutral-200 bg-transparent px-2 py-0.5 text-sm text-foreground transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-900"
-        >
+        <a href={STATS_HREF} className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600">
           statistiche
         </a>
-        .
       </p>
 
-      <form
-        className="mt-6 flex max-w-md flex-col gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submitCap(prefs.cap);
-        }}
-      >
-        <label htmlFor="offerte-cap" className="text-sm text-neutral-600 dark:text-neutral-400">
-          inserisci il CAP
+      <div className="mt-8">
+        <label htmlFor="offerte-cap" className="sr-only">
+          CAP della fornitura
         </label>
-        <div className="flex gap-2">
+        <input
+          ref={capInputRef}
+          id="offerte-cap"
+          inputMode="numeric"
+          autoComplete="postal-code"
+          maxLength={5}
+          placeholder="CAP"
+          value={prefs.cap}
+          onChange={(event) => {
+            const next = event.target.value.replace(/\D/g, "").slice(0, 5);
+            setPrefs((prev) => ({ ...prev, cap: next }));
+            setCapError(null);
+          }}
+          className="w-full border-0 bg-transparent p-0 text-3xl font-semibold tracking-[0.14em] text-foreground outline-none placeholder:tracking-normal placeholder:text-neutral-400 sm:text-4xl"
+        />
+        {placeLabel ? (
+          <p className="mt-0.5 truncate text-sm text-neutral-600 dark:text-neutral-400">
+            {placeLabel}
+          </p>
+        ) : capError ? (
+          <p className="mt-0.5 text-sm text-red-600 dark:text-red-400">{capError}</p>
+        ) : (
+          <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+            Inserisci il CAP della fornitura.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-8 flex flex-col gap-6">
+        <fieldset>
+          <legend className="text-sm text-neutral-500 dark:text-neutral-400">Chi sei</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Chip
+              active={prefs.cliente === "domestico"}
+              onClick={() =>
+                setPrefs((prev) => ({
+                  ...prev,
+                  cliente: "domestico",
+                  potenzaKw: clampPotenzaKw(prev.potenzaKw, "domestico"),
+                }))
+              }
+              icon={<ClienteIcon kind="domestico" />}
+            >
+              Casa
+            </Chip>
+            <Chip
+              active={prefs.cliente === "non domestico"}
+              onClick={() =>
+                setPrefs((prev) => ({
+                  ...prev,
+                  cliente: "non domestico",
+                  potenzaKw: clampPotenzaKw(prev.potenzaKw, "non domestico"),
+                }))
+              }
+              icon={<ClienteIcon kind="non domestico" />}
+            >
+              Partita IVA
+            </Chip>
+          </div>
+        </fieldset>
+
+        {prefs.cliente === "domestico" ? (
+          <fieldset>
+            <legend className="text-sm text-neutral-500 dark:text-neutral-400">Residenza</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Chip active={prefs.residente} onClick={() => setPrefs((prev) => ({ ...prev, residente: true }))}>
+                Residente
+              </Chip>
+              <Chip
+                active={!prefs.residente}
+                onClick={() => setPrefs((prev) => ({ ...prev, residente: false }))}
+              >
+                Non residente
+              </Chip>
+            </div>
+          </fieldset>
+        ) : null}
+
+        <fieldset>
+          <legend className="text-sm text-neutral-500 dark:text-neutral-400">Prezzo</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Chip
+              active={prefs.prezzo === "tutti"}
+              onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "tutti" }))}
+              icon={<PrezzoIcon kind="tutti" />}
+            >
+              Tutti
+            </Chip>
+            <Chip
+              active={prefs.prezzo === "prezzo fisso"}
+              onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "prezzo fisso" }))}
+              icon={<PrezzoIcon kind="prezzo fisso" />}
+            >
+              Fisso
+            </Chip>
+            <Chip
+              active={prefs.prezzo === "prezzo variabile"}
+              onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "prezzo variabile" }))}
+              icon={<PrezzoIcon kind="prezzo variabile" />}
+            >
+              Variabile
+            </Chip>
+          </div>
+        </fieldset>
+
+        <PotenzaSelect
+          cliente={prefs.cliente}
+          value={prefs.potenzaKw}
+          onChange={(potenzaKw) => setPrefs((prev) => ({ ...prev, potenzaKw }))}
+        />
+
+        <label className="flex flex-col gap-2">
+          <span className="flex items-baseline justify-between text-sm text-neutral-500 dark:text-neutral-400">
+            Consumo annuo
+            <strong className="font-medium text-foreground">
+              {formatIt(prefs.consumoKwh)} kWh
+            </strong>
+          </span>
           <input
-            ref={capInputRef}
-            id="offerte-cap"
-            name="cap"
-            inputMode="numeric"
-            autoComplete="postal-code"
-            maxLength={5}
-            placeholder="20121"
-            value={prefs.cap}
-            onChange={(event) => {
-              const next = event.target.value.replace(/\D/g, "").slice(0, 5);
-              setPrefs((prev) => ({ ...prev, cap: next }));
-              setCapError(null);
-              if (next.length === 5) void submitCap(next);
-            }}
-            className="h-11 min-w-0 flex-1 rounded-md border border-neutral-200 bg-transparent px-3 text-lg tracking-[0.2em] text-foreground outline-none placeholder:tracking-normal placeholder:text-neutral-400 focus:border-neutral-400 dark:border-neutral-800 dark:focus:border-neutral-600"
+            type="range"
+            min={800}
+            max={8000}
+            step={50}
+            value={prefs.consumoKwh}
+            onChange={(event) =>
+              setPrefs((prev) => ({ ...prev, consumoKwh: Number(event.target.value) }))
+            }
+            className="w-full accent-neutral-800 dark:accent-neutral-200"
           />
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">
+            Media famiglia italiana ~2.700 kWh.
+          </span>
+        </label>
+
+        <fieldset>
+          <legend className="text-sm text-neutral-500 dark:text-neutral-400">Come consumi</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Chip
+              active={prefs.profilo === "standard"}
+              onClick={() => setPrefs((prev) => ({ ...prev, profilo: "standard" }))}
+              title="Inverno più alto, primavera più basso, un po’ di clima d’estate"
+            >
+              Standard
+            </Chip>
+            <Chip
+              active={prefs.profilo === "oculato"}
+              onClick={() => setPrefs((prev) => ({ ...prev, profilo: "oculato" }))}
+              title="Sposti la parte flessibile su ore e mesi più convenienti"
+            >
+              Oculato
+            </Chip>
+          </div>
+          <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+            {prefs.profilo === "oculato"
+              ? "Lavatrice, boiler e ricariche sulle fasce e i mesi più bassi; il resto della casa resta com’è. Il totale kWh non cambia."
+              : "Come una casa media: più prelievo in inverno, un po’ di clima a luglio–agosto, primavera più leggera. Il totale kWh non cambia."}
+          </p>
+        </fieldset>
+
+        <div>
           <button
-            type="submit"
-            className="h-11 shrink-0 rounded-md border border-neutral-200 bg-transparent px-4 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            type="button"
+            aria-expanded={advanced}
+            onClick={() => setAdvanced((open) => !open)}
+            className={
+              advanced
+                ? "rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                : "rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            }
           >
-            Confronta
+            {advanced ? "Nascondi filtri avanzati" : "Usa tutti i filtri"}
           </button>
         </div>
-      </form>
 
-      <dialog
-        ref={dialogRef}
-        aria-labelledby={titleId}
-        className="offerte-dialog"
-        onClose={closeDialog}
-      >
-        <div className="flex h-full min-h-0 flex-col">
-          <header className="shrink-0 bg-background">
-            <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-              <div className="min-w-0 flex-1">
-                <h2 id={titleId} className="sr-only">
-                  Offerte nel CAP {prefs.cap || ""}
-                </h2>
-                <label htmlFor="offerte-cap-dialog" className="sr-only">
-                  CAP della fornitura
-                </label>
-                <input
-                  ref={dialogCapRef}
-                  id="offerte-cap-dialog"
-                  inputMode="numeric"
-                  autoComplete="postal-code"
-                  maxLength={5}
-                  value={prefs.cap}
-                  onChange={(event) => {
-                    const next = event.target.value.replace(/\D/g, "").slice(0, 5);
-                    setPrefs((prev) => ({ ...prev, cap: next }));
-                  }}
-                  className="w-full border-0 bg-transparent p-0 text-3xl font-semibold tracking-[0.14em] text-foreground outline-none sm:text-4xl"
-                />
-                {placeLabel ? (
-                  <p className="mt-0.5 truncate text-sm text-neutral-600 dark:text-neutral-400">
-                    {placeLabel}
-                  </p>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={closeDialog}
-                className="shrink-0 rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              >
-                Chiudi
-              </button>
-            </div>
-          </header>
-
-          <div className="offerte-dialog-scroll min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-4 sm:px-6">
-            <div className="flex flex-col gap-6">
-              <fieldset>
-                <legend className="text-sm text-neutral-500 dark:text-neutral-400">Chi sei</legend>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Chip
-                    active={prefs.cliente === "domestico"}
-                    onClick={() =>
-                      setPrefs((prev) => ({
-                        ...prev,
-                        cliente: "domestico",
-                        potenzaKw: clampPotenzaKw(prev.potenzaKw, "domestico"),
-                      }))
-                    }
-                    icon={<ClienteIcon kind="domestico" />}
-                  >
-                    Casa
-                  </Chip>
-                  <Chip
-                    active={prefs.cliente === "non domestico"}
-                    onClick={() =>
-                      setPrefs((prev) => ({
-                        ...prev,
-                        cliente: "non domestico",
-                        potenzaKw: clampPotenzaKw(prev.potenzaKw, "non domestico"),
-                      }))
-                    }
-                    icon={<ClienteIcon kind="non domestico" />}
-                  >
-                    Partita IVA
-                  </Chip>
-                </div>
-              </fieldset>
-
-              <fieldset>
-                <legend className="text-sm text-neutral-500 dark:text-neutral-400">Prezzo</legend>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Chip
-                    active={prefs.prezzo === "tutti"}
-                    onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "tutti" }))}
-                    icon={<PrezzoIcon kind="tutti" />}
-                  >
-                    Tutti
-                  </Chip>
-                  <Chip
-                    active={prefs.prezzo === "prezzo fisso"}
-                    onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "prezzo fisso" }))}
-                    icon={<PrezzoIcon kind="prezzo fisso" />}
-                  >
-                    Fisso
-                  </Chip>
-                  <Chip
-                    active={prefs.prezzo === "prezzo variabile"}
-                    onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "prezzo variabile" }))}
-                    icon={<PrezzoIcon kind="prezzo variabile" />}
-                  >
-                    Variabile
-                  </Chip>
-                </div>
-              </fieldset>
-
-              <PotenzaSelect
-                cliente={prefs.cliente}
-                value={prefs.potenzaKw}
-                onChange={(potenzaKw) => setPrefs((prev) => ({ ...prev, potenzaKw }))}
-              />
-
-              <label className="flex flex-col gap-2">
-                <span className="flex items-baseline justify-between text-sm text-neutral-500 dark:text-neutral-400">
-                  Consumo annuo
-                  <strong className="font-medium text-foreground">
-                    {formatIt(prefs.consumoKwh)} kWh
-                  </strong>
-                </span>
-                <input
-                  type="range"
-                  min={800}
-                  max={8000}
-                  step={50}
-                  value={prefs.consumoKwh}
-                  onChange={(event) =>
-                    setPrefs((prev) => ({ ...prev, consumoKwh: Number(event.target.value) }))
-                  }
-                  className="w-full accent-neutral-800 dark:accent-neutral-200"
-                />
-                <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Media famiglia italiana ~2.700 kWh.
-                </span>
-              </label>
-
-              <div>
-                <button
-                  type="button"
-                  aria-expanded={advanced}
-                  onClick={() => setAdvanced((open) => !open)}
-                  className={
-                    advanced
-                      ? "rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
-                      : "rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-                  }
+        {advanced ? (
+          <div className="grid gap-6 sm:grid-cols-2">
+            <fieldset>
+              <legend className="text-sm text-neutral-500 dark:text-neutral-400">Mercato</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Chip
+                  active={prefs.mercato === "tutti"}
+                  onClick={() => setPrefs((prev) => ({ ...prev, mercato: "tutti" }))}
+                  icon={<MercatoIcon kind="tutti" />}
                 >
-                  {advanced ? "Nascondi filtri avanzati" : "Usa tutti i filtri"}
-                </button>
+                  Tutti
+                </Chip>
+                <Chip
+                  active={prefs.mercato === "placet"}
+                  onClick={() => setPrefs((prev) => ({ ...prev, mercato: "placet" }))}
+                  icon={<MercatoIcon kind="placet" />}
+                >
+                  PLACET
+                </Chip>
+                <Chip
+                  active={prefs.mercato === "ml"}
+                  onClick={() => setPrefs((prev) => ({ ...prev, mercato: "ml" }))}
+                  icon={<MercatoIcon kind="ml" />}
+                >
+                  Mercato libero
+                </Chip>
               </div>
-
-              {advanced ? (
-                <div className="grid gap-6 sm:grid-cols-2">
-                  <fieldset>
-                    <legend className="text-sm text-neutral-500 dark:text-neutral-400">Mercato</legend>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Chip
-                        active={prefs.mercato === "tutti"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, mercato: "tutti" }))}
-                        icon={<MercatoIcon kind="tutti" />}
-                      >
-                        Tutti
-                      </Chip>
-                      <Chip
-                        active={prefs.mercato === "placet"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, mercato: "placet" }))}
-                        icon={<MercatoIcon kind="placet" />}
-                      >
-                        PLACET
-                      </Chip>
-                      <Chip
-                        active={prefs.mercato === "ml"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, mercato: "ml" }))}
-                        icon={<MercatoIcon kind="ml" />}
-                      >
-                        Mercato libero
-                      </Chip>
-                    </div>
-                  </fieldset>
-                  <fieldset className="sm:col-span-2">
-                    <legend className="text-sm text-neutral-500 dark:text-neutral-400">
-                      Profilo orario
-                    </legend>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Chip
-                        active={prefs.fascia === "tutti"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, fascia: "tutti" }))}
-                        icon={<MercatoIcon kind="tutti" />}
-                        title="Tutti i profili"
-                      >
-                        Tutte
-                      </Chip>
-                      <Chip
-                        active={prefs.fascia === "monoraria"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, fascia: "monoraria" }))}
-                        icon={<FasciaPlanIcon plan="monoraria" />}
-                        title="Un prezzo tutte le ore (fisso o PUN del mese)"
-                      >
-                        Monoraria
-                      </Chip>
-                      <Chip
-                        active={prefs.fascia === "bioraria"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, fascia: "bioraria" }))}
-                        icon={<FasciaPlanIcon plan="bioraria" />}
-                        title="Due fasce: F1 e F23"
-                      >
-                        Bioraria
-                      </Chip>
-                      <Chip
-                        active={prefs.fascia === "fasce"}
-                        onClick={() => setPrefs((prev) => ({ ...prev, fascia: "fasce" }))}
-                        icon={<FasciaPlanIcon plan="fasce" />}
-                        title="Tre fasce: F1, F2 e F3"
-                      >
-                        Trioraria
-                      </Chip>
-                      <Chip
-                        active={prefs.fascia === "dinamica"}
-                        onClick={() =>
-                          setPrefs((prev) => ({
-                            ...prev,
-                            fascia: "dinamica",
-                            prezzo: prev.prezzo === "prezzo fisso" ? "prezzo variabile" : prev.prezzo,
-                            mercato: prev.mercato === "placet" ? "ml" : prev.mercato,
-                          }))
-                        }
-                        icon={<FasciaPlanIcon plan="dinamica" />}
-                        title="PUN ora per ora + spread e/o quota fissa del fornitore"
-                      >
-                        Dinamica
-                      </Chip>
-                    </div>
-                    {fasciaHint(prefs.fascia) ? (
-                      <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                        {fasciaHint(prefs.fascia)}
-                      </p>
-                    ) : null}
-                  </fieldset>
-                </div>
+            </fieldset>
+            <fieldset className="sm:col-span-2">
+              <legend className="text-sm text-neutral-500 dark:text-neutral-400">
+                Profilo orario
+              </legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Chip
+                  active={prefs.fascia === "tutti"}
+                  onClick={() => setPrefs((prev) => ({ ...prev, fascia: "tutti" }))}
+                  icon={<MercatoIcon kind="tutti" />}
+                  title="Tutti i profili"
+                >
+                  Tutte
+                </Chip>
+                <Chip
+                  active={prefs.fascia === "monoraria"}
+                  onClick={() => setPrefs((prev) => ({ ...prev, fascia: "monoraria" }))}
+                  icon={<FasciaPlanIcon plan="monoraria" />}
+                  title="Un prezzo tutte le ore (fisso o PUN del mese)"
+                >
+                  Monoraria
+                </Chip>
+                <Chip
+                  active={prefs.fascia === "bioraria"}
+                  onClick={() => setPrefs((prev) => ({ ...prev, fascia: "bioraria" }))}
+                  icon={<FasciaPlanIcon plan="bioraria" />}
+                  title="Due fasce: F1 e F23"
+                >
+                  Bioraria
+                </Chip>
+                <Chip
+                  active={prefs.fascia === "fasce"}
+                  onClick={() => setPrefs((prev) => ({ ...prev, fascia: "fasce" }))}
+                  icon={<FasciaPlanIcon plan="fasce" />}
+                  title="Tre fasce: F1, F2 e F3"
+                >
+                  Trioraria
+                </Chip>
+                <Chip
+                  active={prefs.fascia === "dinamica"}
+                  onClick={() =>
+                    setPrefs((prev) => ({
+                      ...prev,
+                      fascia: "dinamica",
+                      prezzo: prev.prezzo === "prezzo fisso" ? "prezzo variabile" : prev.prezzo,
+                      mercato: prev.mercato === "placet" ? "ml" : prev.mercato,
+                    }))
+                  }
+                  icon={<FasciaPlanIcon plan="dinamica" />}
+                  title="PUN ora per ora + spread e/o quota fissa del fornitore"
+                >
+                  Dinamica
+                </Chip>
+              </div>
+              {fasciaHint(prefs.fascia) ? (
+                <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                  {fasciaHint(prefs.fascia)}
+                </p>
               ) : null}
-            </div>
-
-            <div className="mt-8 min-h-40">
-              {loading && !result?.hits.length ? (
-                <p className="text-sm text-neutral-500">Carico le offerte…</p>
-              ) : result?.error ? (
-                <p className="text-sm text-red-600 dark:text-red-400">{result.error}</p>
-              ) : result && result.places.length === 0 && prefs.cap.length === 5 ? (
-                <p className="text-sm text-neutral-500">Nessun comune per questo CAP.</p>
-              ) : (
-                <ResultsList
-                  hits={result?.hits ?? []}
-                  total={result?.totalMatched ?? 0}
-                  loading={loading}
-                  fascia={prefs.fascia}
-                  prefs={prefs}
+            </fieldset>
+            <fieldset className="sm:col-span-2">
+              <legend className="text-sm text-neutral-500 dark:text-neutral-400">Pagamento</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <FilterChips
+                  options={PAGAMENTO_FILTERS}
+                  selected={prefs.pagamento}
+                  onChange={(pagamento) => setPrefs((prev) => ({ ...prev, pagamento }))}
                 />
-              )}
-            </div>
-
-            <p className="mt-8 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
-              Quota fissa e spread dalla scheda Portale Offerte. La stima di bolletta arriverà
-              quando avremo anche i prezzi futuri dell&apos;energia. Fonte:{" "}
-              <a
-                href={PORTALE_OFFERTE_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600"
-              >
-                open data Portale Offerte
-              </a>
-              , elaborazione kilowatt e banane.
-            </p>
-            </div>
+              </div>
+            </fieldset>
+            <fieldset className="sm:col-span-2">
+              <legend className="text-sm text-neutral-500 dark:text-neutral-400">Attivazione</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <FilterChips
+                  options={ATTIVAZIONE_FILTERS}
+                  selected={prefs.attivazione}
+                  onChange={(attivazione) => setPrefs((prev) => ({ ...prev, attivazione }))}
+                />
+              </div>
+              <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                Come sottoscrivi. «Qualsiasi canale» vale anche se filtri solo web.
+              </p>
+            </fieldset>
+            <fieldset className="sm:col-span-2">
+              <legend className="text-sm text-neutral-500 dark:text-neutral-400">
+                Quando si attiva
+              </legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <FilterChips
+                  options={CONTRATTO_FILTERS}
+                  selected={prefs.contratto}
+                  onChange={(contratto) => setPrefs((prev) => ({ ...prev, contratto }))}
+                />
+              </div>
+              <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                Cambio fornitore, prima volta, riattivazione o voltura. Se la scheda non lo dice,
+                l’offerta resta in lista.
+              </p>
+            </fieldset>
           </div>
-        </div>
-      </dialog>
+        ) : null}
+      </div>
+
+      <div className="mt-8 min-h-40">
+        {prefs.cap.length !== 5 ? (
+          <p className="text-sm text-neutral-500">Inserisci un CAP di 5 cifre per vedere le offerte.</p>
+        ) : loading && !result?.hits.length ? (
+          <p className="text-sm text-neutral-500">Carico le offerte…</p>
+        ) : result?.error ? (
+          <p className="text-sm text-red-600 dark:text-red-400">{result.error}</p>
+        ) : result && result.places.length === 0 ? (
+          <p className="text-sm text-neutral-500">Nessun comune per questo CAP.</p>
+        ) : (
+          <ResultsList
+            hits={result?.hits ?? []}
+            total={result?.totalMatched ?? 0}
+            loading={loading}
+            fascia={prefs.fascia}
+            prefs={prefs}
+          />
+        )}
+      </div>
+
+      <p className="mt-8 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+        Il prezzo in grande è la stima del primo anno: materia energia con perdite di rete
+        (~10%), rete, oneri, accise e IVA, sul consumo e la potenza che hai messo. Standard
+        segue le stagioni di una casa media; oculato sposta circa un quarto del consumo sui
+        mesi e le ore più convenienti (F3, notti, weekend). Sotto, la media al mese sulla
+        durata in scheda. La curva è mese per mese (12 o 24 mesi); il secondo anno è più
+        chiaro. Non interpoliamo il rinnovo dopo la durata. Per le variabili usiamo, mese per
+        mese, i
+        {" "}
+        <a
+          href={CME_ITB_PAGE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600"
+        >
+          futures CME Italian Power Baseload (GME)
+        </a>
+        {result?.forwardAsOf ? ` al ${formatIsoDate(result.forwardAsOf)}` : ""}
+        {result?.punEurKwh != null
+          ? ` (PUN atteso ${formatCen(result.punEurKwh)} c€/kWh)`
+          : " — curva non ancora disponibile"}
+        . Ogni giorno salviamo uno snapshot nuovo, senza sovrascrivere i precedenti. Non è il
+        numero del Portale Offerte: loro usano forward Acquirente Unico non pubblici. Fonte
+        schede:{" "}
+        <a
+          href={PORTALE_OFFERTE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600"
+        >
+          open data Portale Offerte
+        </a>
+        , elaborazione kilowatt e banane.
+      </p>
     </section>
+  );
+}
+
+function toggleFilterId(list: string[], id: string) {
+  return list.includes(id) ? list.filter((value) => value !== id) : [...list, id];
+}
+
+function FilterChips({
+  options,
+  selected,
+  onChange,
+}: {
+  options: readonly { id: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <>
+      <Chip active={selected.length === 0} onClick={() => onChange([])}>
+        Tutti
+      </Chip>
+      {options.map((option) => (
+        <Chip
+          key={option.id}
+          active={selected.includes(option.id)}
+          onClick={() => onChange(toggleFilterId(selected, option.id))}
+        >
+          {option.label}
+        </Chip>
+      ))}
+    </>
   );
 }
 
@@ -636,7 +716,7 @@ function PotenzaSelect({
     }
     document.addEventListener("mousedown", onPointerDown);
     window.addEventListener("resize", onScrollOrResize);
-    const scroller = triggerRef.current?.closest(".offerte-dialog-scroll");
+    const scroller = triggerRef.current?.closest(".offerte-compare-scroll");
     scroller?.addEventListener("scroll", onScrollOrResize);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
@@ -826,7 +906,7 @@ function PotenzaSelect({
                 })}
               </ul>
             </div>,
-            rootRef.current?.closest("dialog") ?? document.body,
+            rootRef.current ?? document.body,
           )
         : null}
     </div>
@@ -844,7 +924,7 @@ function fasciaHint(fascia: OfferteFascia) {
 }
 
 function buildSearchParams(prefs: Prefs, offset = 0) {
-  return new URLSearchParams({
+  const params = new URLSearchParams({
     cap: prefs.cap,
     cliente: prefs.cliente,
     mercato: prefs.mercato,
@@ -852,9 +932,15 @@ function buildSearchParams(prefs: Prefs, offset = 0) {
     fascia: prefs.fascia,
     consumo: String(prefs.consumoKwh),
     potenza: String(prefs.potenzaKw),
+    residente: prefs.residente ? "1" : "0",
+    profilo: prefs.profilo,
     offset: String(offset),
     limit: String(OFFERTE_SEARCH_PAGE_SIZE),
   });
+  if (prefs.pagamento.length) params.set("pagamento", prefs.pagamento.join(","));
+  if (prefs.attivazione.length) params.set("attivazione", prefs.attivazione.join(","));
+  if (prefs.contratto.length) params.set("contratto", prefs.contratto.join(","));
+  return params;
 }
 
 function ResultsList({
@@ -988,9 +1074,25 @@ function ResultsList({
                       </dd>
                     </div>
                   </dl>
+                  {hit.breakdown ? (
+                    <p className="offerte-hit-muted mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                      {formatEuro(hit.breakdown.energia)} energia
+                      {" · "}
+                      {formatEuro(hit.breakdown.rete)} rete
+                      {" · "}
+                      {formatEuro(hit.breakdown.oneri)} oneri
+                      {" · "}
+                      {formatEuro(hit.breakdown.imposte)} imposte
+                      {hit.breakdown.sconti > 0 ? ` · −${formatEuro(hit.breakdown.sconti)} sconti` : ""}
+                    </p>
+                  ) : null}
                 </div>
+                <YearPrice annualEur={hit.annualEur} months={hit.months} />
                 <ChevronIcon />
               </summary>
+              {hit.months && hit.months.length > 1 ? (
+                <MonthBillChart months={hit.months} />
+              ) : null}
               <OfferDettaglio dettaglio={hit.dettaglio} />
             </details>
           </li>
@@ -1085,6 +1187,167 @@ function formatSpread(hit: OfferteSearchHit) {
     }).format(value);
   if (Math.abs(min - max) < 0.05) return `${fmt(min)} c€/kWh`;
   return `${fmt(min)}–${fmt(max)} c€/kWh`;
+}
+
+function curveHorizonLabel(months: OfferteMonthPoint[]) {
+  return `${months.length} mesi`;
+}
+
+function monthAverageEur(months: OfferteMonthPoint[] | null) {
+  if (!months || months.length === 0) return null;
+  return months.reduce((sum, month) => sum + month.eur, 0) / months.length;
+}
+
+function YearPrice({
+  annualEur,
+  months,
+}: {
+  annualEur: number | null;
+  months: OfferteMonthPoint[] | null;
+}) {
+  const longCurve = (months?.length ?? 0) > 12;
+  const avgMonthEur = monthAverageEur(months);
+  const label =
+    annualEur == null
+      ? "Stima del primo anno non disponibile"
+      : avgMonthEur != null
+        ? `Stima primo anno ${formatEuro(annualEur)}, media ${formatEuro(avgMonthEur)} al mese su ${months!.length} mesi`
+        : `Stima primo anno ${formatEuro(annualEur)}`;
+  return (
+    <div className="shrink-0 text-right" aria-label={label}>
+      <p>
+        <span
+          className={`block font-semibold tabular-nums tracking-tight ${
+            annualEur == null ? "text-lg text-neutral-400 dark:text-neutral-500" : "text-2xl sm:text-3xl"
+          }`}
+        >
+          {annualEur == null ? "n.d." : formatEuro(annualEur)}
+        </span>
+        <span className="offerte-hit-muted mt-0.5 block text-xs text-neutral-500 dark:text-neutral-400">
+          primo anno
+        </span>
+      </p>
+      {avgMonthEur != null ? (
+        <p className="mt-1 text-xs tabular-nums">
+          {formatEuro(avgMonthEur)}
+          <span className="offerte-hit-muted"> / mese</span>
+        </p>
+      ) : null}
+      {months && months.length > 1 ? (
+        <div className="mt-1.5">
+          <MonthBars months={months} height={32} className="ml-auto w-19 sm:w-23" />
+          {longCurve ? (
+            <p className="offerte-hit-muted mt-1 text-[0.65rem] leading-none text-neutral-500 dark:text-neutral-400">
+              {curveHorizonLabel(months)}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function monthBarClass(index: number, count: number) {
+  if (index === 0) return "bg-current";
+  if (count > 12 && index >= 12) return "bg-current/22";
+  return "bg-current/40";
+}
+
+function MonthBars({
+  months,
+  height,
+  className,
+}: {
+  months: OfferteMonthPoint[];
+  height: number;
+  className?: string;
+}) {
+  const values = months.map((month) => month.eur);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const minBar =
+    span === 0 ? Math.round(height * 0.72) : Math.max(6, Math.round(height * 0.22));
+  const minEur = months.reduce((best, month) => Math.min(best, month.eur), months[0]!.eur);
+  const maxEur = months.reduce((best, month) => Math.max(best, month.eur), months[0]!.eur);
+  return (
+    <div
+      className={`flex items-end gap-px ${className ?? ""}`}
+      style={{ height }}
+      role="img"
+      aria-label={`Andamento su ${months.length} mesi, da ${formatEuro(minEur)} a ${formatEuro(maxEur)} al mese`}
+    >
+      {months.map((month, i) => (
+        <span
+          key={month.index}
+          title={`${month.label}: ${formatEuro(month.eur)}`}
+          className={monthBarClass(i, months.length)}
+          style={{
+            height: `${minBar + ((month.eur - min) / span) * (height - minBar)}px`,
+            flex: "1 1 0%",
+            minWidth: 1,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MonthBillChart({ months }: { months: OfferteMonthPoint[] }) {
+  const values = months.map((month) => month.eur);
+  const minEur = Math.min(...values);
+  const maxEur = Math.max(...values);
+  const avgEur = monthAverageEur(months);
+  const first = months[0]!;
+  const last = months[months.length - 1]!;
+  const yearMark = months.length > 12 ? months[11] : null;
+  const splitPct = months.length > 12 ? (12 / months.length) * 100 : null;
+  return (
+    <div className="pt-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm font-medium">Andamento su {curveHorizonLabel(months)}</p>
+        <p className="offerte-hit-muted text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+          {avgEur != null ? `media ${formatEuro(avgEur)}/mese` : `${formatEuro(minEur)}–${formatEuro(maxEur)}/mese`}
+        </p>
+      </div>
+      <div className="relative mt-2">
+        <MonthBars months={months} height={112} className="w-full" />
+        {splitPct != null ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 border-l border-current/25"
+            style={{ left: `${splitPct}%` }}
+          />
+        ) : null}
+      </div>
+      <div className="offerte-hit-muted mt-1.5 flex justify-between gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+        <span>{first.label}</span>
+        {yearMark ? <span className="hidden sm:inline">fine 1° anno · {yearMark.label}</span> : null}
+        <span>{last.label}</span>
+      </div>
+    </div>
+  );
+}
+
+function formatEuro(value: number) {
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatCen(value: number) {
+  return new Intl.NumberFormat("it-IT", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  }).format(value * 100);
+}
+
+function formatIsoDate(iso: string) {
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
 }
 
 function formatIt(value: number) {

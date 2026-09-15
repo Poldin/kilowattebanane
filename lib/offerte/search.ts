@@ -1,26 +1,40 @@
+import { fasciaSharesFor, parseConsumoProfilo } from "@/lib/offerte/consumo-profile";
+import { estimateOfferBill } from "@/lib/offerte/bill";
 import { offerteReadClient, paginateSelect } from "@/lib/offerte/db";
 import { romeToday } from "@/lib/offerte/dates";
 import type { MlComponentInput } from "@/lib/offerte/estimate";
 import { resolveOffertePlan } from "@/lib/offerte/codice";
+import { loadPunForwardBlend } from "@/lib/offerte/forward";
+import {
+  kernelFromRow,
+  mlKernel,
+  placetKernel,
+  type OfferKernel,
+} from "@/lib/offerte/kernel";
 import { compareOfferFacts, mlFacts, placetFacts } from "@/lib/offerte/metrics";
 import {
   formatScontoValore,
+  matchesAttivazioneFilter,
+  matchesContrattoFilter,
+  matchesPagamentoFilter,
   mlOfferDettaglio,
   placetOfferDettaglio,
 } from "@/lib/offerte/portal-labels";
 import {
   OFFERTE_SEARCH_PAGE_SIZE,
   type CapPlace,
-  type OfferteFascia,
   type OfferteSearchHit,
   type OfferteSearchQuery,
   type OfferteSearchResult,
   type OfferteSconto,
 } from "@/lib/offerte/public-types";
+import { loadParametriMap, regulatedStack } from "@/lib/offerte/regulated";
+import { loadLatestPunShape } from "@/lib/offerte/shape";
 
 export type {
   CapPlace,
   OfferteCliente,
+  OfferteConsumoProfilo,
   OfferteFascia,
   OfferteMercato,
   OffertePrezzo,
@@ -102,7 +116,14 @@ type MlScontoRow = {
   descrizione: string | null;
   valore: number | string | null;
   unita_misura: string | null;
+  tipologia_prezzo: string | null;
+  validita: string | null;
+  condizione_applicazione: string | null;
+  descrizione_condizione: string | null;
+  iva_sconto: string | null;
 };
+
+type MlDispRow = { offer_id: number; valore: number | string | null; nome: string | null };
 
 type MlCompRow = MlComponentInput & { offer_id: number };
 
@@ -168,7 +189,15 @@ export async function searchOfferte(
   const cap = query.cap.replace(/\D/g, "");
   const places = await lookupCap(cap);
   if (places.length === 0) {
-    return { cap, places: [], punEurKwh: null, hits: [], totalMatched: 0 };
+    return {
+      cap,
+      places: [],
+      punEurKwh: null,
+      forwardAsOf: null,
+      forwardSource: null,
+      hits: [],
+      totalMatched: 0,
+    };
   }
 
   const today = romeToday();
@@ -229,20 +258,61 @@ export async function searchOfferte(
       inBound(query.potenzaKw, row.potenza_min, row.potenza_max),
   );
 
-  const componenti = await loadComponenti(mlCovered.map((row) => row.id));
+  const mlIds = mlCovered.map((row) => row.id);
+  const placetIds = placetCovered.map((row) => row.id);
+  const [componenti, kernels, dispacciamento, scontiAll, params, forward, shape] =
+    await Promise.all([
+      loadComponenti(mlIds),
+      loadKernels(placetIds, mlIds),
+      loadDispacciamento(mlIds),
+      loadScontiRaw(mlIds),
+      loadParametriMap(),
+      loadPunForwardBlend(today),
+      loadLatestPunShape(),
+    ]);
   const byOffer = new Map<number, MlCompRow[]>();
   for (const row of componenti) {
     const list = byOffer.get(row.offer_id) ?? [];
     list.push(row);
     byOffer.set(row.offer_id, list);
   }
+  const byDisp = groupByOffer(dispacciamento);
+  const byScontoRaw = groupByOffer(scontiAll);
+  const residente = query.residente !== false;
+  const regulated = regulatedStack(params, {
+    cliente: query.cliente,
+    residente,
+    potenzaKw: query.potenzaKw,
+  });
+  const profilo = parseConsumoProfilo(query.profilo);
+  const shares =
+    query.shareF1 != null || query.shareF2 != null || query.shareF3 != null
+      ? { f1: query.shareF1, f2: query.shareF2, f3: query.shareF3 }
+      : fasciaSharesFor(profilo);
 
-  type RankedHit = OfferteSearchHit & { mlOfferId?: number };
+  type RankedHit = OfferteSearchHit & { mlOfferId?: number; kernel?: OfferKernel };
 
   const hits: RankedHit[] = [
     ...placetCovered.map((row) => {
       const tipoOfferta = row.tipo_offerta ?? "";
       const facts = placetFacts(row);
+      const plan = resolveOffertePlan(
+        { source: "placet", tipoOfferta, codOfferta: row.cod_offerta },
+        facts.plan,
+      );
+      const kernel =
+        kernels.get(`placet:${row.id}`) ??
+        placetKernel({ ...row, plan });
+      const bill = estimateOfferBill(kernel, {
+        consumoKwh: query.consumoKwh,
+        potenzaKw: query.potenzaKw,
+        shares,
+        profilo,
+        regulated,
+        forward,
+        shape,
+        durataMesi: PLACET_DURATA_MESI,
+      });
       return {
         source: "placet" as const,
         codOfferta: row.cod_offerta,
@@ -254,21 +324,58 @@ export async function searchOfferte(
         validTo: row.valid_to,
         durataMesi: PLACET_DURATA_MESI,
         ...facts,
-        plan: resolveOffertePlan(
-          { source: "placet", tipoOfferta, codOfferta: row.cod_offerta },
-          facts.plan,
-        ),
+        plan,
         urlOfferta: row.url_offerta,
         urlVenditore: row.url_sito_venditore,
+        annualEur: bill?.annualEur ?? null,
+        firstMonthEur: bill?.firstMonthEur ?? null,
+        months: bill?.months.map(({ index, start, label, eur }) => ({
+          index,
+          start,
+          label,
+          eur,
+        })) ?? null,
+        breakdown: bill?.breakdown ?? null,
         dettaglio: placetOfferDettaglio(row),
       };
     }),
     ...mlCovered.map((row) => {
       const tipoOfferta = row.tipo_offerta ?? "";
+      const components = byOffer.get(row.id) ?? [];
       const facts = mlFacts({
         tipo_offerta: row.tipo_offerta,
         tipologia_fasce: row.tipologia_fasce,
-        components: byOffer.get(row.id) ?? [],
+        components,
+      });
+      const plan = resolveOffertePlan(
+        { source: "ml", tipoOfferta, codOfferta: row.cod_offerta },
+        facts.plan,
+      );
+      const kernel =
+        kernels.get(`ml:${row.id}`) ??
+        mlKernel({
+          id: row.id,
+          cod_offerta: row.cod_offerta,
+          tipo_cliente: row.tipo_cliente,
+          tipo_offerta: row.tipo_offerta,
+          idx_prezzo_energia: row.idx_prezzo_energia,
+          coefficiente: row.coefficiente,
+          plan,
+          components,
+          dispacciamento: byDisp.get(row.id) ?? [],
+          sconti: byScontoRaw.get(row.id) ?? [],
+        });
+      const durataMesi = normalizeDurata(row.durata);
+      const bill = estimateOfferBill(kernel, {
+        consumoKwh: query.consumoKwh,
+        potenzaKw: query.potenzaKw,
+        shares,
+        profilo,
+        regulated,
+        forward,
+        shape,
+        sconti: byScontoRaw.get(row.id) ?? [],
+        durataMesi,
       });
       return {
         source: "ml" as const,
@@ -280,22 +387,39 @@ export async function searchOfferte(
         tipoOfferta,
         validFrom: row.valid_from,
         validTo: row.valid_to,
-        durataMesi: normalizeDurata(row.durata),
+        durataMesi,
         ...facts,
-        plan: resolveOffertePlan(
-          { source: "ml", tipoOfferta, codOfferta: row.cod_offerta },
-          facts.plan,
-        ),
+        plan,
         urlOfferta: row.url_offerta,
         urlVenditore: row.url_sito_venditore,
+        annualEur: bill?.annualEur ?? null,
+        firstMonthEur: bill?.firstMonthEur ?? null,
+        months: bill?.months.map(({ index, start, label, eur }) => ({
+          index,
+          start,
+          label,
+          eur,
+        })) ?? null,
+        breakdown: bill?.breakdown ?? null,
         dettaglio: mlOfferDettaglio(row),
       };
     }),
   ];
 
-  const filtered = hits.filter((hit) => matchesFasciaFilter(hit, query.fascia));
+  const filtered = hits.filter(
+    (hit) =>
+      matchesFasciaFilter(hit, query.fascia) &&
+      matchesPagamentoFilter(hit.dettaglio.pagamento, query.pagamento) &&
+      matchesAttivazioneFilter(hit.dettaglio.attivazione, query.attivazione) &&
+      matchesContrattoFilter(hit.dettaglio.tipologiaContratto, query.contratto),
+  );
 
   filtered.sort((a, b) => {
+    if (a.annualEur != null && b.annualEur != null && a.annualEur !== b.annualEur) {
+      return a.annualEur - b.annualEur;
+    }
+    if (a.annualEur != null && b.annualEur == null) return -1;
+    if (a.annualEur == null && b.annualEur != null) return 1;
     const byFacts = compareOfferFacts(a, b);
     if (byFacts !== 0) return byFacts;
     return a.nome.localeCompare(b.nome, "it");
@@ -307,14 +431,16 @@ export async function searchOfferte(
     Math.max(1, query.limit ?? OFFERTE_SEARCH_PAGE_SIZE),
   );
   const ranked = filtered.slice(offset, offset + limit);
-  const scontiByOffer = await loadSconti(
-    ranked.flatMap((hit) => (hit.mlOfferId != null ? [hit.mlOfferId] : [])),
+  const scontiByOffer = formatScontiMap(
+    ranked.flatMap((hit) => (hit.mlOfferId != null ? (byScontoRaw.get(hit.mlOfferId) ?? []) : [])),
   );
 
   return {
     cap,
     places,
-    punEurKwh: null,
+    punEurKwh: forward.punEurKwh,
+    forwardAsOf: forward.asOf,
+    forwardSource: forward.source,
     totalMatched: filtered.length,
     hits: ranked.map(({ mlOfferId, ...hit }) => ({
       ...hit,
@@ -379,9 +505,26 @@ async function loadComponenti(offerIds: number[]) {
   return rows;
 }
 
-async function loadSconti(offerIds: number[]) {
-  const byOffer = new Map<number, OfferteSconto[]>();
-  if (offerIds.length === 0) return byOffer;
+async function loadDispacciamento(offerIds: number[]) {
+  if (offerIds.length === 0) return [] as MlDispRow[];
+  const client = offerteReadClient();
+  const rows: MlDispRow[] = [];
+  for (let i = 0; i < offerIds.length; i += 200) {
+    const slice = offerIds.slice(i, i + 200);
+    const page = await paginateSelect<MlDispRow>((from, to) =>
+      client
+        .from("po_ml_e_dispacciamento")
+        .select("offer_id, valore, nome")
+        .in("offer_id", slice)
+        .range(from, to),
+    );
+    rows.push(...page);
+  }
+  return rows;
+}
+
+async function loadScontiRaw(offerIds: number[]) {
+  if (offerIds.length === 0) return [] as MlScontoRow[];
   const client = offerteReadClient();
   const rows: MlScontoRow[] = [];
   for (let i = 0; i < offerIds.length; i += 200) {
@@ -389,12 +532,54 @@ async function loadSconti(offerIds: number[]) {
     const page = await paginateSelect<MlScontoRow>((from, to) =>
       client
         .from("po_ml_e_sconti")
-        .select("offer_id, nome, descrizione, valore, unita_misura")
+        .select(
+          "offer_id, nome, descrizione, valore, unita_misura, tipologia_prezzo, validita, condizione_applicazione, descrizione_condizione, iva_sconto",
+        )
         .in("offer_id", slice)
         .range(from, to),
     );
     rows.push(...page);
   }
+  return rows;
+}
+
+async function loadKernels(placetIds: number[], mlIds: number[]) {
+  const map = new Map<string, OfferKernel>();
+  const client = offerteReadClient();
+  async function loadSource(source: "placet" | "ml", ids: number[]) {
+    if (ids.length === 0) return;
+    for (let i = 0; i < ids.length; i += 200) {
+      const slice = ids.slice(i, i + 200);
+      const page = await paginateSelect<Record<string, unknown>>((from, to) =>
+        client
+          .from("po_offer_kernel")
+          .select("*")
+          .eq("source", source)
+          .in("offer_id", slice)
+          .range(from, to),
+      );
+      for (const row of page) {
+        const kernel = kernelFromRow(row);
+        map.set(`${kernel.source}:${kernel.offerId}`, kernel);
+      }
+    }
+  }
+  await Promise.all([loadSource("placet", placetIds), loadSource("ml", mlIds)]);
+  return map;
+}
+
+function groupByOffer<T extends { offer_id: number }>(rows: T[]) {
+  const map = new Map<number, T[]>();
+  for (const row of rows) {
+    const list = map.get(row.offer_id) ?? [];
+    list.push(row);
+    map.set(row.offer_id, list);
+  }
+  return map;
+}
+
+function formatScontiMap(rows: MlScontoRow[]) {
+  const byOffer = new Map<number, OfferteSconto[]>();
   for (const row of rows) {
     const list = byOffer.get(row.offer_id) ?? [];
     const nome = row.nome?.replace(/\s+/g, " ").trim() || "Sconto";

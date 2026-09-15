@@ -7,5 +7,6 @@ export function revalidateOfferte() {
   revalidateTag(OFFERTE_CACHE_TAG, "max");
   revalidatePath("/");
   revalidatePath("/offer-stats");
+  revalidatePath("/offer-compare");
   revalidatePath("/api/offerte/stats", "page");
 }

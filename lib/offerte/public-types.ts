@@ -1,5 +1,7 @@
 export const PORTALE_OFFERTE_URL =
   "https://www.ilportaleofferte.it/portaleOfferte/it/open-data.page";
+export const CME_ITB_PAGE_URL =
+  "https://www.cmegroup.com/markets/energy/electricity/italian-power-baseload-gme-calendar-month.html";
 export const PORTALE_OFFERTE_HOME =
   "https://www.ilportaleofferte.it/portaleOfferte/it/homepage.page";
 export const PORTALE_OFFERTE_CERCA =
@@ -9,6 +11,7 @@ export type OfferteCliente = "domestico" | "non domestico";
 export type OfferteMercato = "tutti" | "placet" | "ml";
 export type OffertePrezzo = "tutti" | "prezzo fisso" | "prezzo variabile";
 export type OfferteFascia = "tutti" | "monoraria" | "bioraria" | "fasce" | "dinamica";
+export type OfferteConsumoProfilo = "standard" | "oculato";
 
 export const OFFERTE_SEARCH_PAGE_SIZE = 40;
 
@@ -20,8 +23,31 @@ export type OfferteSearchQuery = {
   fascia: OfferteFascia;
   consumoKwh: number;
   potenzaKw: number;
+  residente?: boolean;
+  profilo?: OfferteConsumoProfilo;
+  pagamento?: string[];
+  attivazione?: string[];
+  contratto?: string[];
+  shareF1?: number;
+  shareF2?: number;
+  shareF3?: number;
   offset?: number;
   limit?: number;
+};
+
+export type OfferteBillBreakdown = {
+  energia: number;
+  rete: number;
+  oneri: number;
+  imposte: number;
+  sconti: number;
+};
+
+export type OfferteMonthPoint = {
+  index: number;
+  start: string;
+  label: string;
+  eur: number;
 };
 
 export type CapPlace = {
@@ -77,6 +103,10 @@ export type OfferteSearchHit = {
   plan: "monoraria" | "bioraria" | "fasce" | "dinamica" | null;
   urlOfferta: string | null;
   urlVenditore: string | null;
+  annualEur: number | null;
+  firstMonthEur: number | null;
+  months: OfferteMonthPoint[] | null;
+  breakdown: OfferteBillBreakdown | null;
   dettaglio: OfferteHitDettaglio;
 };
 
@@ -84,6 +114,8 @@ export type OfferteSearchResult = {
   cap: string;
   places: CapPlace[];
   punEurKwh: number | null;
+  forwardAsOf: string | null;
+  forwardSource: string | null;
   hits: OfferteSearchHit[];
   totalMatched: number;
 };

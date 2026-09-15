@@ -25,13 +25,6 @@ export function Footer() {
     window.location.href = `/#${PRICES_SECTION_ID}`;
   }
 
-  function showOfferte(event: React.MouseEvent<HTMLAnchorElement>) {
-    const el = document.getElementById("offerte");
-    if (!el) return;
-    event.preventDefault();
-    el.scrollIntoView({ behavior: "smooth" });
-  }
-
   return (
     <footer className="mt-auto border-t border-neutral-200 dark:border-neutral-800">
       <div className="mx-auto grid w-full max-w-3xl gap-8 px-1 py-8 sm:px-6 md:grid-cols-3 md:items-start md:gap-6 md:py-10">
@@ -61,7 +54,7 @@ export function Footer() {
               </button>
             </li>
             <li>
-              <Link href="/#offerte" onClick={showOfferte} className={itemClass}>
+              <Link href="/offer-compare" className={itemClass}>
                 offerte
               </Link>
             </li>

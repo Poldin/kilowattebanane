@@ -1,3 +1,10 @@
+import { parseConsumoProfilo } from "@/lib/offerte/consumo-profile";
+import {
+  ATTIVAZIONE_FILTERS,
+  CONTRATTO_FILTERS,
+  PAGAMENTO_FILTERS,
+  parsePortalFilterIds,
+} from "@/lib/offerte/portal-labels";
 import { OFFERTE_SEARCH_PAGE_SIZE } from "@/lib/offerte/public-types";
 import { clampPotenzaKw } from "@/lib/offerte/potenza";
 import { lookupCap, searchOfferte, type OfferteSearchQuery } from "@/lib/offerte/search";
@@ -30,6 +37,9 @@ function asQuery(params: URLSearchParams): OfferteSearchQuery | Response {
   const potenzaKw = Number(params.get("potenza") ?? "3");
   const offsetRaw = Number(params.get("offset") ?? "0");
   const limitRaw = Number(params.get("limit") ?? String(OFFERTE_SEARCH_PAGE_SIZE));
+  const shareF1 = Number(params.get("f1") ?? "");
+  const shareF2 = Number(params.get("f2") ?? "");
+  const shareF3 = Number(params.get("f3") ?? "");
   return {
     cap,
     cliente,
@@ -38,6 +48,14 @@ function asQuery(params: URLSearchParams): OfferteSearchQuery | Response {
     fascia,
     consumoKwh: Number.isFinite(consumoKwh) ? Math.min(20000, Math.max(500, consumoKwh)) : 2700,
     potenzaKw: clampPotenzaKw(potenzaKw, cliente),
+    residente: params.get("residente") !== "0",
+    profilo: parseConsumoProfilo(params.get("profilo")),
+    pagamento: parsePortalFilterIds(params.get("pagamento"), PAGAMENTO_FILTERS),
+    attivazione: parsePortalFilterIds(params.get("attivazione"), ATTIVAZIONE_FILTERS),
+    contratto: parsePortalFilterIds(params.get("contratto"), CONTRATTO_FILTERS),
+    shareF1: Number.isFinite(shareF1) ? shareF1 : undefined,
+    shareF2: Number.isFinite(shareF2) ? shareF2 : undefined,
+    shareF3: Number.isFinite(shareF3) ? shareF3 : undefined,
     offset: Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0,
     limit: Number.isFinite(limitRaw)
       ? Math.min(OFFERTE_SEARCH_PAGE_SIZE, Math.max(1, Math.floor(limitRaw)))
