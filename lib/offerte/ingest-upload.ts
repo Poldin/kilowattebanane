@@ -26,8 +26,15 @@ export async function ingestUploadedOfferteFiles(files: DownloadedFile[]) {
         summary.kind === "placet_e" || summary.kind === "ml_e" || summary.kind === "parametri_e",
     )
   ) {
-    await rebuildOfferKernels();
-    revalidateOfferte();
+    try {
+      await rebuildOfferKernels();
+      revalidateOfferte();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Rebuild fallito.";
+      throw new Error(
+        `File importati correttamente, ma l'indice di ricerca non è stato aggiornato: ${detail}. Usa "Rigenera indice" senza ricaricare i file.`,
+      );
+    }
   }
 
   return summaries;

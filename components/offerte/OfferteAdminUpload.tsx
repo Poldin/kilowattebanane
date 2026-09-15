@@ -75,6 +75,8 @@ export function OfferteAdminUpload() {
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<string | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<Summary[] | null>(null);
 
@@ -150,6 +152,36 @@ export function OfferteAdminUpload() {
     setAuthenticated(false);
     setStatus(null);
     setSummaries(null);
+  }
+
+  async function handleRebuild() {
+    setRebuildMessage(null);
+    setUploadError(null);
+    setRebuilding(true);
+    try {
+      const response = await fetch("/api/admin/offerte/rebuild", {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        rebuilt?: number;
+      };
+      if (!response.ok) {
+        setRebuildMessage(payload.error ?? "Rebuild fallito.");
+        return;
+      }
+      setRebuildMessage(
+        payload.rebuilt != null
+          ? `Indice rigenerato: ${payload.rebuilt} offerte.`
+          : "Indice rigenerato.",
+      );
+      await loadStatus();
+    } catch {
+      setRebuildMessage("Rebuild fallito. Riprova.");
+    } finally {
+      setRebuilding(false);
+    }
   }
 
   async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
@@ -306,14 +338,35 @@ export function OfferteAdminUpload() {
             ))}
           </ul>
         </div>
-        <button
-          type="button"
-          onClick={() => void handleLogout()}
-          className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-        >
-          Esci
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void handleRebuild()}
+            disabled={rebuilding || uploading}
+            className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            {rebuilding ? "Rigenero indice…" : "Rigenera indice"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            Esci
+          </button>
+        </div>
       </div>
+      {rebuildMessage ? (
+        <p
+          className={`text-sm ${
+            rebuildMessage.includes("fallito")
+              ? "text-red-600 dark:text-red-400"
+              : "text-green-700 dark:text-green-400"
+          }`}
+        >
+          {rebuildMessage}
+        </p>
+      ) : null}
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium tracking-tight">Come scaricare i file</h2>

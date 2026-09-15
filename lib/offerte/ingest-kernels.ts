@@ -62,6 +62,18 @@ async function loadByIds<T>(
   return rows;
 }
 
+function dedupeKernelRows<T extends { source: string; offer_id: number }>(rows: T[]) {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const key = `${row.source}:${row.offer_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
 function groupByOffer<T extends { offer_id: number }>(rows: T[]) {
   const map = new Map<number, T[]>();
   for (const row of rows) {
@@ -84,6 +96,7 @@ export async function rebuildOfferKernels() {
       )
       .lte("valid_from", today)
       .gte("valid_to", today)
+      .order("id")
       .range(from, to),
   );
   const ml = await paginateSelect<MlLive>((from, to) =>
@@ -92,6 +105,7 @@ export async function rebuildOfferKernels() {
       .select("id, cod_offerta, tipo_cliente, tipo_offerta, idx_prezzo_energia, coefficiente, tipologia_fasce")
       .lte("valid_from", today)
       .gte("valid_to", today)
+      .order("id")
       .range(from, to),
   );
 
@@ -145,8 +159,13 @@ export async function rebuildOfferKernels() {
     }),
   ];
 
-  const rows = kernels.map(kernelToRow);
-  await client.from("po_offer_kernel").delete().neq("cod_offerta", "");
+  const rows = dedupeKernelRows(kernels.map(kernelToRow));
+  const { error: deleteError } = await client
+    .from("po_offer_kernel")
+    .delete()
+    .in("source", ["placet", "ml"]);
+  if (deleteError) throw new Error(deleteError.message);
+
   for (const group of chunk(rows, 200)) {
     const { error } = await client.from("po_offer_kernel").insert(group);
     if (error) throw new Error(error.message);
