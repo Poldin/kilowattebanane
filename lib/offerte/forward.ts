@@ -145,8 +145,13 @@ export function monthlyPunFromPoints(
 }
 
 export function blendPunFromPoints(points: ForwardPoint[], asOf: string): PunForwardBlend {
-  const latestAsOf = points.reduce((best, row) => (row.asOf > best ? row.asOf : best), asOf);
-  const snapshot = points.filter((row) => row.asOf === latestAsOf);
+  const latestAsOf = points.reduce(
+    (best, row) => (row.asOf > best ? row.asOf : best),
+    points[0]?.asOf ?? "",
+  );
+  const snapshot = latestAsOf
+    ? points.filter((row) => row.asOf === latestAsOf)
+    : [];
   const quarters = nextFourQuarters(asOf).map((q) => ({
     quarter: q.quarter,
     year: q.year,

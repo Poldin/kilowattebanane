@@ -131,24 +131,34 @@ async function readCmePayload(url: string, headers: Record<string, string>) {
 
 export async function fetchCmeItalianPowerForwards(snapshotDate: string): Promise<CmeFetchResult> {
   const quotesUrl = `${CME_ITB_QUOTES_URL}?isProtected&_t=${Date.now()}`;
-  const direct = await readCmePayload(quotesUrl, {
-    accept: "application/json, text/plain, */*",
-    "user-agent": UA,
-    referer: CME_ITB_PAGE_URL,
-    origin: "https://www.cmegroup.com",
-  });
-
   let payload: unknown;
   let sourceUrl = CME_ITB_QUOTES_URL;
-  if (direct.ok) {
-    payload = jsonFromMaybeMarkdown(direct.text);
-  } else {
+  let directStatus: number | null = null;
+
+  try {
+    const direct = await readCmePayload(quotesUrl, {
+      accept: "application/json, text/plain, */*",
+      "user-agent": UA,
+      referer: CME_ITB_PAGE_URL,
+      origin: "https://www.cmegroup.com",
+    });
+    directStatus = direct.status;
+    if (direct.ok) {
+      payload = jsonFromMaybeMarkdown(direct.text);
+    }
+  } catch {
+    directStatus = directStatus ?? 0;
+  }
+
+  if (payload == null) {
     const jina = await readCmePayload(`https://r.jina.ai/${CME_ITB_QUOTES_URL}?isProtected`, {
       accept: "text/plain",
       "user-agent": UA,
     });
     if (!jina.ok) {
-      throw new Error(`CME ITB HTTP ${direct.status}; mirror HTTP ${jina.status}`);
+      throw new Error(
+        `CME ITB HTTP ${directStatus ?? "error"}; mirror HTTP ${jina.status}`,
+      );
     }
     payload = jsonFromMaybeMarkdown(jina.text);
     sourceUrl = `https://r.jina.ai/${CME_ITB_QUOTES_URL}`;
