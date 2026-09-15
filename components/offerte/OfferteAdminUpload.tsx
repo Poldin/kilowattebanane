@@ -74,6 +74,7 @@ export function OfferteAdminUpload() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<Summary[] | null>(null);
 
@@ -156,28 +157,87 @@ export function OfferteAdminUpload() {
     setUploadError(null);
     setSummaries(null);
     setUploading(true);
+    setUploadPhase("Preparazione…");
+    const form = event.currentTarget;
     try {
-      const form = new FormData(event.currentTarget);
-      const response = await fetch("/api/admin/offerte/upload", {
+      const fileInput = form.elements.namedItem("files");
+      const selected =
+        fileInput instanceof HTMLInputElement && fileInput.files
+          ? [...fileInput.files]
+          : [];
+      if (selected.length === 0) {
+        setUploadError("Seleziona almeno un file.");
+        return;
+      }
+
+      const prepareRes = await fetch("/api/admin/offerte/upload/prepare", {
         method: "POST",
-        headers: authHeaders(),
-        body: form,
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          files: selected.map((file) => ({ name: file.name })),
+        }),
       });
-      const payload = (await response.json()) as {
+      const prepared = (await prepareRes.json()) as {
+        error?: string;
+        uploads?: Array<{ path: string; filename: string; signedUrl: string }>;
+      };
+      if (!prepareRes.ok || !prepared.uploads?.length) {
+        setUploadError(prepared.error ?? "Preparazione upload fallita.");
+        return;
+      }
+
+      const byName = new Map(selected.map((file) => [file.name, file]));
+      for (const slot of prepared.uploads) {
+        const file = byName.get(slot.filename);
+        if (!file) {
+          setUploadError(`File mancante: ${slot.filename}`);
+          return;
+        }
+        setUploadPhase(`Caricamento ${slot.filename}…`);
+        const putRes = await fetch(slot.signedUrl, {
+          method: "PUT",
+          body: file,
+          headers: file.type ? { "Content-Type": file.type } : undefined,
+        });
+        if (!putRes.ok) {
+          setUploadError(`Upload fallito per ${slot.filename}.`);
+          return;
+        }
+      }
+
+      setUploadPhase("Import in corso…");
+      const ingestRes = await fetch("/api/admin/offerte/upload", {
+        method: "POST",
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          uploads: prepared.uploads.map((slot) => ({
+            path: slot.path,
+            filename: slot.filename,
+          })),
+        }),
+      });
+      const payload = (await ingestRes.json()) as {
         error?: string;
         summaries?: Summary[];
       };
-      if (!response.ok) {
+      if (!ingestRes.ok) {
         setUploadError(payload.error ?? "Import fallito.");
         return;
       }
       setSummaries(payload.summaries ?? []);
-      event.currentTarget.reset();
+      form.reset();
       await loadStatus();
     } catch {
       setUploadError("Import fallito. Riprova.");
     } finally {
       setUploading(false);
+      setUploadPhase(null);
     }
   }
 
@@ -327,7 +387,8 @@ export function OfferteAdminUpload() {
             className="mt-2 block w-full max-w-lg text-sm text-neutral-600 file:mr-3 file:rounded-md file:border-0 file:bg-neutral-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-neutral-200 dark:text-neutral-400 dark:file:bg-neutral-900 dark:hover:file:bg-neutral-800"
           />
           <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-            Accetta i nomi standard ARERA: PLACET CSV, ML XML, Parametri CSV.
+            Accetta i nomi standard ARERA: PLACET CSV, ML XML, Parametri CSV. L&apos;XML
+            grande viene caricato direttamente su Supabase, non passa da Vercel.
           </p>
         </div>
         <button
@@ -335,7 +396,7 @@ export function OfferteAdminUpload() {
           disabled={uploading}
           className="h-11 rounded-md border border-neutral-200 bg-neutral-900 px-4 text-sm text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
         >
-          {uploading ? "Import in corso…" : "Importa"}
+          {uploading ? (uploadPhase ?? "Import in corso…") : "Importa"}
         </button>
         {uploadError ? (
           <p className="text-sm text-red-600 dark:text-red-400">{uploadError}</p>
