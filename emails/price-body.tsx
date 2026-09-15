@@ -1,6 +1,10 @@
 import { Button, Column, Img, Link, Row, Section, Text } from "react-email";
 import type { PriceMailModel } from "@/lib/mail/content";
 import { MAIL_CHART_DISPLAY_H, MAIL_CHART_DISPLAY_W } from "@/lib/mail/chart";
+import {
+  MAIL_OUTLOOK_DISPLAY_H,
+  MAIL_OUTLOOK_DISPLAY_W,
+} from "@/lib/mail/outlook-chart";
 import { LOOKBACK_SECTION_ID } from "@/lib/lookback";
 
 const YEAR_TONE = {
@@ -26,6 +30,8 @@ export function PriceDigestBody({
   model: PriceMailModel;
   intro?: string;
 }) {
+  const hasHints = model.kpiColumns.some((column) => column.hint);
+
   return (
     <>
       {intro ? <Text style={styles.intro}>{intro}</Text> : null}
@@ -43,6 +49,60 @@ export function PriceDigestBody({
       </Link>
       <Text style={styles.tip}>{model.bestTip}</Text>
       {model.worstTip ? <Text style={styles.worst}>{model.worstTip}</Text> : null}
+
+      {model.kpiColumns.length > 0 ? (
+        <Section style={styles.kpiWrap}>
+          <table style={styles.kpiTable} cellPadding={0} cellSpacing={0}>
+            <thead>
+              <tr>
+                {model.kpiColumns.map((column, index) => (
+                  <th
+                    key={column.key}
+                    style={{
+                      ...styles.kpiHead,
+                      ...(index > 0 ? styles.kpiDivider : {}),
+                      ...(column.color ? { color: column.color } : {}),
+                    }}
+                  >
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {model.kpiColumns.map((column, index) => (
+                  <td
+                    key={column.key}
+                    style={{
+                      ...styles.kpiValue,
+                      ...(index > 0 ? styles.kpiDivider : {}),
+                      ...(column.color ? { color: column.color } : {}),
+                    }}
+                  >
+                    {column.value}
+                  </td>
+                ))}
+              </tr>
+              {hasHints ? (
+                <tr>
+                  {model.kpiColumns.map((column, index) => (
+                    <td
+                      key={column.key}
+                      style={{
+                        ...styles.kpiHint,
+                        ...(index > 0 ? styles.kpiDivider : {}),
+                      }}
+                    >
+                      {column.hint ?? ""}
+                    </td>
+                  ))}
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </Section>
+      ) : null}
 
       {model.yearPercentile ? (
         <Text style={styles.yearLine}>
@@ -64,40 +124,15 @@ export function PriceDigestBody({
         </Text>
       ) : null}
 
-      {model.fasciaStats.length > 0 ? (
-        <Row style={styles.stats}>
-          {model.fasciaStats.map((stat) => (
-            <Column key={stat.id}>
-              <Text style={{ ...styles.statLabel, color: stat.color }}>
-                {stat.mark === "cheap" ? "🍌 " : stat.mark === "peak" ? "🐵 " : ""}
-                {stat.label}
-              </Text>
-              <Text style={{ ...styles.statValue, color: stat.color }}>
-                {stat.priceLabel}
-              </Text>
-              {stat.rangeLabel ? (
-                <Text style={styles.statHint}>{stat.rangeLabel}</Text>
-              ) : null}
-            </Column>
-          ))}
-        </Row>
-      ) : null}
-
-      <Row style={styles.stats}>
-        <Column>
-          <Text style={styles.statLabel}>min</Text>
-          <Text style={styles.statValue}>{model.minLabel}</Text>
-        </Column>
-        <Column>
-          <Text style={styles.statLabel}>medio</Text>
-          <Text style={styles.statValue}>{model.avgLabel}</Text>
-        </Column>
-        <Column>
-          <Text style={styles.statLabel}>max</Text>
-          <Text style={styles.statValue}>{model.maxLabel}</Text>
-        </Column>
-      </Row>
-      <Text style={styles.unit}>c€/kWh all&apos;ingrosso</Text>
+      <Link href={model.ctaUrl} style={styles.chartLink}>
+        <Img
+          src={model.outlookChartUrl}
+          alt={`Prezzo medio mensile su 13 mesi, zona ${model.zoneName}, ${model.tariffLabel}`}
+          width={MAIL_OUTLOOK_DISPLAY_W}
+          height={MAIL_OUTLOOK_DISPLAY_H}
+          style={styles.chart}
+        />
+      </Link>
 
       <Button href={model.ctaUrl} style={styles.button}>
         Vedi il grafico interattivo
@@ -157,6 +192,42 @@ const styles = {
     lineHeight: "22px",
     margin: "0 0 12px",
   },
+  kpiWrap: {
+    margin: "0 0 16px",
+  },
+  kpiTable: {
+    border: "1px solid #e5e5e5",
+    borderCollapse: "collapse" as const,
+    borderRadius: "6px",
+  },
+  kpiHead: {
+    backgroundColor: "#fafafa",
+    borderBottom: "1px solid #e5e5e5",
+    color: "#737373",
+    fontSize: "10px",
+    fontWeight: 600,
+    letterSpacing: "0.06em",
+    padding: "6px 10px",
+    textAlign: "left" as const,
+    textTransform: "uppercase" as const,
+  },
+  kpiValue: {
+    color: "#111111",
+    fontSize: "16px",
+    fontWeight: 600,
+    padding: "4px 10px",
+    textAlign: "left" as const,
+  },
+  kpiHint: {
+    borderTop: "1px solid #f5f5f5",
+    color: "#a3a3a3",
+    fontSize: "10px",
+    padding: "2px 10px 6px",
+    textAlign: "left" as const,
+  },
+  kpiDivider: {
+    borderLeft: "1px solid #e5e5e5",
+  },
   yearLine: {
     color: "#111111",
     fontSize: "15px",
@@ -182,32 +253,6 @@ const styles = {
     fontWeight: 500,
     textDecoration: "underline",
     textUnderlineOffset: "2px",
-  },
-  stats: {
-    margin: "8px 0 0",
-  },
-  statLabel: {
-    color: "#737373",
-    fontSize: "11px",
-    letterSpacing: "0.06em",
-    margin: "0 0 2px",
-    textTransform: "uppercase" as const,
-  },
-  statValue: {
-    color: "#111111",
-    fontSize: "20px",
-    fontWeight: 600,
-    margin: 0,
-  },
-  statHint: {
-    color: "#a3a3a3",
-    fontSize: "11px",
-    margin: "2px 0 0",
-  },
-  unit: {
-    color: "#a3a3a3",
-    fontSize: "12px",
-    margin: "4px 0 18px",
   },
   button: {
     backgroundColor: "#111111",

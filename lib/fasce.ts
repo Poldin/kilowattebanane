@@ -165,6 +165,34 @@ export function layersForTariff(id: TariffPlanId): ChartLayers {
   }
 }
 
+/** True when the user overlaid another chart type on top of the selected tariff. */
+export function isChartComparisonMode(
+  layers: ChartLayers,
+  tariff: TariffPlanId,
+): boolean {
+  const base = layersForTariff(tariff);
+  if (layers.line && !base.line) return true;
+  if (layers.mono && !base.mono) return true;
+  if (layers.f23 && !base.f23) return true;
+  const showFascia = layers.f1 || layers.f2 || layers.f3;
+  const baseFascia = base.f1 || base.f2 || base.f3;
+  if (showFascia && !baseFascia) return true;
+  return false;
+}
+
+export function showChartFruitMarks(
+  layers: ChartLayers,
+  tariff: TariffPlanId,
+): boolean {
+  return !isChartComparisonMode(layers, tariff);
+}
+
+export function stripFruitFromTip(text: string): string {
+  if (text.startsWith("🍌 ")) return text.slice(2);
+  if (text.startsWith("🐵 ")) return text.slice(2);
+  return text;
+}
+
 export type FasciaAverages = Record<FasciaStatId, number | null>;
 
 const FIXED_HOLIDAYS = [

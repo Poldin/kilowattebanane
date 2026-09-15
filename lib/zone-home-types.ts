@@ -1,6 +1,13 @@
 import type { DayAheadRow } from "@/lib/day-ahead-core";
 import type { LookbackDayPoint } from "@/lib/lookback";
+import type { PunMonthPoint } from "@/lib/offerte/forward";
 import type { MarketZoneId } from "@/lib/market-zones";
+
+export type ZoneForwardPayload = {
+  asOf: string | null;
+  source: string | null;
+  months: PunMonthPoint[];
+};
 
 export type ZoneHourlyPayload = {
   date: string;
@@ -14,4 +21,5 @@ export type ZoneHomePayload = {
   dates: string[];
   points: LookbackDayPoint[];
   hourly: ZoneHourlyPayload[];
+  forward: ZoneForwardPayload;
 };

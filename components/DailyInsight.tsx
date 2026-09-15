@@ -7,6 +7,7 @@ import {
   useState,
   useTransition,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import { ChartLayerToggles } from "@/components/ChartLayerToggles";
 import { RegionZoneBar } from "@/components/RegionZoneBar";
@@ -22,6 +23,7 @@ import {
 } from "@/lib/day-ahead-core";
 import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
 import type { ZoneHomePayload } from "@/lib/zone-home-types";
+import { MonthlyOutlookChart } from "@/components/MonthlyOutlookChart";
 import { ShareButton } from "@/components/ShareButton";
 import { SignupSlot } from "@/components/SignupForm";
 import { LoadShiftSim } from "@/components/LoadShiftSim";
@@ -75,12 +77,16 @@ import {
   DEFAULT_TARIFF_PLAN,
   cheapPeakForTariff,
   fasciaAveragesFromQuarters,
+  fasciaBadgeLabel,
+  fasciaBadgesForPlan,
   fasciaF23Bands,
   fasciaHourBands,
   fasciaRangeLabel,
   FASCIA_COLOR,
   FASCIA_LEGEND_COLOR,
   layersForTariff,
+  showChartFruitMarks,
+  stripFruitFromTip,
   visibleFasciaStatsFromLayers,
   type ChartLayers,
   type FasciaId,
@@ -93,7 +99,7 @@ import {
   formatYearPercentile,
   yearWindowPercentileForTariff,
 } from "@/lib/lookback";
-import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
+import type { ZoneForwardPayload, ZoneHourlyPayload } from "@/lib/zone-home-types";
 
 type DayInsight = {
   deliveryDate: string;
@@ -243,6 +249,7 @@ function nowLineForDay(
   day: DayInsight,
   now: RomeNow | null,
   tariff: TariffPlanId,
+  showFruit: boolean,
 ): NowLine | null {
   if (!now || now.date !== day.deliveryDate || day.prices.length === 0) {
     return null;
@@ -263,7 +270,7 @@ function nowLineForDay(
     hour: now.hour + now.minute / 60,
     time: formatClock(now.hour, now.minute),
     priceLabel: formatEurocent(toEurocentPerKwh(price)),
-    fruit: advice.fruit,
+    fruit: showFruit ? advice.fruit : null,
     fasciaId: advice.fasciaId,
     comment: {
       before: advice.before,
@@ -347,14 +354,6 @@ function PriceTips({
   );
 }
 
-const FASCIA_STATS: { id: FasciaStatId; label: string }[] = [
-  { id: "F1", label: "F1" },
-  { id: "F2", label: "F2" },
-  { id: "F3", label: "F3" },
-  { id: "F23", label: "F23" },
-  { id: "Fmonoraria", label: "Fmonoraria" },
-];
-
 function formatFasciaValue(value: number | null) {
   return value == null ? "—" : formatEurocent(value);
 }
@@ -380,11 +379,83 @@ function FasciaSwatch({ id }: { id: FasciaStatId }) {
   );
 }
 
-function StatHint({ children }: { children: string }) {
+type DayKpiColumn = {
+  key: string;
+  label: ReactNode;
+  labelColor?: string;
+  value: string;
+  hint: string | null;
+};
+
+function DayKpiTable({
+  columns,
+  compact,
+  ariaLabel,
+}: {
+  columns: DayKpiColumn[];
+  compact: boolean;
+  ariaLabel?: string;
+}) {
+  if (columns.length === 0) return null;
+
+  const cellPad = compact ? "px-1.5 py-0.5" : "px-2 py-1";
+  const labelClass = compact
+    ? "text-[10px] font-medium tracking-wide uppercase"
+    : "text-[11px] font-medium tracking-wide uppercase";
+  const valueClass = compact
+    ? "text-sm font-semibold tabular-nums tracking-tight"
+    : "text-base font-semibold tabular-nums tracking-tight";
+  const hintClass = "text-[10px] leading-tight tabular-nums text-neutral-400 dark:text-neutral-500";
+  const hasHints = columns.some((column) => column.hint);
+  const colDivider = "border-l border-neutral-200 dark:border-neutral-800";
+
   return (
-    <p className="mt-0.5 text-[11px] leading-tight tabular-nums text-neutral-400 dark:text-neutral-500">
-      {children}
-    </p>
+    <div
+      className="mt-3 w-fit max-w-full overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-800"
+      aria-label={ariaLabel}
+    >
+      <table className="border-collapse text-left">
+        <thead>
+          <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/60">
+            {columns.map((column, index) => (
+              <th
+                key={column.key}
+                scope="col"
+                className={`${cellPad} ${labelClass} whitespace-nowrap ${index > 0 ? colDivider : ""}`}
+                style={column.labelColor ? { color: column.labelColor } : undefined}
+              >
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {columns.map((column, index) => (
+              <td
+                key={column.key}
+                className={`${cellPad} ${valueClass} whitespace-nowrap ${index > 0 ? colDivider : ""}`}
+                style={column.labelColor ? { color: column.labelColor } : undefined}
+              >
+                {column.value}
+              </td>
+            ))}
+          </tr>
+          {hasHints ? (
+            <tr className="border-t border-neutral-100 dark:border-neutral-800/80">
+              {columns.map((column, index) => (
+                <td
+                  key={column.key}
+                  className={`${cellPad} ${hintClass} whitespace-nowrap ${index > 0 ? colDivider : ""}`}
+                >
+                  {column.hint ?? ""}
+                </td>
+              ))}
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -392,23 +463,29 @@ function DayStats({
   date,
   prices,
   tariff,
+  showFruit,
   hourly,
+  forward,
   today,
 }: {
   date: string;
   prices: number[];
   tariff: TariffPlanId;
+  showFruit: boolean;
   hourly: ZoneHourlyPayload[];
+  forward: ZoneForwardPayload;
   today: string;
 }) {
+  const showLineStats = tariff === "dinamica";
+  const visibleFasciaIds = fasciaBadgesForPlan(tariff);
   const { min, avg, max, minHours, maxHours } = dayHourlyCentStats(prices);
   const fasce = fasciaAveragesFromQuarters(date, prices);
-  const fasciaMarks = cheapPeakForTariff(tariff, fasce);
+  const fasciaMarks = cheapPeakForTariff(tariff, fasce, visibleFasciaIds);
   const yearCopy = useMemo(() => {
     const context = yearWindowPercentileForTariff(hourly, date, tariff);
     return context ? formatYearPercentile(context, today) : null;
   }, [hourly, date, tariff, today]);
-  const stats = [
+  const lineStats = [
     { label: "min", value: formatEurocent(min), hint: minHours },
     { label: "medio", value: formatEurocent(avg), hint: "0–24" },
     { label: "max", value: formatEurocent(max), hint: maxHours },
@@ -419,11 +496,73 @@ function DayStats({
       : yearCopy?.tone === "cheap"
         ? BANANA
         : MID;
+  const statsLabel = [
+    visibleFasciaIds.length > 0 ? "medie di fascia" : null,
+    showLineStats ? "minimo, medio e massimo" : null,
+  ]
+    .filter(Boolean)
+    .join(" e ");
+  const kpiColumns = useMemo((): DayKpiColumn[] => {
+    if (visibleFasciaIds.length > 0) {
+      return visibleFasciaIds.map((id) => {
+        const color = FASCIA_LEGEND_COLOR[id];
+        return {
+          key: id,
+          labelColor: color,
+          label: (
+            <span className="inline-flex items-center gap-1">
+              <FasciaSwatch id={id} />
+              {showFruit && id === fasciaMarks.cheap ? (
+                <span aria-hidden>🍌 </span>
+              ) : showFruit && id === fasciaMarks.peak ? (
+                <span aria-hidden>🐵 </span>
+              ) : null}
+              {fasciaBadgeLabel(id)}
+            </span>
+          ),
+          value: formatFasciaValue(fasce[id]),
+          hint: fasciaRangeLabel(date, id),
+        };
+      });
+    }
+
+    if (showLineStats) {
+      return lineStats.map((stat) => ({
+        key: stat.label,
+        label: stat.label,
+        value: stat.value,
+        hint: stat.hint,
+      }));
+    }
+
+    return [];
+  }, [
+    visibleFasciaIds,
+    showLineStats,
+    lineStats,
+    date,
+    fasce,
+    fasciaMarks,
+    showFruit,
+  ]);
+  const compact = kpiColumns.length > 1;
+  const hasKpis = kpiColumns.length > 0;
 
   return (
-    <div className="mt-5" aria-label="Minimo, medio, massimo e medie di fascia del giorno">
+    <>
+      {hasKpis ? (
+        <DayKpiTable
+          columns={kpiColumns}
+          compact={compact}
+          ariaLabel={statsLabel ? `${statsLabel} del giorno` : undefined}
+        />
+      ) : null}
       {yearCopy ? (
-        <p className="mb-4 text-sm font-medium text-foreground sm:text-base">
+        <p
+          className={`text-sm font-medium text-foreground sm:text-base ${
+            hasKpis ? "mt-4" : "mt-5"
+          }`}
+        >
           {yearCopy.before}
           <span className={YEAR_PERCENTILE_BADGE}>{yearCopy.badge}</span>
           {" dell'ultimo anno: "}
@@ -442,52 +581,13 @@ function DayStats({
           </a>
         </p>
       ) : null}
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-        {FASCIA_STATS.map((stat) => {
-          const range = fasciaRangeLabel(date, stat.id);
-          const color = FASCIA_LEGEND_COLOR[stat.id];
-          return (
-            <div key={stat.id}>
-              <p
-                className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide uppercase"
-                style={{ color }}
-              >
-                <FasciaSwatch id={stat.id} />
-                {stat.id === fasciaMarks.cheap ? (
-                  <span aria-hidden>🍌 </span>
-                ) : stat.id === fasciaMarks.peak ? (
-                  <span aria-hidden>🐵 </span>
-                ) : null}
-                {stat.label}
-              </p>
-              <p
-                className="text-xl font-semibold tabular-nums tracking-tight"
-                style={{ color }}
-              >
-                {formatFasciaValue(fasce[stat.id])}
-              </p>
-              {range ? <StatHint>{range}</StatHint> : null}
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {stats.map((stat) => (
-          <div key={stat.label}>
-            <p className="text-[11px] font-medium tracking-wider text-neutral-500 uppercase">
-              {stat.label}
-            </p>
-            <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
-              {stat.value}
-            </p>
-            {stat.hint ? <StatHint>{stat.hint}</StatHint> : null}
-          </div>
-        ))}
-      </div>
-      <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-        c€/kWh all&apos;ingrosso
-      </p>
-    </div>
+      <MonthlyOutlookChart
+        anchorDate={date}
+        hourly={hourly}
+        forward={forward}
+        tariff={tariff}
+      />
+    </>
   );
 }
 
@@ -591,6 +691,7 @@ function PriceChart({
   const { chartW, chartH, pad, axisFontSize, unitFontSize } = useChartLayout();
   const [pickedHour, setPickedHour] = useState<number | null>(null);
   const resolvedLayers = layers ?? layersForTariff(DEFAULT_TARIFF_PLAN);
+  const showFruit = showChartFruitMarks(resolvedLayers, tariff);
   const showLine = resolvedLayers.line;
   const showMono = resolvedLayers.mono;
   const showF23 = resolvedLayers.f23;
@@ -863,8 +964,8 @@ function PriceChart({
                   labelY={labelY}
                   width={width}
                   color={color}
-                  cheapId={fasciaMarks.cheap}
-                  peakId={fasciaMarks.peak}
+                  cheapId={showFruit ? fasciaMarks.cheap : null}
+                  peakId={showFruit ? fasciaMarks.peak : null}
                 />
               </g>
             );
@@ -908,8 +1009,8 @@ function PriceChart({
                   labelY={labelY}
                   width={width}
                   color={color}
-                  cheapId={fasciaMarks.cheap}
-                  peakId={fasciaMarks.peak}
+                  cheapId={showFruit ? fasciaMarks.cheap : null}
+                  peakId={showFruit ? fasciaMarks.peak : null}
                 />
               </g>
             );
@@ -958,28 +1059,32 @@ function PriceChart({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          {bananaMarks.map((mark) => (
-            <text
-              key={`banana-${mark.hour}`}
-              x={mark.x}
-              y={mark.y - 11}
-              textAnchor="middle"
-              fontSize={MARKER_FONT_SIZE}
-            >
-              🍌
-            </text>
-          ))}
-          {monkeyMarks.map((mark) => (
-            <text
-              key={`monkey-${mark.hour}`}
-              x={mark.x}
-              y={mark.y - 11}
-              textAnchor="middle"
-              fontSize={MARKER_FONT_SIZE}
-            >
-              🐵
-            </text>
-          ))}
+          {showFruit
+            ? bananaMarks.map((mark) => (
+                <text
+                  key={`banana-${mark.hour}`}
+                  x={mark.x}
+                  y={mark.y - 11}
+                  textAnchor="middle"
+                  fontSize={MARKER_FONT_SIZE}
+                >
+                  🍌
+                </text>
+              ))
+            : null}
+          {showFruit
+            ? monkeyMarks.map((mark) => (
+                <text
+                  key={`monkey-${mark.hour}`}
+                  x={mark.x}
+                  y={mark.y - 11}
+                  textAnchor="middle"
+                  fontSize={MARKER_FONT_SIZE}
+                >
+                  🐵
+                </text>
+              ))
+            : null}
         </>
       ) : null}
 
@@ -1032,13 +1137,18 @@ function PriceChart({
           <button
             type="button"
             className="absolute top-2.5 right-2.5 z-10 flex items-center gap-2 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-white shadow-sm"
-            aria-label={`Chiudi lettura delle ${formatTipHour(picked.hour)}, ${formatEurocent(picked.price)}, ${pickedRank}%`}
+            aria-label={`Chiudi lettura delle ${formatTipHour(picked.hour)}, ${formatEurocent(picked.price)}${showFruit ? `, ${pickedRank}%` : ""}`}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => setPickedHour(null)}
           >
             <span className="text-xs font-semibold tabular-nums sm:text-sm">
-              {formatTipHour(picked.hour)} · {formatEurocent(picked.price)} ·{" "}
-              {pickedRank}% {pickedRank < 50 ? "🍌" : "🐵"}
+              {formatTipHour(picked.hour)} · {formatEurocent(picked.price)}
+              {showFruit ? (
+                <>
+                  {" · "}
+                  {pickedRank}% {pickedRank < 50 ? "🍌" : "🐵"}
+                </>
+              ) : null}
             </span>
             <span aria-hidden className="text-sm leading-none text-white/70">
               ×
@@ -1057,6 +1167,7 @@ function QuarterColumn({
   monkeySlots,
   cheapBands,
   peakBands,
+  showFruit,
 }: {
   prices: number[];
   offset: number;
@@ -1064,6 +1175,7 @@ function QuarterColumn({
   monkeySlots: Set<number>;
   cheapBands: PriceBand[];
   peakBands: PriceBand[];
+  showFruit: boolean;
 }) {
   return (
     <table className="w-full table-fixed border-collapse text-xs leading-tight sm:text-sm">
@@ -1119,7 +1231,7 @@ function QuarterColumn({
                       : "text-foreground"
                 }`}
               >
-                {cheapest ? (
+                {showFruit && cheapest ? (
                   <>
                     <span className="sr-only">minimo </span>
                     <span className="mr-0.5" aria-hidden>
@@ -1127,7 +1239,7 @@ function QuarterColumn({
                     </span>
                   </>
                 ) : null}
-                {peakiest ? (
+                {showFruit && peakiest ? (
                   <>
                     <span className="sr-only">picco </span>
                     <span className="mr-0.5" aria-hidden>
@@ -1182,7 +1294,13 @@ function QuarterTableChevron() {
   );
 }
 
-function QuarterPriceTable({ day }: { day: DayInsight }) {
+function QuarterPriceTable({
+  day,
+  showFruit,
+}: {
+  day: DayInsight;
+  showFruit: boolean;
+}) {
   const bananaSlots = cheapestSlotsInBands(day.prices, day.cheapBands);
   const monkeySlots = priciestSlotsInBands(day.prices, day.peakBands);
   const split = day.noonIndex > 0 && day.noonIndex < day.prices.length
@@ -1221,6 +1339,7 @@ function QuarterPriceTable({ day }: { day: DayInsight }) {
                 monkeySlots={monkeySlots}
                 cheapBands={day.cheapBands}
                 peakBands={day.peakBands}
+                showFruit={showFruit}
               />
             </div>
           ))}
@@ -1275,31 +1394,42 @@ function InsightSkeleton() {
         <SkeletonBone className="h-4 w-[min(88%,16rem)]" />
       </div>
 
-      <div className="mt-5">
-        <div className="grid grid-cols-3 gap-2">
-          {["min", "medio", "max"].map((label) => (
-            <div key={label}>
-              <p className="text-[11px] font-medium tracking-wider text-neutral-400 uppercase">
+      <div className="mt-3 w-fit overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-800">
+        <div className="flex border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/60">
+          {["min", "medio", "max"].map((label, index) => (
+            <div
+              key={label}
+              className={`px-1.5 py-1 ${index > 0 ? "border-l border-neutral-200 dark:border-neutral-800" : ""}`}
+            >
+              <p className="text-[10px] font-medium tracking-wide text-neutral-400 uppercase">
                 {label}
               </p>
-              <SkeletonBone className="mt-1 h-6 w-16" />
-              <SkeletonBone className="mt-1 h-3 w-10" />
             </div>
           ))}
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
-          {["F1", "F2", "F3", "F23", "Fmonoraria"].map((label) => (
-            <div key={label}>
-              <p className="text-[11px] font-medium tracking-wide text-neutral-400 uppercase">
-                {label}
-              </p>
-              <SkeletonBone className="mt-1 h-6 w-16" />
-              <SkeletonBone className="mt-1 h-3 w-12" />
+        <div className="flex">
+          {["min", "medio", "max"].map((label, index) => (
+            <div
+              key={label}
+              className={`px-1.5 py-0.5 ${index > 0 ? "border-l border-neutral-200 dark:border-neutral-800" : ""}`}
+            >
+              <SkeletonBone className="h-4 w-12" />
             </div>
           ))}
         </div>
-        <SkeletonBone className="mt-1 h-3 w-52" />
+        <div className="flex border-t border-neutral-100 dark:border-neutral-800/80">
+          {["min", "medio", "max"].map((label, index) => (
+            <div
+              key={label}
+              className={`px-1.5 py-0.5 ${index > 0 ? "border-l border-neutral-200 dark:border-neutral-800" : ""}`}
+            >
+              <SkeletonBone className="h-2.5 w-9" />
+            </div>
+          ))}
+        </div>
       </div>
+
+      <SkeletonBone className="mt-4 h-4 w-[min(100%,22rem)]" />
 
       <div className="mt-6">
         <SkeletonBone className="h-4 w-44" />
@@ -1469,7 +1599,8 @@ export function DailyInsight({
   const isNewest = dateIndex <= 0;
   const today = romeToday();
   const now = useRomeNow();
-  const nowLine = day ? nowLineForDay(day, now, tariff) : null;
+  const showFruit = showChartFruitMarks(layers, tariff);
+  const nowLine = day ? nowLineForDay(day, now, tariff, showFruit) : null;
   const showSkeleton = fetching || isRefreshing;
   const dateLabel = day
     ? formatDeliveryDate(day.deliveryDate, today)
@@ -1676,19 +1807,21 @@ export function DailyInsight({
               tariff={tariff}
             />
             <PriceTips
-              best={tips.bestTip}
-              worst={tips.worstTip}
+              best={showFruit ? tips.bestTip : stripFruitFromTip(tips.bestTip)}
+              worst={showFruit ? tips.worstTip : stripFruitFromTip(tips.worstTip)}
               nowLine={nowLine}
             />
             <DayStats
               date={day.deliveryDate}
               prices={day.prices}
               tariff={tariff}
+              showFruit={showFruit}
               hourly={home?.hourly ?? []}
+              forward={home?.forward ?? { asOf: null, source: null, months: [] }}
               today={today}
             />
             <SignupSlot className="mt-6 w-full scroll-mt-20" />
-            <QuarterPriceTable day={day} />
+            <QuarterPriceTable day={day} showFruit={showFruit} />
           </div>
           {home ? (
             <>

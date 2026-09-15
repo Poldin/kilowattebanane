@@ -18,7 +18,7 @@ import {
   type MarketZoneId,
 } from "@/lib/market-zones";
 import { toHourlyAverages } from "@/lib/prices";
-import { mailChartUrl, publicSiteUrl } from "@/lib/app-url";
+import { mailChartUrl, mailOutlookChartUrl, publicSiteUrl } from "@/lib/app-url";
 import {
   cheapPeakForTariff,
   fasciaAveragesFromQuarters,
@@ -58,6 +58,14 @@ export type MailFasciaStat = {
   color: string;
 };
 
+export type MailKpiColumn = {
+  key: string;
+  label: string;
+  value: string;
+  hint: string | null;
+  color?: string;
+};
+
 export type ZoneMailContent = {
   deliveryDate: string;
   dateLabel: string;
@@ -67,12 +75,10 @@ export type ZoneMailContent = {
   tariffLabel: string;
   bestTip: string;
   worstTip: string;
-  minLabel: string;
-  avgLabel: string;
-  maxLabel: string;
-  fasciaStats: MailFasciaStat[];
+  kpiColumns: MailKpiColumn[];
   hourly: { hour: number; label: string; priceLabel: string }[];
   chartUrl: string;
+  outlookChartUrl: string;
   yearPercentile: YearPercentileCopy | null;
 };
 
@@ -90,6 +96,29 @@ export function formatMailDate(ymd: string, today = romeToday()) {
   if (ymd === today) return `oggi · ${formatted}`;
   if (ymd === addCalendarDays(today, 1)) return `domani · ${formatted}`;
   return formatted;
+}
+
+function mailKpiColumns(
+  ymd: string,
+  prices: number[],
+  tariff: TariffPlanId,
+): MailKpiColumn[] {
+  if (tariff === "dinamica") {
+    const { min, avg, max, minHours, maxHours } = dayHourlyCentStats(prices);
+    return [
+      { key: "min", label: "min", value: formatEurocent(min), hint: minHours },
+      { key: "medio", label: "medio", value: formatEurocent(avg), hint: "0–24" },
+      { key: "max", label: "max", value: formatEurocent(max), hint: maxHours },
+    ];
+  }
+
+  return fasciaStatsForMail(ymd, prices, tariff).map((stat) => ({
+    key: stat.id,
+    label: `${stat.mark === "cheap" ? "🍌 " : stat.mark === "peak" ? "🐵 " : ""}${stat.label}`,
+    value: stat.priceLabel,
+    hint: stat.rangeLabel,
+    color: stat.color,
+  }));
 }
 
 function fasciaStatsForMail(
@@ -169,8 +198,6 @@ export function zoneMailContentFromDay(
   const tips = computeTariffTips(day.prices, day.deliveryDate, resolved);
   const hourly = toHourlyAverages(day.prices);
   const pricesCent = hourly.map(toEurocentPerKwh);
-  const { min, avg, max } = dayHourlyCentStats(day.prices);
-
   return {
     deliveryDate: day.deliveryDate,
     dateLabel: day.dateLabel,
@@ -180,16 +207,14 @@ export function zoneMailContentFromDay(
     tariffLabel: tariffPlanLabel(resolved),
     bestTip: tips.bestTip,
     worstTip: tips.worstTip,
-    minLabel: formatEurocent(min),
-    avgLabel: formatEurocent(avg),
-    maxLabel: formatEurocent(max),
-    fasciaStats: fasciaStatsForMail(day.deliveryDate, day.prices, resolved),
+    kpiColumns: mailKpiColumns(day.deliveryDate, day.prices, resolved),
     hourly: pricesCent.map((price, hour) => ({
       hour,
       label: `${String(hour).padStart(2, "0")}:00`,
       priceLabel: formatEurocent(price),
     })),
     chartUrl: mailChartUrl(day.zone, day.deliveryDate, resolved),
+    outlookChartUrl: mailOutlookChartUrl(day.zone, day.deliveryDate, resolved),
     yearPercentile: yearPercentileForMail(day, resolved, history),
   };
 }

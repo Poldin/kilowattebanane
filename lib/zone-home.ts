@@ -5,11 +5,12 @@ import {
   fetchZoneHourlyStats,
   fetchZonePriceRange,
 } from "@/lib/day-ahead-query";
-import { pickDefaultDeliveryDate } from "@/lib/day-ahead-core";
+import { pickDefaultDeliveryDate, romeToday } from "@/lib/day-ahead-core";
+import { loadPunForwardBlend } from "@/lib/offerte/forward";
 import { MIN_COMPLETE_SLOTS } from "@/lib/insights";
 import { lookbackPointFromHours } from "@/lib/lookback";
 import type { MarketZoneId } from "@/lib/market-zones";
-import type { ZoneHomePayload } from "@/lib/zone-home-types";
+import type { ZoneForwardPayload, ZoneHomePayload } from "@/lib/zone-home-types";
 
 export type { ZoneHomePayload, ZoneHourlyPayload } from "@/lib/zone-home-types";
 
@@ -59,6 +60,19 @@ export const loadZoneSlots = unstable_cache(
   CACHE,
 );
 
+async function loadZoneForward(asOf: string): Promise<ZoneForwardPayload> {
+  try {
+    const blend = await loadPunForwardBlend(asOf);
+    return {
+      asOf: blend.asOf,
+      source: blend.source,
+      months: blend.months,
+    };
+  } catch {
+    return { asOf: null, source: null, months: [] };
+  }
+}
+
 export async function loadZoneHome(
   zone: MarketZoneId,
   requestedDate?: string,
@@ -68,6 +82,9 @@ export async function loadZoneHome(
     (requestedDate && series.dates.includes(requestedDate)
       ? requestedDate
       : null) ?? pickDefaultDeliveryDate(series.dates);
-  const slots = date ? await loadZoneDaySlots(zone, date) : [];
-  return { zone, date, slots, ...series };
+  const [slots, forward] = await Promise.all([
+    date ? loadZoneDaySlots(zone, date) : Promise.resolve([]),
+    loadZoneForward(date ?? romeToday()),
+  ]);
+  return { zone, date, slots, forward, ...series };
 }
