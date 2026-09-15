@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { authorizeCron } from "@/lib/cron-auth";
+import { withCronRoute } from "@/lib/cron-route";
 import { pullOfferte, type PullOfferteOptions } from "@/lib/offerte/pull";
 import { revalidateOfferte } from "@/lib/offerte/revalidate";
 import type { ImportKind } from "@/lib/offerte/types";
@@ -10,10 +10,7 @@ export const maxDuration = 300;
 const KINDS = new Set<ImportKind>(["geo", "parametri_e", "placet_e", "ml_e"]);
 
 async function handle(request: NextRequest) {
-  if (!authorizeCron(request)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+  return withCronRoute("offerte/pull", request, async () => {
   const sourcesParam = request.nextUrl.searchParams.get("source") ?? "all";
   const sources = sourcesParam
     .split(",")
@@ -43,6 +40,7 @@ async function handle(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Offerte pull failed";
     return Response.json({ error: message }, { status: 500 });
   }
+  });
 }
 
 export function GET(request: NextRequest) {

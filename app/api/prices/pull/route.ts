@@ -2,16 +2,13 @@ import { NextRequest } from "next/server";
 import { revalidatePriceArchive } from "@/lib/archive-revalidate";
 import { pullDayAheadPrices, pullDayAheadRange } from "@/lib/day-ahead";
 import { MARKET_ZONES, dateFromParam, type MarketZoneId } from "@/lib/market-zones";
-import { authorizeCron } from "@/lib/cron-auth";
+import { withCronRoute } from "@/lib/cron-route";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 async function handle(request: NextRequest) {
-  if (!authorizeCron(request)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+  return withCronRoute("prices/pull", request, async () => {
   const daysParam = Number(request.nextUrl.searchParams.get("days") ?? "0");
   const daysBack = Number.isFinite(daysParam) ? Math.min(31, Math.max(0, Math.trunc(daysParam))) : 0;
   const from = dateFromParam(request.nextUrl.searchParams.get("from") ?? undefined);
@@ -49,6 +46,7 @@ async function handle(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Pull failed";
     return Response.json({ error: message }, { status: 500 });
   }
+  });
 }
 
 export function GET(request: NextRequest) {
