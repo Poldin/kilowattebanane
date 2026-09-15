@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuthConfigured, adminTokenFromRequest } from "@/lib/offerte/admin-auth";
 import { loadOfferteImportStatus } from "@/lib/offerte/admin-status";
-import { openDataFileLabel, openDataFileUrl } from "@/lib/offerte/source";
+import { openDataFileLabel } from "@/lib/offerte/source";
 import { romeToday } from "@/lib/offerte/dates";
 import { PORTALE_OFFERTE_URL } from "@/lib/offerte/public-types";
 
@@ -26,19 +26,19 @@ export async function GET(request: NextRequest) {
         kind: "placet_e",
         label: "PLACET",
         filename: openDataFileLabel("placet_e", today),
-        url: openDataFileUrl("placet_e", today),
+        downloadUrl: `/api/admin/offerte/download?kind=placet_e`,
       },
       {
         kind: "ml_e",
         label: "Mercato libero",
         filename: openDataFileLabel("ml_e", today),
-        url: openDataFileUrl("ml_e", today),
+        downloadUrl: `/api/admin/offerte/download?kind=ml_e`,
       },
       {
         kind: "parametri_e",
         label: "Parametri",
         filename: openDataFileLabel("parametri_e", today),
-        url: openDataFileUrl("parametri_e", today),
+        downloadUrl: `/api/admin/offerte/download?kind=parametri_e`,
       },
     ],
   });

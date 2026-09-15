@@ -15,7 +15,7 @@ type FileHint = {
   kind: string;
   label: string;
   filename: string;
-  url: string;
+  downloadUrl: string;
 };
 
 type StatusPayload = {
@@ -256,8 +256,10 @@ export function OfferteAdminUpload() {
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium tracking-tight">Come scaricare i file</h2>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+          <li>Scarica i tre file con i pulsanti qui sotto (salvati sul computer).</li>
+          <li>Caricali nel form: almeno PLACET e mercato libero per aggiornare le offerte.</li>
           <li>
-            Apri la pagina open data del{" "}
+            Se manca il file di oggi, prova domani o scaricalo dal{" "}
             <a
               href={status?.portaleUrl}
               target="_blank"
@@ -268,21 +270,25 @@ export function OfferteAdminUpload() {
             </a>
             .
           </li>
-          <li>Scarica i tre file del giorno (di solito disponibili dopo la mezzanotte).</li>
-          <li>Caricali qui sotto: almeno PLACET e mercato libero per aggiornare le offerte.</li>
         </ol>
-        <ul className="mt-4 space-y-2 text-sm">
+        <ul className="mt-4 space-y-3 text-sm">
           {(status?.files ?? []).map((file) => (
-            <li key={file.kind}>
-              <span className="font-medium text-foreground">{file.label}</span>
-              {" · "}
+            <li
+              key={file.kind}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 px-3 py-2 dark:border-neutral-800"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">{file.label}</p>
+                <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
+                  {file.filename}
+                </p>
+              </div>
               <a
-                href={file.url}
-                target="_blank"
-                rel="noreferrer"
-                className="break-all underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600"
+                href={file.downloadUrl}
+                download={file.filename}
+                className="shrink-0 rounded-md border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-neutral-200 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
               >
-                {file.filename}
+                Scarica
               </a>
             </li>
           ))}

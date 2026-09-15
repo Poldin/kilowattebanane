@@ -47,10 +47,15 @@ async function getFile(url: string) {
   return response;
 }
 
-export async function downloadOfferteFile(
+function contentTypeFor(kind: OfferteKind) {
+  if (kind === "ml_e") return "application/xml; charset=utf-8";
+  return "text/csv; charset=utf-8";
+}
+
+export async function fetchOpenDataFile(
   kind: OfferteKind,
   preferredDate = romeToday(),
-): Promise<DownloadedFile> {
+) {
   const candidates = [preferredDate, addIsoDays(preferredDate, -1)];
   let lastStatus = 0;
   let lastUrl = "";
@@ -69,12 +74,30 @@ export async function downloadOfferteFile(
       kind,
       url,
       snapshotDate,
+      filename: openDataFileLabel(kind, snapshotDate),
+      contentType: contentTypeFor(kind),
       bytes: buffer.length,
       sha256: sha256(buffer),
       lastModified: response.headers.get("last-modified"),
-      text: buffer.toString("utf8"),
+      buffer,
     };
   }
 
   throw new Error(`Open data ${kind} not found (${lastStatus}) at ${lastUrl}`);
+}
+
+export async function downloadOfferteFile(
+  kind: OfferteKind,
+  preferredDate = romeToday(),
+): Promise<DownloadedFile> {
+  const fetched = await fetchOpenDataFile(kind, preferredDate);
+  return {
+    kind: fetched.kind,
+    url: fetched.url,
+    snapshotDate: fetched.snapshotDate,
+    bytes: fetched.bytes,
+    sha256: fetched.sha256,
+    lastModified: fetched.lastModified,
+    text: fetched.buffer.toString("utf8"),
+  };
 }
