@@ -15,7 +15,9 @@ type FileHint = {
   kind: string;
   label: string;
   filename: string;
-  downloadUrl: string;
+  downloadUrl: string | null;
+  externalUrl: string | null;
+  note: string | null;
 };
 
 type StatusPayload = {
@@ -256,10 +258,9 @@ export function OfferteAdminUpload() {
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium tracking-tight">Come scaricare i file</h2>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-          <li>Scarica i tre file con i pulsanti qui sotto (salvati sul computer).</li>
-          <li>Caricali nel form: almeno PLACET e mercato libero per aggiornare le offerte.</li>
+          <li>Scarica PLACET e Parametri con i pulsanti qui sotto.</li>
           <li>
-            Se manca il file di oggi, prova domani o scaricalo dal{" "}
+            Per l&apos;XML del mercato libero apri il{" "}
             <a
               href={status?.portaleUrl}
               target="_blank"
@@ -268,8 +269,9 @@ export function OfferteAdminUpload() {
             >
               Portale Offerte
             </a>
-            .
+            {" "}e salva il file sul computer.
           </li>
+          <li>Carica tutti i file nel form e clicca Importa.</li>
         </ol>
         <ul className="mt-4 space-y-3 text-sm">
           {(status?.files ?? []).map((file) => (
@@ -282,14 +284,30 @@ export function OfferteAdminUpload() {
                 <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
                   {file.filename}
                 </p>
+                {file.note ? (
+                  <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                    {file.note}
+                  </p>
+                ) : null}
               </div>
-              <a
-                href={file.downloadUrl}
-                download={file.filename}
-                className="shrink-0 rounded-md border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-neutral-200 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
-              >
-                Scarica
-              </a>
+              {file.downloadUrl ? (
+                <a
+                  href={file.downloadUrl}
+                  download={file.filename}
+                  className="shrink-0 rounded-md border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-neutral-200 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                >
+                  Scarica
+                </a>
+              ) : file.externalUrl ? (
+                <a
+                  href={file.externalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 rounded-md border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-neutral-200 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                >
+                  Apri Portale
+                </a>
+              ) : null}
             </li>
           ))}
         </ul>
