@@ -53,7 +53,7 @@ export function Footer() {
                 Iscriviti gratis
               </button>
             </li>
-            <li>
+            <li className="hidden">
               <Link href="/offer-compare" className={itemClass}>
                 offerte
               </Link>

@@ -60,7 +60,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             />
           </div>
 
-          <div className="mx-auto mt-16 w-full max-w-xl sm:mt-20">
+          <div className="mx-auto mt-16 hidden w-full max-w-xl sm:mt-20">
             <OfferteModule />
           </div>
 

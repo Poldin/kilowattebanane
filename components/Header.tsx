@@ -46,7 +46,7 @@ export function Header() {
         <div className="flex shrink-0 items-center gap-3 sm:gap-4">
           <Link
             href="/offer-compare"
-            className="text-sm text-neutral-700 transition-colors hover:text-foreground dark:text-neutral-300 dark:hover:text-neutral-200"
+            className="hidden text-sm text-neutral-700 transition-colors hover:text-foreground dark:text-neutral-300 dark:hover:text-neutral-200"
           >
             offerte
           </Link>
