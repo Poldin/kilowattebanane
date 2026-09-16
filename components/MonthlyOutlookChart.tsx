@@ -7,6 +7,7 @@ import {
   type MonthOutlookPoint,
 } from "@/lib/monthly-outlook";
 import { formatEurocent } from "@/lib/insights";
+import { forwardSourceShortLabel } from "@/lib/offerte/forward-source";
 import type { TariffPlanId } from "@/lib/fasce";
 import type { ZoneForwardPayload, ZoneHourlyPayload } from "@/lib/zone-home-types";
 
@@ -220,7 +221,9 @@ export function MonthlyOutlookChart({
             aria-hidden
           />
           Futuro · forward PUN
-          {forward.asOf ? ` (CME al ${formatForwardAsOf(forward.asOf)})` : null}
+          {forward.asOf
+            ? ` (${forwardSourceShortLabel(forward.source) ?? "forward"} al ${formatForwardAsOf(forward.asOf)})`
+            : null}
         </span>
       </div>
     </div>

@@ -1,5 +1,17 @@
 import { calendarMonthStarts } from "@/lib/offerte/dates";
 import { offerteReadClient } from "@/lib/offerte/db";
+import {
+  CME_FORWARD_SOURCE,
+  GME_FORWARD_SOURCE,
+  MIXED_FORWARD_SOURCE,
+} from "@/lib/offerte/forward-source";
+
+export {
+  CME_FORWARD_SOURCE,
+  GME_FORWARD_SOURCE,
+  MIXED_FORWARD_SOURCE,
+  forwardSourceShortLabel,
+} from "@/lib/offerte/forward-source";
 
 export const FORWARD_MONTH_HORIZON = 24;
 
@@ -144,14 +156,41 @@ export function monthlyPunFromPoints(
   });
 }
 
-export function blendPunFromPoints(points: ForwardPoint[], asOf: string): PunForwardBlend {
-  const latestAsOf = points.reduce(
+export function forwardPointKey(point: ForwardPoint) {
+  return `${point.product}|${point.tenor}|${point.periodStart}`;
+}
+
+export function mergeForwardPointsPreferGme(
+  cme: ForwardPoint[],
+  gme: ForwardPoint[],
+): ForwardPoint[] {
+  const byKey = new Map<string, ForwardPoint>();
+  for (const point of cme) byKey.set(forwardPointKey(point), point);
+  for (const point of gme) byKey.set(forwardPointKey(point), point);
+  return [...byKey.values()];
+}
+
+function blendSource(points: ForwardPoint[]) {
+  const sources = new Set(points.map((point) => point.source));
+  const hasGme = sources.has(GME_FORWARD_SOURCE);
+  const hasCme = sources.has(CME_FORWARD_SOURCE);
+  if (hasGme && hasCme) return MIXED_FORWARD_SOURCE;
+  if (hasGme) return GME_FORWARD_SOURCE;
+  if (hasCme) return CME_FORWARD_SOURCE;
+  return points[0]?.source ?? null;
+}
+
+function blendAsOf(points: ForwardPoint[]) {
+  const gme = points.filter((point) => point.source === GME_FORWARD_SOURCE);
+  const preferred = gme.length > 0 ? gme : points;
+  return preferred.reduce(
     (best, row) => (row.asOf > best ? row.asOf : best),
-    points[0]?.asOf ?? "",
-  );
-  const snapshot = latestAsOf
-    ? points.filter((row) => row.asOf === latestAsOf)
-    : [];
+    preferred[0]?.asOf ?? "",
+  ) || null;
+}
+
+export function blendPunFromPoints(points: ForwardPoint[], asOf: string): PunForwardBlend {
+  const snapshot = points;
   const quarters = nextFourQuarters(asOf).map((q) => ({
     quarter: q.quarter,
     year: q.year,
@@ -162,8 +201,8 @@ export function blendPunFromPoints(points: ForwardPoint[], asOf: string): PunFor
   const priced = quarters.map((q) => q.baseloadEurMwh).filter((v): v is number => v != null);
   const punEurMwh = priced.length > 0 ? priced.reduce((a, b) => a + b, 0) / priced.length : null;
   return {
-    asOf: snapshot[0]?.asOf ?? null,
-    source: snapshot[0]?.source ?? null,
+    asOf: blendAsOf(snapshot),
+    source: blendSource(snapshot),
     punEurMwh,
     punEurKwh: punEurMwh == null ? null : punEurMwh / 1000,
     quarters,
@@ -172,9 +211,17 @@ export function blendPunFromPoints(points: ForwardPoint[], asOf: string): PunFor
 }
 
 export async function loadLatestForwardPoints(): Promise<ForwardPoint[]> {
+  const [cme, gme] = await Promise.all([
+    loadLatestTablePoints("po_forward_curve"),
+    loadLatestGmeMonthlyPoints(),
+  ]);
+  return mergeForwardPointsPreferGme(cme, gme);
+}
+
+async function loadLatestTablePoints(table: "po_forward_curve"): Promise<ForwardPoint[]> {
   const client = offerteReadClient();
   const { data: latest, error: latestError } = await client
-    .from("po_forward_curve")
+    .from(table)
     .select("as_of")
     .order("as_of", { ascending: false })
     .limit(1)
@@ -184,15 +231,14 @@ export async function loadLatestForwardPoints(): Promise<ForwardPoint[]> {
   if (!asOf) return [];
 
   const { data, error } = await client
-    .from("po_forward_curve")
-    .select(
-      "as_of, product, tenor, period_start, period_end, price_eur_mwh, source",
-    )
+    .from(table)
+    .select("as_of, product, tenor, period_start, period_end, price_eur_mwh, source")
     .eq("as_of", asOf);
   if (error) throw new Error(error.message);
 
   return (data ?? []).flatMap((row) => {
-    const product = row.product === "peakload" ? "peakload" : row.product === "baseload" ? "baseload" : null;
+    const product =
+      row.product === "peakload" ? "peakload" : row.product === "baseload" ? "baseload" : null;
     const tenor =
       row.tenor === "month" || row.tenor === "quarter" || row.tenor === "year" ? row.tenor : null;
     const price = n(row.price_eur_mwh as number | string | null);
@@ -205,7 +251,42 @@ export async function loadLatestForwardPoints(): Promise<ForwardPoint[]> {
         periodStart: String(row.period_start),
         periodEnd: String(row.period_end),
         priceEurMwh: price,
-        source: String(row.source ?? "cme_itb"),
+        source: String(row.source ?? CME_FORWARD_SOURCE),
+      },
+    ];
+  });
+}
+
+async function loadLatestGmeMonthlyPoints(): Promise<ForwardPoint[]> {
+  const client = offerteReadClient();
+  const { data: latest, error: latestError } = await client
+    .from("po_gme_mte_monthly")
+    .select("as_of")
+    .order("as_of", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latestError) throw new Error(latestError.message);
+  const asOf = latest?.as_of as string | undefined;
+  if (!asOf) return [];
+
+  const { data, error } = await client
+    .from("po_gme_mte_monthly")
+    .select("as_of, period_start, period_end, price_eur_mwh, source")
+    .eq("as_of", asOf);
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).flatMap((row) => {
+    const price = n(row.price_eur_mwh as number | string | null);
+    if (price == null) return [];
+    return [
+      {
+        asOf: String(row.as_of),
+        product: "baseload" as const,
+        tenor: "month" as const,
+        periodStart: String(row.period_start),
+        periodEnd: String(row.period_end),
+        priceEurMwh: price,
+        source: String(row.source ?? GME_FORWARD_SOURCE),
       },
     ];
   });

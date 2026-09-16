@@ -30,6 +30,7 @@ import {
 import {
   OFFERTE_SEARCH_PAGE_SIZE,
   CME_ITB_PAGE_URL,
+  GME_MTE_PAGE_URL,
   PORTALE_OFFERTE_URL,
   type CapPlace,
   type OfferteCliente,
@@ -579,13 +580,26 @@ export function OfferteExplorer({
         mese, i
         {" "}
         <a
+          href={GME_MTE_PAGE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600"
+        >
+          forward GME MTE mensili
+        </a>
+        {" "}
+        dove ci sono, e i
+        {" "}
+        <a
           href={CME_ITB_PAGE_URL}
           target="_blank"
           rel="noreferrer"
           className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600"
         >
-          futures CME Italian Power Baseload (GME)
+          futures CME Italian Power
         </a>
+        {" "}
+        per i mesi successivi
         {result?.forwardAsOf ? ` al ${formatIsoDate(result.forwardAsOf)}` : ""}
         {result?.punEurKwh != null
           ? ` (PUN atteso ${formatCen(result.punEurKwh)} c€/kWh)`

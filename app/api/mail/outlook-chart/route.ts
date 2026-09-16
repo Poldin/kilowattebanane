@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       tariff,
       forwardMonths: forward.months,
       forwardAsOf: forward.asOf,
+      forwardSource: forward.source,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Chart failed";

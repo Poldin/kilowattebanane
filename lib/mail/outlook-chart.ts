@@ -5,6 +5,7 @@ import {
   type MonthOutlookPoint,
 } from "@/lib/monthly-outlook";
 import type { TariffPlanId } from "@/lib/fasce";
+import { forwardSourceShortLabel } from "@/lib/offerte/forward-source";
 import type { PunMonthPoint } from "@/lib/offerte/forward";
 import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
 
@@ -46,6 +47,7 @@ export type MailOutlookChartLayout = {
     isAnchor: boolean;
   }[];
   forwardAsOfLabel: string | null;
+  forwardSourceLabel: string | null;
 };
 
 function formatMonthAxisLabel(isoDate: string) {
@@ -76,12 +78,14 @@ export function buildMailOutlookChartLayout({
   tariff,
   forwardMonths,
   forwardAsOf,
+  forwardSource,
 }: {
   anchorDate: string;
   hourly: ZoneHourlyPayload[];
   tariff: TariffPlanId;
   forwardMonths: PunMonthPoint[];
   forwardAsOf: string | null;
+  forwardSource?: string | null;
 }): MailOutlookChartLayout | null {
   const series = buildMonthOutlook({
     anchorDate,
@@ -89,7 +93,7 @@ export function buildMailOutlookChartLayout({
     tariff,
     forwardMonths,
     forwardAsOf,
-    forwardSource: null,
+    forwardSource: forwardSource ?? null,
     expanded: false,
   });
 
@@ -158,6 +162,7 @@ export function buildMailOutlookChartLayout({
     bars,
     monthLabels,
     forwardAsOfLabel: forwardAsOf ? formatForwardAsOf(forwardAsOf) : null,
+    forwardSourceLabel: forwardSourceShortLabel(forwardSource ?? null),
   };
 }
 

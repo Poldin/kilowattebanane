@@ -2,6 +2,8 @@ export const PORTALE_OFFERTE_URL =
   "https://www.ilportaleofferte.it/portaleOfferte/it/open-data.page";
 export const CME_ITB_PAGE_URL =
   "https://www.cmegroup.com/markets/energy/electricity/italian-power-baseload-gme-calendar-month.html";
+export const GME_MTE_PAGE_URL =
+  "https://www.mercatoelettrico.org/it-it/Home/Esiti/Elettricita/MTE/Esiti/Baseload";
 export const PORTALE_OFFERTE_HOME =
   "https://www.ilportaleofferte.it/portaleOfferte/it/homepage.page";
 export const PORTALE_OFFERTE_CERCA =

@@ -1,69 +1,40 @@
-import { unzipFirstFile } from "@/lib/offerte/zip";
-import type { ForwardPoint, ForwardProduct, ForwardTenor } from "@/lib/offerte/forward";
+import type { ForwardPoint } from "@/lib/offerte/forward";
+import { GME_FORWARD_SOURCE } from "@/lib/offerte/forward-source";
+import { GME_MTE_PAGE_URL } from "@/lib/offerte/public-types";
 
-const GME_API = "https://api.mercatoelettrico.org";
-const UA = "kilowattebanane/mte (https://kilowattebanane.it)";
+export { GME_MTE_PAGE_URL };
+export { GME_FORWARD_SOURCE as GME_MTE_SOURCE };
+export const GME_MTE_API_URL =
+  "https://www.mercatoelettrico.org/DesktopModules/GmeEsitiMTE/API/GmeEsitiMTE/GetMEESitiMTE";
+export const GME_MTE_MODULE_ID = "10259";
+export const GME_MTE_TAB_ID = "1532";
 
-const MONTHS: Record<string, number> = {
-  gen: 1,
-  gennaio: 1,
-  jan: 1,
-  january: 1,
-  feb: 2,
-  febbraio: 2,
-  february: 2,
-  mar: 3,
-  marzo: 3,
-  march: 3,
-  apr: 4,
-  aprile: 4,
-  april: 4,
-  mag: 5,
-  maggio: 5,
-  may: 5,
-  giu: 6,
-  giugno: 6,
-  jun: 6,
-  june: 6,
-  lug: 7,
-  luglio: 7,
-  jul: 7,
-  july: 7,
-  ago: 8,
-  agosto: 8,
-  aug: 8,
-  august: 8,
-  set: 9,
-  settembre: 9,
-  sep: 9,
-  sept: 9,
-  september: 9,
-  ott: 10,
-  ottobre: 10,
-  oct: 10,
-  october: 10,
-  nov: 11,
-  novembre: 11,
-  november: 11,
-  dic: 12,
-  dicembre: 12,
-  dec: 12,
-  december: 12,
+const UA = "kilowattebanane/gme-mte (https://kilowattebanane.it)";
+const MONTHLY_BL = /^BL-M-(20\d{2})-(0[1-9]|1[0-2])$/;
+
+export type GmeMteRow = {
+  Data?: unknown;
+  Prodotto?: unknown;
+  PrezzoControllo?: unknown;
+  PrezzoRiferimento?: unknown;
+  UltimoPrezzoAbbinato?: unknown;
+  VolumiMW?: unknown;
 };
 
-const ROMAN_Q: Record<string, number> = { i: 1, ii: 2, iii: 3, iv: 4 };
+export type GmeMonthlyPoint = ForwardPoint & {
+  productCode: string;
+  checkPriceEurMwh: number | null;
+  refPriceEurMwh: number | null;
+  lastPriceEurMwh: number | null;
+  volumeMw: number | null;
+  raw: GmeMteRow;
+};
 
-export type MteFetchResult = {
+export type GmeMteFetchResult = {
   asOf: string;
-  points: ForwardPoint[];
-  source: string;
+  points: GmeMonthlyPoint[];
+  sourceUrl: string;
 };
-
-function ymdToIso(value: string | number) {
-  const raw = String(value).replace(/\D/g, "");
-  if (raw.length !== 8) return null;
-  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
-}
 
 function lastDayOfMonth(year: number, month: number) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -77,220 +48,143 @@ function monthBounds(year: number, month: number) {
   };
 }
 
-function quarterBounds(year: number, quarter: number) {
-  const startMonth = (quarter - 1) * 3 + 1;
-  const endMonth = quarter * 3;
-  return {
-    start: `${year}-${String(startMonth).padStart(2, "0")}-01`,
-    end: `${year}-${String(endMonth).padStart(2, "0")}-${String(lastDayOfMonth(year, endMonth)).padStart(2, "0")}`,
-  };
+export function ymdFromGmeDate(raw: unknown) {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  if (digits.length !== 8) return null;
+  const year = Number(digits.slice(0, 4));
+  const month = Number(digits.slice(4, 6));
+  const day = Number(digits.slice(6, 8));
+  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function yearBounds(year: number) {
-  return { start: `${year}-01-01`, end: `${year}-12-31` };
+export function parseGmeNumber(raw: unknown) {
+  if (raw == null || raw === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
 }
 
-function expandYear(raw: string) {
-  if (raw.length === 4) return Number(raw);
-  const n = Number(raw);
-  return n >= 70 ? 1900 + n : 2000 + n;
+export function parseGmeMteMonthlyCode(code: string) {
+  const match = code.trim().toUpperCase().match(MONTHLY_BL);
+  if (!match) return null;
+  return monthBounds(Number(match[1]), Number(match[2]));
 }
 
-export function parseMteProduct(name: string): {
-  product: ForwardProduct;
-  tenor: ForwardTenor;
-  periodStart: string;
-  periodEnd: string;
-} | null {
-  const text = name.replace(/\s+/g, " ").trim();
-  const peak = /\b(pk|peak|peakload)\b/i.test(text);
-  const product: ForwardProduct = peak ? "peakload" : "baseload";
-
-  const ym = text.match(/\b(20\d{2})[-./]?(0[1-9]|1[0-2])\b/);
-  const compactYm = text.match(/\b(20\d{2})(0[1-9]|1[0-2])\b/);
-  const monthHit = text.match(
-    /\b(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|january|february|march|april|may|june|july|august|september|october|november|december|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic|jan|jun|jul|aug|sep|sept|oct|dec)\.?\s*-?\s*(20\d{2}|\d{2})\b/i,
-  );
-  const quarterHit =
-    text.match(/\b(?:Q|T|trim(?:estre)?)\s*([1-4])\s*[-/ ]\s*(20\d{2}|\d{2})\b/i) ||
-    text.match(/\b(20\d{2})\s*[-/ ]\s*(?:Q|T)\s*([1-4])\b/i) ||
-    text.match(/\b(I{1,3}|IV)\s+trimestre\s+(20\d{2}|\d{2})\b/i);
-  const yearHit =
-    text.match(/\b(?:cal(?:endar)?|anno|year|bl-y|baseload\s+y)\s*[-/ ]*(20\d{2}|\d{2})\b/i) ||
-    text.match(/\b(20\d{2})\b/);
-
-  if (/\b(mese|month|mensile|bl-m|fdbm)\b/i.test(text) || compactYm || (ym && !quarterHit)) {
-    const compact = compactYm ?? ym;
-    if (compact) {
-      const year = Number(compact[1].length === 6 ? compact[1].slice(0, 4) : compact[1]);
-      const month = Number(compact[2] ?? compact[1].slice(4));
-      if (year && month >= 1 && month <= 12) {
-        const bounds = monthBounds(year, month);
-        return { product, tenor: "month", periodStart: bounds.start, periodEnd: bounds.end };
-      }
-    }
-    if (monthHit) {
-      const month = MONTHS[monthHit[1].toLowerCase().replace(".", "")];
-      const year = expandYear(monthHit[2]);
-      if (month) {
-        const bounds = monthBounds(year, month);
-        return { product, tenor: "month", periodStart: bounds.start, periodEnd: bounds.end };
-      }
-    }
-  }
-
-  if (quarterHit) {
-    const roman = ROMAN_Q[quarterHit[1].toLowerCase()];
-    let quarter = roman ?? Number(quarterHit[1]);
-    let yearRaw = quarterHit[2] ?? "";
-    if (/^20\d{2}/.test(quarterHit[0]) && quarterHit[2]) {
-      yearRaw = quarterHit[1];
-      quarter = Number(quarterHit[2]);
-    }
-    const year = expandYear(yearRaw);
-    if (Number.isFinite(quarter) && quarter >= 1 && quarter <= 4 && year) {
-      const bounds = quarterBounds(year, quarter);
-      return { product, tenor: "quarter", periodStart: bounds.start, periodEnd: bounds.end };
-    }
-  }
-
-  if (/\b(anno|year|calendar|cal|annuale|bl-y)\b/i.test(text) && yearHit) {
-    const year = expandYear(yearHit[1]);
-    const bounds = yearBounds(year);
-    return { product, tenor: "year", periodStart: bounds.start, periodEnd: bounds.end };
-  }
-
+export function pickGmeMtePrice(row: GmeMteRow) {
+  const check = parseGmeNumber(row.PrezzoControllo);
+  if (check != null && check > 0) return check;
+  const ref = parseGmeNumber(row.PrezzoRiferimento);
+  if (ref != null && ref > 0) return ref;
+  const last = parseGmeNumber(row.UltimoPrezzoAbbinato);
+  if (last != null && last > 0) return last;
   return null;
 }
 
-function pickPrice(row: Record<string, unknown>) {
-  const keys = [
-    "CheckPrice",
-    "checkPrice",
-    "PrezzoControllo",
-    "RefPrice",
-    "refPrice",
-    "LastMatchedPrice",
-    "lastMatchedPrice",
-    "SettlementPrice",
-    "Price",
-  ];
-  for (const key of keys) {
-    const value = Number(row[key]);
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-  return null;
-}
-
-function asRows(payload: unknown): Record<string, unknown>[] {
-  if (Array.isArray(payload)) return payload as Record<string, unknown>[];
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    for (const key of ["data", "Data", "results", "Results", "MTEResults", "items"]) {
-      if (Array.isArray(record[key])) return record[key] as Record<string, unknown>[];
-    }
-  }
-  return [];
-}
-
-export function pointsFromMteRows(rows: Record<string, unknown>[], fallbackAsOf: string) {
-  const byKey = new Map<string, ForwardPoint>();
+export function pointsFromGmeMteRows(rows: GmeMteRow[], fallbackAsOf: string) {
+  const byStart = new Map<string, GmeMonthlyPoint>();
   for (const row of rows) {
-    const name = String(row.Product ?? row.product ?? row.NomeProdotto ?? row.Instrument ?? "");
-    const parsed = parseMteProduct(name);
-    if (!parsed) continue;
-    const price = pickPrice(row);
-    if (price == null) continue;
-    const asOf =
-      ymdToIso(String(row.Date ?? row.SessionDate ?? row.data ?? fallbackAsOf.replace(/-/g, ""))) ??
-      fallbackAsOf;
-    const point: ForwardPoint = {
+    const code = String(row.Prodotto ?? "").trim();
+    const bounds = parseGmeMteMonthlyCode(code);
+    const price = pickGmeMtePrice(row);
+    if (!bounds || price == null) continue;
+    const asOf = ymdFromGmeDate(row.Data) ?? fallbackAsOf;
+    byStart.set(bounds.start, {
       asOf,
-      product: parsed.product,
-      tenor: parsed.tenor,
-      periodStart: parsed.periodStart,
-      periodEnd: parsed.periodEnd,
+      product: "baseload",
+      tenor: "month",
+      periodStart: bounds.start,
+      periodEnd: bounds.end,
       priceEurMwh: price,
-      source: "gme_mte",
-    };
-    const key = `${point.asOf}|${point.product}|${point.tenor}|${point.periodStart}`;
-    const prev = byKey.get(key);
-    if (!prev || point.priceEurMwh > 0) byKey.set(key, point);
+      source: GME_FORWARD_SOURCE,
+      productCode: code.toUpperCase(),
+      checkPriceEurMwh: parseGmeNumber(row.PrezzoControllo),
+      refPriceEurMwh: parseGmeNumber(row.PrezzoRiferimento),
+      lastPriceEurMwh: parseGmeNumber(row.UltimoPrezzoAbbinato),
+      volumeMw: parseGmeNumber(row.VolumiMW),
+      raw: row,
+    });
   }
-  return [...byKey.values()];
+  return [...byStart.values()].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
 }
 
-async function gmeAuth(login: string, password: string) {
-  const response = await fetch(`${GME_API}/api/v1/Auth`, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json", "user-agent": UA },
-    body: JSON.stringify({ Login: login, Password: password }),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(`GME auth HTTP ${response.status}`);
-  const payload = (await response.json()) as { Success?: boolean; token?: string; Reason?: string };
-  if (!payload.Success || !payload.token) {
-    throw new Error(payload.Reason || "GME auth failed");
+function cookieHeader(response: Response) {
+  const raw =
+    typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : [];
+  const byName = new Map<string, string>();
+  for (const part of raw) {
+    const pair = part.split(";")[0] ?? "";
+    const eq = pair.indexOf("=");
+    if (eq <= 0) continue;
+    byName.set(pair.slice(0, eq), pair.slice(eq + 1));
   }
-  return payload.token;
+  return [...byName.entries()].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 
-async function gmeRequestData(token: string, start: string, end: string) {
-  const response = await fetch(`${GME_API}/api/v1/RequestData`, {
-    method: "POST",
+function firstMatch(html: string, patterns: RegExp[]) {
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+function sessionFromPage(html: string) {
+  const token = firstMatch(html, [
+    /name="__RequestVerificationToken"[^>]*value="([^"]+)"/i,
+    /value="([^"]+)"[^>]*name="__RequestVerificationToken"/i,
+  ]);
+  const moduleId =
+    firstMatch(html, [/ModuleId["']?\s*[:=]\s*["']?(\d+)/i]) ?? GME_MTE_MODULE_ID;
+  const tabId =
+    firstMatch(html, [/sf_tabId":"(\d+)"/i, /TabId":(\d+)/i]) ?? GME_MTE_TAB_ID;
+  if (!token) throw new Error("GME MTE: missing request verification token");
+  return { token, moduleId, tabId };
+}
+
+export async function fetchGmeMteMonthlyForwards(
+  snapshotDate: string,
+): Promise<GmeMteFetchResult> {
+  const page = await fetch(GME_MTE_PAGE_URL, {
     headers: {
-      "content-type": "application/json",
-      accept: "application/json",
-      authorization: `Bearer ${token}`,
+      accept: "text/html,application/xhtml+xml",
       "user-agent": UA,
     },
-    body: JSON.stringify({
-      Platform: "PublicMarketResults",
-      Segment: "MTE",
-      DataName: "ME_MTEResults",
-      IntervalStart: start.replace(/-/g, ""),
-      IntervalEnd: end.replace(/-/g, ""),
-      Attributes: {},
-    }),
+    cache: "no-store",
+    redirect: "follow",
+  });
+  const html = await page.text();
+  if (!page.ok) {
+    throw new Error(`GME MTE page HTTP ${page.status}`);
+  }
+  const { token, moduleId, tabId } = sessionFromPage(html);
+  const cookie = cookieHeader(page);
+  const sourceUrl = `${GME_MTE_API_URL}?data=0`;
+  const response = await fetch(sourceUrl, {
+    headers: {
+      accept: "application/json, text/plain, */*",
+      "user-agent": UA,
+      referer: GME_MTE_PAGE_URL,
+      ModuleId: moduleId,
+      TabId: tabId,
+      RequestVerificationToken: token,
+      ...(cookie ? { cookie } : {}),
+    },
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(`GME MTE HTTP ${response.status}`);
-  const payload = (await response.json()) as {
-    ResultRequest?: string;
-    ContentResponse?: string;
-    FormatType?: string;
-  };
-  if (!payload.ContentResponse) {
-    throw new Error(payload.ResultRequest || "GME MTE empty response");
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`GME MTE HTTP ${response.status}: ${text.slice(0, 180)}`);
   }
-  const zip = Buffer.from(payload.ContentResponse, "base64");
-  const text = unzipFirstFile(zip);
-  return JSON.parse(text) as unknown;
-}
-
-function gmeCredentials() {
-  const login = process.env.GME_API_LOGIN?.trim() || process.env.GME_API_USER?.trim();
-  const password = process.env.GME_API_PASSWORD?.trim();
-  if (!login || !password) return null;
-  return { login, password };
-}
-
-export async function fetchMteForwards(asOf: string, lookbackDays = 10): Promise<MteFetchResult> {
-  const creds = gmeCredentials();
-  if (!creds) {
-    throw new Error("Missing GME_API_LOGIN and GME_API_PASSWORD");
-  }
-  const startDate = new Date(`${asOf}T00:00:00Z`);
-  startDate.setUTCDate(startDate.getUTCDate() - lookbackDays);
-  const start = startDate.toISOString().slice(0, 10);
-  const token = await gmeAuth(creds.login, creds.password);
-  const payload = await gmeRequestData(token, start, asOf);
-  const points = pointsFromMteRows(asRows(payload), asOf);
-  if (points.length === 0) throw new Error("GME MTE parsed 0 forward points");
-  const latest = points.reduce((best, row) => (row.asOf > best ? row.asOf : best), points[0].asOf);
+  const payload = JSON.parse(text) as unknown;
+  const rows = Array.isArray(payload) ? (payload as GmeMteRow[]) : [];
+  const points = pointsFromGmeMteRows(rows, snapshotDate);
+  if (points.length === 0) throw new Error("GME MTE parsed 0 monthly baseload points");
+  const asOf = points.reduce((best, row) => (row.asOf > best ? row.asOf : best), points[0].asOf);
   return {
-    asOf: latest,
-    source: "gme_mte",
-    points: points.filter((row) => row.asOf === latest),
+    asOf,
+    points: points.filter((row) => row.asOf === asOf),
+    sourceUrl,
   };
 }

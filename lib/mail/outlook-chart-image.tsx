@@ -19,12 +19,14 @@ export function mailOutlookChartImageResponse({
   tariff,
   forwardMonths,
   forwardAsOf,
+  forwardSource,
 }: {
   anchorDate: string;
   hourly: ZoneHourlyPayload[];
   tariff: TariffPlanId;
   forwardMonths: PunMonthPoint[];
   forwardAsOf: string | null;
+  forwardSource?: string | null;
 }) {
   const layout = buildMailOutlookChartLayout({
     anchorDate,
@@ -32,6 +34,7 @@ export function mailOutlookChartImageResponse({
     tariff,
     forwardMonths,
     forwardAsOf,
+    forwardSource,
   });
   if (!layout) {
     return new Response("Grafico non disponibile", { status: 404 });
@@ -188,7 +191,9 @@ function MailOutlookChartImage({ layout }: { layout: MailOutlookChartLayout }) {
             }}
           />
           Futuro · forward PUN
-          {layout.forwardAsOfLabel ? ` (CME al ${layout.forwardAsOfLabel})` : ""}
+          {layout.forwardAsOfLabel
+            ? ` (${layout.forwardSourceLabel ?? "forward"} al ${layout.forwardAsOfLabel})`
+            : ""}
         </div>
       </div>
     </div>

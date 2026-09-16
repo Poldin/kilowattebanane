@@ -13,7 +13,10 @@ async function handle(request: NextRequest) {
     try {
       const result = await pullForwardStack(snapshotDate);
       revalidateOfferte();
-      const status = result.forwardError && !result.forwards ? 502 : 200;
+      const status =
+        result.forwardError && !result.forwards && result.gmeError && !result.gme
+          ? 502
+          : 200;
       return Response.json(result, { status });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Forward pull failed";
