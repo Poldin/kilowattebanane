@@ -7,7 +7,7 @@ type RegionSelectProps = {
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
-  variant?: "default" | "banana";
+  variant?: "default" | "banana" | "inverted";
   compact?: boolean;
   hideLabel?: boolean;
   align?: "left" | "right";
@@ -110,6 +110,8 @@ export function RegionSelect({
   }
 
   const isBanana = variant === "banana";
+  const isInverted = variant === "inverted";
+  const isDarkSurface = isBanana || isInverted;
   const selectedZoneName = value ? zoneNameForRegion(value) : undefined;
 
   return (
@@ -119,7 +121,9 @@ export function RegionSelect({
         className={
           hideLabel
             ? "sr-only"
-            : "mb-1.5 block text-xs font-medium text-neutral-600 dark:text-neutral-400"
+            : isInverted
+              ? "mb-1.5 block text-xs font-medium text-neutral-400 dark:text-neutral-600"
+              : "mb-1.5 block text-xs font-medium text-neutral-600 dark:text-neutral-400"
         }
       >
         Regione
@@ -155,24 +159,32 @@ export function RegionSelect({
         }}
         onKeyDown={onTriggerKeyDown}
         className={
-          isBanana
-            ? `flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-[#111111] text-left text-neutral-100 outline-none transition-colors hover:bg-neutral-900 ${
+          isInverted
+            ? `flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-[#111111] text-left text-neutral-100 outline-none transition-colors hover:bg-neutral-900 dark:border-neutral-300 dark:bg-white dark:text-[#111111] dark:hover:bg-neutral-100 ${
                 compact
                   ? "h-10 w-full px-2.5 text-sm sm:h-8 sm:min-w-[11rem] sm:w-auto"
                   : "h-10 w-full px-3 text-sm"
               }`
-            : `flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-left text-sm outline-none transition-colors ${
-                open
-                  ? "border-neutral-400 dark:border-neutral-500"
-                  : "border-neutral-200 hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
-              }`
+            : isBanana
+              ? `flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-[#111111] text-left text-neutral-100 outline-none transition-colors hover:bg-neutral-900 ${
+                  compact
+                    ? "h-10 w-full px-2.5 text-sm sm:h-8 sm:min-w-[11rem] sm:w-auto"
+                    : "h-10 w-full px-3 text-sm"
+                }`
+              : `flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-left text-sm outline-none transition-colors ${
+                  open
+                    ? "border-neutral-400 dark:border-neutral-500"
+                    : "border-neutral-200 hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
+                }`
         }
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span
             className={
-              isBanana
-                ? "truncate font-medium"
+              isDarkSurface
+                ? value
+                  ? "truncate font-medium"
+                  : "truncate text-neutral-400 dark:text-neutral-500"
                 : value
                   ? "truncate text-foreground"
                   : "truncate text-neutral-400 dark:text-neutral-600"
@@ -191,7 +203,7 @@ export function RegionSelect({
           aria-hidden
           viewBox="0 0 16 16"
           className={`h-4 w-4 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""} ${
-            isBanana ? "text-neutral-400" : "text-neutral-500"
+            isDarkSurface ? "text-neutral-400" : "text-neutral-500"
           }`}
           fill="none"
           stroke="currentColor"
@@ -206,21 +218,25 @@ export function RegionSelect({
           className={`absolute z-30 mt-2 overflow-hidden rounded-md ${
             align === "right" ? "right-0" : "left-0"
           } ${
-            isBanana
-              ? "w-[min(22rem,calc(100vw-2rem))] border border-neutral-800 bg-[#111111]"
-              : "w-full border border-neutral-200 bg-background dark:border-neutral-800"
+            isInverted
+              ? "w-[min(22rem,calc(100vw-2rem))] border border-neutral-800 bg-[#111111] dark:border-neutral-300 dark:bg-white"
+              : isBanana
+                ? "w-[min(22rem,calc(100vw-2rem))] border border-neutral-800 bg-[#111111]"
+                : "w-full border border-neutral-200 bg-background dark:border-neutral-800"
           }`}
         >
           <div
             className={`border-b px-3 py-2 ${
-              isBanana
-                ? "border-neutral-800"
-                : "border-neutral-200 dark:border-neutral-800"
+              isInverted
+                ? "border-neutral-800 dark:border-neutral-200"
+                : isBanana
+                  ? "border-neutral-800"
+                  : "border-neutral-200 dark:border-neutral-800"
             }`}
           >
             <p
               className={`text-[11px] font-medium tracking-wide uppercase ${
-                isBanana ? "text-neutral-400" : "text-neutral-500"
+                isDarkSurface ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-500"
               }`}
             >
               Zone di mercato
@@ -237,7 +253,7 @@ export function RegionSelect({
             }
             onKeyDown={onListKeyDown}
             className={`max-h-52 overflow-y-auto py-1 outline-none ${
-              isBanana ? "region-select-list-banana" : "region-select-list"
+              isDarkSurface ? "region-select-list-banana" : "region-select-list"
             }`}
           >
             {ITALIAN_REGIONS.map((name, index) => {
@@ -257,13 +273,17 @@ export function RegionSelect({
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectRegion(name)}
                     className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                      isBanana
+                      isInverted
                         ? active
-                          ? "bg-neutral-800 text-neutral-100"
-                          : "text-neutral-300"
-                        : active
-                          ? "bg-neutral-100 text-foreground dark:bg-neutral-900"
-                          : "text-neutral-700 dark:text-neutral-300"
+                          ? "bg-neutral-800 text-neutral-100 dark:bg-neutral-100 dark:text-[#111111]"
+                          : "text-neutral-300 dark:text-neutral-700"
+                        : isBanana
+                          ? active
+                            ? "bg-neutral-800 text-neutral-100"
+                            : "text-neutral-300"
+                          : active
+                            ? "bg-neutral-100 text-foreground dark:bg-neutral-900"
+                            : "text-neutral-700 dark:text-neutral-300"
                     }`}
                   >
                     <span
@@ -276,7 +296,7 @@ export function RegionSelect({
                     {zoneName && zoneName !== name ? (
                       <span
                         className={
-                          isBanana
+                          isDarkSurface
                             ? zoneBadgeClass
                             : "shrink-0 text-[11px] font-medium text-neutral-400 dark:text-neutral-500"
                         }
@@ -290,7 +310,7 @@ export function RegionSelect({
                       viewBox="0 0 16 16"
                       className={`h-3.5 w-3.5 shrink-0 ${
                         selected ? "opacity-100" : "opacity-0"
-                      } ${isBanana ? "text-neutral-100" : "text-foreground"}`}
+                      } ${isDarkSurface ? "text-neutral-100 dark:text-[#111111]" : "text-foreground"}`}
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="1.75"

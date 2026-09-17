@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 
 export const FAQ_TOMORROW_ID = "faq-costo-domani";
 export const FAQ_POCKET_ID = "faq-soldi-in-tasca";
@@ -37,7 +36,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Quando escono i prezzi di domani?",
     answer:
-      "Il mercato del giorno dopo chiude a mezzogiorno: gli operatori comprano e vendono l'energia di domani. I prezzi si pubblicano nel pomeriggio, e a quel punto li tiriamo su e partono le mail. Sulla home, dopo le 22, se i dati di domani ci sono già il grafico passa da solo a domani. Prima resti su oggi: domani lo trovi con le frecce o nell'archivio.",
+      "Il mercato del giorno dopo chiude a mezzogiorno: gli operatori comprano e vendono l'energia di domani. I prezzi si pubblicano nel pomeriggio, e a quel punto li tiriamo su e partono le mail. Sulla home, dopo le 22, se i dati di domani ci sono già il grafico passa da solo a domani. Prima resti su oggi: domani lo trovi con le frecce.",
   },
   {
     question: "Da dove prendete i dati?",
@@ -127,31 +126,13 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: "Quando conviene consumare energia in Italia?",
-    answer: (
-      <>
-        Dipende dal giorno e dalla zona. Ogni giornata ha ore più basse (🍌) e
-        ore di picco (🐵): sono i prezzi di mercato, non la bolletta. Per una
-        data precisa apri l&apos;
-        <Link href="/prezzi" className={FAQ_LINK_CLASS}>
-          archivio prezzi
-        </Link>
-        : minimo, medio, massimo e le fasce orarie per Nord, Centro-Nord,
-        Centro-Sud, Sud, Calabria, Sicilia e Sardegna.
-      </>
-    ),
+    answer:
+      "Dipende dal giorno e dalla zona. Ogni giornata ha ore più basse (🍌) e ore di picco (🐵): sono i prezzi di mercato, non la bolletta. Sulla home vedi minimo, medio, massimo e le fasce orarie per Nord, Centro-Nord, Centro-Sud, Sud, Calabria, Sicilia e Sardegna.",
   },
   {
     question: "Dove vedo i prezzi di un giorno preciso?",
-    answer: (
-      <>
-        Nell&apos;
-        <Link href="/prezzi" className={FAQ_LINK_CLASS}>
-          archivio
-        </Link>
-        , una pagina per ogni giornata di cui abbiamo i dati. Sulla home
-        restano grafico interattivo e tabella ogni quarto d&apos;ora.
-      </>
-    ),
+    answer:
+      "Sulla home: grafico interattivo e tabella ogni quarto d'ora. Con le frecce passi da oggi a ieri o a domani, quando i dati ci sono già.",
   },
 ];
 

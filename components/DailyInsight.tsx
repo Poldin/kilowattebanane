@@ -26,6 +26,8 @@ import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { MonthlyOutlookChart } from "@/components/MonthlyOutlookChart";
 import { ShareButton } from "@/components/ShareButton";
 import { SignupSlot } from "@/components/SignupForm";
+import { MarketLearnBanner } from "@/components/MarketLearnBanner";
+import { ShareBanner } from "@/components/ShareBanner";
 import { LoadShiftSim } from "@/components/LoadShiftSim";
 import { LookbackInsight } from "@/components/LookbackInsight";
 import {
@@ -1820,7 +1822,11 @@ export function DailyInsight({
               forward={home?.forward ?? { asOf: null, source: null, months: [] }}
               today={today}
             />
-            <SignupSlot className="mt-6 w-full scroll-mt-20" />
+            <div className="mt-6 flex w-full flex-col gap-3">
+              <MarketLearnBanner />
+              <SignupSlot className="w-full scroll-mt-20" />
+              <ShareBanner />
+            </div>
             <QuarterPriceTable day={day} showFruit={showFruit} />
           </div>
           {home ? (

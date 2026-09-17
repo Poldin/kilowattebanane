@@ -140,16 +140,16 @@ export function SignupForm() {
   return (
     <section
       aria-labelledby="signup-heading"
-      className="w-full rounded-lg border border-neutral-200 bg-neutral-50 p-5 sm:p-6 dark:border-neutral-800 dark:bg-neutral-950"
+      className="w-full rounded-lg border border-neutral-800 bg-[#111111] p-5 text-[#f5f5f5] sm:p-6 dark:border-neutral-200 dark:bg-[#f5f5f5] dark:text-[#111111]"
     >
       <h2
         id="signup-heading"
-        className="text-base font-medium tracking-tight text-foreground sm:text-lg"
+        className="text-3xl font-bold tracking-tight leading-tight sm:text-4xl"
       >
-        💌Ricevi ogni giorno i prezzi dell'energia nella tua zona. Gratis.
+        Monitora i prezzi dell&apos;energia
       </h2>
-      <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-        Scegli regione, tipo di dati in mail e inserisci l&apos;email.
+      <p className="mt-2 text-sm text-neutral-300 dark:text-neutral-600">
+        💌 Iscriviti e ricevi ogni giorno una mail con i prezzi dell&apos;energia nella tua zona. Gratis.
       </p>
 
       <form onSubmit={handleSubmit} className="relative mt-5 flex flex-col gap-3">
@@ -160,19 +160,19 @@ export function SignupForm() {
           </label>
         </div>
 
-        <RegionSelect required value={region} onChange={setRegion} />
+        <RegionSelect required value={region} onChange={setRegion} variant="inverted" />
 
         <TariffSelect
           value={tariff}
           onChange={handleTariffChange}
-          variant="default"
+          variant="inverted"
           align="left"
           hideLabel={false}
           label="Come vuoi vedere i prezzi in mail?"
         />
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
+          <span className="text-xs font-medium text-neutral-400 dark:text-neutral-600">
             Email
           </span>
           <input
@@ -182,24 +182,24 @@ export function SignupForm() {
             placeholder="tu@email.it"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-10 w-full rounded-md border border-neutral-200 bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-neutral-800 dark:placeholder:text-neutral-600 dark:focus:border-neutral-600"
+            className="h-10 w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 text-sm text-neutral-100 outline-none transition-colors placeholder:text-neutral-500 focus:border-neutral-500 dark:border-neutral-300 dark:bg-white dark:text-[#111111] dark:placeholder:text-neutral-400 dark:focus:border-neutral-400"
           />
         </label>
 
         {error ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-sm text-red-400 dark:text-red-600">{error}</p>
         ) : null}
 
         <button
           type="submit"
           disabled={pending}
-          className="mt-1 h-10 w-full rounded-md bg-foreground text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="mt-1 h-10 w-full rounded-md bg-[#f5f5f5] text-sm font-medium text-[#111111] transition-opacity hover:opacity-90 disabled:opacity-60 dark:bg-[#111111] dark:text-[#f5f5f5]"
         >
-          {pending ? "Un attimo…" : "Iscriviti gratis"}
+          {pending ? "Un attimo…" : "💌 Iscriviti gratis"}
         </button>
       </form>
 
-      <p className="mt-4 text-center text-xs text-neutral-500 dark:text-neutral-500">
+      <p className="mt-4 text-center text-xs text-neutral-400 dark:text-neutral-500">
         Annulla quando vuoi direttamente dalle mail.
       </p>
 

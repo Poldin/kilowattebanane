@@ -73,8 +73,8 @@ export function Footer() {
               </button>
             </li>
             <li>
-              <Link href="/prezzi" className={itemClass}>
-                Archivio prezzi, giorno per giorno
+              <Link href="/learn" className={itemClass}>
+                Studia il mercato elettrico
               </Link>
             </li>
             <li>

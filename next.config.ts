@@ -19,6 +19,16 @@ const nextConfig: NextConfig = {
         destination: "https://kilowattebanane.it/:path*",
         permanent: true,
       },
+      {
+        source: "/prezzi",
+        destination: "/",
+        permanent: true,
+      },
+      {
+        source: "/prezzi/:path*",
+        destination: "/",
+        permanent: true,
+      },
     ];
   },
 };

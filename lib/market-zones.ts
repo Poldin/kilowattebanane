@@ -145,15 +145,3 @@ export function zoneNameForRegion(region: string) {
 }
 
 export const MARKET_ZONE_IDS = Object.keys(MARKET_ZONES) as MarketZoneId[];
-
-export function regionsForZone(zone: MarketZoneId) {
-  return ITALIAN_REGIONS.filter((region) => REGION_TO_ZONE[region] === zone);
-}
-
-export function archiveDayPath(date: string) {
-  return `/prezzi/${date}`;
-}
-
-export function archiveDayJsonPath(date: string) {
-  return `/prezzi/${date}/dati`;
-}
