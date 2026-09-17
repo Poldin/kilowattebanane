@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { FasciaPlanIcon } from "@/components/offerte/FasciaPlanIcon";
 import { ScontiRankings } from "@/components/offerte/ScontiRankings";
+import { MarketLearnBanner } from "@/components/MarketLearnBanner";
 import { ParetoSection } from "@/components/offerte/ParetoSection";
+import { PrezziSection } from "@/components/offerte/PrezziSection";
 import {
   CanoneIcon,
   ClienteIcon,
@@ -68,44 +70,34 @@ export function OfferteStats({ stats }: { stats: OfferteClusterStats }) {
         {formatItDate(stats.snapshotDate)}. 
       </p>
 
-      <div className="mt-8 divide-y divide-neutral-200 border-y border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+      <div className="mt-8 flex flex-col gap-4">
         {CLUSTERS.map((cluster) => (
           <section
             key={cluster.key}
-            aria-labelledby={`cluster-${cluster.key}`}
-            className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[7.25rem_1fr] sm:items-center sm:gap-x-5"
+            aria-label={cluster.title}
           >
-            <h2
-              id={`cluster-${cluster.key}`}
-              className="text-sm font-medium tracking-tight"
-              title={cluster.lead}
-            >
-              {cluster.title}
-            </h2>
             <p className="sr-only">{cluster.lead}</p>
-            <ClusterSplit buckets={stats[cluster.key]} total={stats.total} />
+            <ClusterSplit buckets={stats[cluster.key]} total={stats.total} barSize="thick" />
           </section>
         ))}
-        <section
-          aria-labelledby="cluster-fascia"
-          className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[7.25rem_1fr] sm:items-center sm:gap-x-5"
-        >
-          <h2
-            id="cluster-fascia"
-            className="text-sm font-medium tracking-tight"
-            title="Stesso prezzo tutte le ore, due fasce, tre fasce, oppure ora per ora."
-          >
-            Che orario
-          </h2>
+        <section aria-label="Che orario">
           <p className="sr-only">
             Stesso prezzo tutte le ore, due fasce, tre fasce, oppure ora per ora. Fisso e
             variabile spezzati per ogni piano, tranne la dinamica.
           </p>
-          <FasciaSplit buckets={stats.fascia} total={stats.total} />
+          <FasciaSplit buckets={stats.fascia} total={stats.total} barSize="thick" />
         </section>
       </div>
 
-      {stats.pareto ? <ParetoSection stats={stats.pareto} /> : null}
+      {stats.pareto ? (
+        <>
+          <ParetoSection stats={stats.pareto} />
+          <div className="mt-8">
+            <MarketLearnBanner />
+          </div>
+        </>
+      ) : null}
+      {stats.prezzi ? <PrezziSection stats={stats.prezzi} /> : null}
       {stats.sconti ? <ScontiSection stats={stats.sconti} /> : null}
       <VendorSection stats={stats.fornitori} total={stats.total} venditori={stats.venditori} />
     </>
@@ -365,45 +357,75 @@ function NewTabIcon() {
   );
 }
 
+type BarSize = "default" | "thick";
+
+function ClusterBucketLegend({
+  bucket,
+  total,
+  align = "start",
+}: {
+  bucket: OfferteClusterBucket;
+  total: number;
+  align?: "start" | "end";
+}) {
+  const pct = total > 0 ? (bucket.count / total) * 100 : 0;
+
+  return (
+    <div
+      className={`flex items-center gap-1.5 text-sm text-foreground ${
+        align === "end" ? "justify-end text-right" : ""
+      }`}
+    >
+      <ClusterIcon bucketKey={bucket.key} />
+      <span>{bucket.label}</span>
+      <span className="tabular-nums text-neutral-600 dark:text-neutral-400">
+        {formatIt(bucket.count)}
+      </span>
+      <span className="tabular-nums text-neutral-400 dark:text-neutral-500">
+        {formatPct(pct)}
+      </span>
+    </div>
+  );
+}
+
 function ClusterSplit({
   buckets,
   total,
+  barSize = "default",
 }: {
   buckets: OfferteClusterBucket[];
   total: number;
+  barSize?: BarSize;
 }) {
+  const visibleBuckets = buckets.filter((bucket) => bucket.count > 0);
+  const segments = buckets
+    .map((bucket, index) => ({
+      key: bucket.key,
+      label: bucket.label,
+      pct: total > 0 ? (bucket.count / total) * 100 : 0,
+      color: undefined,
+      fillClass: BAR_FILL[index] ?? BAR_FILL[BAR_FILL.length - 1],
+    }))
+    .filter((segment) => segment.pct > 0);
+  const dualLegend = barSize !== "default" && visibleBuckets.length === 2;
+
   return (
     <div>
-      <ul className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        {buckets.map((bucket) => {
-          const pct = total > 0 ? (bucket.count / total) * 100 : 0;
-          return (
-            <li
-              key={bucket.key}
-              className="flex items-center gap-1.5 text-sm text-foreground"
-            >
-              <ClusterIcon bucketKey={bucket.key} />
-              <span>{bucket.label}</span>
-              <span className="tabular-nums text-neutral-600 dark:text-neutral-400">
-                {formatIt(bucket.count)}
-              </span>
-              <span className="tabular-nums text-neutral-400 dark:text-neutral-500">
-                {formatPct(pct)}
-              </span>
+      {dualLegend ? (
+        <div className="flex items-baseline justify-between gap-4">
+          <ClusterBucketLegend bucket={visibleBuckets[0]!} total={total} />
+          <ClusterBucketLegend bucket={visibleBuckets[1]!} total={total} align="end" />
+        </div>
+      ) : (
+        <ul className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          {buckets.map((bucket) => (
+            <li key={bucket.key}>
+              <ClusterBucketLegend bucket={bucket} total={total} />
             </li>
-          );
-        })}
-      </ul>
-      <ClusterBar
-        segments={buckets
-          .map((bucket, index) => ({
-            key: bucket.key,
-            pct: total > 0 ? (bucket.count / total) * 100 : 0,
-            color: undefined,
-            fillClass: BAR_FILL[index] ?? BAR_FILL[BAR_FILL.length - 1],
-          }))
-          .filter((segment) => segment.pct > 0)}
-      />
+          ))}
+        </ul>
+      )}
+      <ClusterBar segments={segments} barSize={barSize} />
     </div>
   );
 }
@@ -411,11 +433,15 @@ function ClusterSplit({
 function FasciaSplit({
   buckets,
   total,
+  barSize = "default",
 }: {
   buckets: OfferteFasciaBucket[];
   total: number;
+  barSize?: BarSize;
 }) {
   const iconClass = "h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400";
+  const segments = fasciaBarSegments(buckets, total);
+
   return (
     <div>
       <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -462,7 +488,7 @@ function FasciaSplit({
           );
         })}
       </ul>
-      <ClusterBar segments={fasciaBarSegments(buckets, total)} />
+      <ClusterBar segments={segments} barSize={barSize} />
     </div>
   );
 }
@@ -473,10 +499,13 @@ function fasciaBarSegments(buckets: OfferteFasciaBucket[], total: number) {
     const fillClass = color ? undefined : "bg-neutral-400 dark:bg-neutral-600";
     if (bucket.fisso == null) {
       const pct = total > 0 ? (bucket.count / total) * 100 : 0;
-      return pct > 0 ? [{ key: bucket.key, pct, color, fillClass, opacity: 1 }] : [];
+      return pct > 0
+        ? [{ key: bucket.key, group: bucket.key, pct, color, fillClass, opacity: 1 }]
+        : [];
     }
     const parts: {
       key: string;
+      group: string;
       pct: number;
       color: string | undefined;
       fillClass?: string;
@@ -485,6 +514,7 @@ function fasciaBarSegments(buckets: OfferteFasciaBucket[], total: number) {
     if (bucket.fisso > 0) {
       parts.push({
         key: `${bucket.key}-fisso`,
+        group: bucket.key,
         pct: total > 0 ? (bucket.fisso / total) * 100 : 0,
         color,
         fillClass,
@@ -494,6 +524,7 @@ function fasciaBarSegments(buckets: OfferteFasciaBucket[], total: number) {
     if (bucket.variabile > 0) {
       parts.push({
         key: `${bucket.key}-variabile`,
+        group: bucket.key,
         pct: total > 0 ? (bucket.variabile / total) * 100 : 0,
         color,
         fillClass,
@@ -504,31 +535,47 @@ function fasciaBarSegments(buckets: OfferteFasciaBucket[], total: number) {
   });
 }
 
+function barHeightClass(barSize: BarSize) {
+  if (barSize === "thick") return "h-[1.375rem] rounded-lg sm:h-6";
+  return "h-1.5 rounded-full";
+}
+
 function ClusterBar({
   segments,
+  barSize = "default",
 }: {
   segments: {
     key: string;
+    group?: string;
     pct: number;
     color?: string;
     fillClass?: string;
     opacity?: number;
   }[];
+  barSize?: BarSize;
 }) {
   const marks: number[] = [];
   let acc = 0;
-  for (const segment of segments.slice(0, -1)) {
-    acc += segment.pct;
-    marks.push(acc);
+  for (let i = 0; i < segments.length - 1; i++) {
+    const current = segments[i]!;
+    const next = segments[i + 1]!;
+    acc += current.pct;
+    const currentGroup = current.group ?? current.key;
+    const nextGroup = next.group ?? next.key;
+    if (currentGroup !== nextGroup) marks.push(acc);
   }
 
+  const tall = barSize !== "default";
+
   return (
-    <div className="relative mt-2 py-1.5" aria-hidden>
-      <div className="flex h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-900">
+    <div className={tall ? "relative mt-2" : "relative mt-2 py-1.5"} aria-hidden>
+      <div
+        className={`flex overflow-hidden bg-neutral-100 dark:bg-neutral-900 ${barHeightClass(barSize)}`}
+      >
         {segments.map((segment) => (
           <div
             key={segment.key}
-            className={segment.color ? undefined : segment.fillClass}
+            className={`h-full ${segment.color ? "" : segment.fillClass ?? ""}`}
             style={{
               width: `${segment.pct}%`,
               ...(segment.color ? { backgroundColor: segment.color } : {}),
@@ -540,8 +587,9 @@ function ClusterBar({
       {marks.map((left) => (
         <span
           key={left}
-          className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-red-500"
+          className="absolute -inset-y-1 w-0.5 -translate-x-1/2 bg-red-500"
           style={{ left: `${left}%` }}
+          aria-hidden
         />
       ))}
     </div>
@@ -556,8 +604,13 @@ function fasciaPlanColor(key: string) {
   return undefined;
 }
 
-function ClusterIcon({ bucketKey }: { bucketKey: string }) {
-  const className = "h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400";
+function ClusterIcon({
+  bucketKey,
+  className = "h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400",
+}: {
+  bucketKey: string;
+  className?: string;
+}) {
   if (bucketKey === "domestico" || bucketKey === "non domestico" || bucketKey === "condominio") {
     return <ClienteIcon kind={bucketKey} className={className} />;
   }
@@ -569,6 +622,15 @@ function ClusterIcon({ bucketKey }: { bucketKey: string }) {
   if (bucketKey === "placet" || bucketKey === "ml") {
     return <MercatoIcon kind={bucketKey} className={className} />;
   }
+  if (bucketKey === "nazionale") {
+    return <CoperturaNazionaleIcon className={className} />;
+  }
+  if (bucketKey === "selettiva") {
+    return <CoperturaSelettivaIcon className={className} />;
+  }
+  if (bucketKey === "altro") {
+    return <AltroIcon className={className} />;
+  }
   if (
     bucketKey === "monoraria" ||
     bucketKey === "bioraria" ||
@@ -578,6 +640,44 @@ function ClusterIcon({ bucketKey }: { bucketKey: string }) {
     return <FasciaPlanIcon plan={bucketKey as OfferteFasciaPlan} />;
   }
   return null;
+}
+
+function CoperturaNazionaleIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden fill="none">
+      <circle cx="8" cy="8" r="5.25" stroke="currentColor" strokeWidth="1.35" />
+      <path
+        d="M3.5 8h9M8 3.5v9"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CoperturaSelettivaIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden fill="none">
+      <path
+        d="M8 2.75a3.25 3.25 0 0 0-3.25 3.25c0 2.45 3.25 5.75 3.25 5.75s3.25-3.3 3.25-5.75A3.25 3.25 0 0 0 8 2.75Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="6" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function AltroIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden fill="none">
+      <circle cx="4.25" cy="8" r="1.1" fill="currentColor" />
+      <circle cx="8" cy="8" r="1.1" fill="currentColor" />
+      <circle cx="11.75" cy="8" r="1.1" fill="currentColor" />
+    </svg>
+  );
 }
 
 function formatIt(value: number) {

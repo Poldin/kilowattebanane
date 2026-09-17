@@ -87,7 +87,7 @@ function boardFor(
 ): OfferteParetoBoard {
   const potenzaKw = cliente === "domestico" ? POTENZA_STANDARD_CASA_KW : 6;
   const axes = inputs
-    .filter((input) => isCredible(input, cliente, prezzo))
+    .filter((input) => isCredibleParetoPoint(input, cliente, prezzo))
     .map((input) => withSconti(input, sconti, potenzaKw));
 
   const hull = convexHull(axes);
@@ -136,8 +136,8 @@ function withSconti(input: ParetoPointInput, mode: ScontoMode, potenzaKw: number
   };
 }
 
-function isCredible(
-  point: ParetoPointInput,
+export function isCredibleParetoPoint(
+  point: Pick<ParetoPointInput, "monthlyEur" | "energyEurKwh">,
   cliente: OfferteParetoBoard["cliente"],
   prezzo: OfferteParetoBoard["prezzo"],
 ) {

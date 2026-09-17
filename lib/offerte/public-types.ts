@@ -260,6 +260,37 @@ export type OfferteParetoStats = {
   boards: OfferteParetoBoard[];
 };
 
+export type OffertePrezziQuartiles = {
+  p10: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  mean: number;
+};
+
+export type OffertePrezziClusterRow = {
+  key: string;
+  label: string;
+  n: number;
+  monthly: OffertePrezziQuartiles;
+  energy: OffertePrezziQuartiles;
+};
+
+export type OffertePrezziBoard = {
+  cliente: OfferteParetoCliente;
+  prezzo: OfferteParetoPrezzo;
+  n: number;
+  monthly: OffertePrezziQuartiles | null;
+  energy: OffertePrezziQuartiles | null;
+  mercato: OffertePrezziClusterRow[];
+  orario: OffertePrezziClusterRow[];
+};
+
+export type OffertePrezziStats = {
+  boards: OffertePrezziBoard[];
+};
+
 export type OfferteClusterStats = OfferteHeadlineStats & {
   cliente: OfferteClusterBucket[];
   prezzo: OfferteClusterBucket[];
@@ -268,5 +299,6 @@ export type OfferteClusterStats = OfferteHeadlineStats & {
   fascia: OfferteFasciaBucket[];
   sconti: OfferteScontoStats;
   pareto: OfferteParetoStats;
+  prezzi: OffertePrezziStats;
   fornitori: OfferteVendorStats;
 };

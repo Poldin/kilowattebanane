@@ -22,6 +22,7 @@ import type {
   OfferteVendorStats,
 } from "@/lib/offerte/public-types";
 import { buildParetoStats, type ParetoPointInput, type ParetoScontoRow } from "@/lib/offerte/pareto";
+import { buildPrezziStats } from "@/lib/offerte/prezzi";
 import type { MlComponentInput } from "@/lib/offerte/estimate";
 
 const SCONTO_RANK_CONSUMO_KWH = 2700;
@@ -189,14 +190,15 @@ export const loadOfferteClusterStats = unstable_cache(
     const scontoRows = await loadLiveSconti(mlRows.map((row) => row.id));
     const sconti = scontoStats(mlRows, scontoRows);
     const componenti = await loadLiveComponenti(mlRows.map((row) => row.id));
-    const pareto = buildParetoStats(
-      paretoInputs(placetRows, mlRows, componenti, scontoRows),
-    );
+    const points = paretoInputs(placetRows, mlRows, componenti, scontoRows);
+    const pareto = buildParetoStats(points);
+    const prezzi = buildPrezziStats(points);
 
     return {
       ...headline,
       sconti,
       pareto,
+      prezzi,
       cliente: buckets(
         rows,
         (row) => row.cliente,
@@ -237,7 +239,7 @@ export const loadOfferteClusterStats = unstable_cache(
       fornitori: vendorStats(rows),
     };
   },
-  ["offerte-cluster-stats-v13"],
+  ["offerte-cluster-stats-v14"],
   { revalidate: OFFERTE_CACHE_REVALIDATE, tags: [OFFERTE_CACHE_TAG] },
 );
 

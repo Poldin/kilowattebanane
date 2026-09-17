@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { OfferteStats } from "@/components/offerte/OfferteStats";
@@ -25,20 +24,7 @@ export default async function OfferStatsPage() {
       <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
         <Header />
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12">
-          <nav
-            aria-label="Percorso"
-            className="text-xs text-neutral-500 dark:text-neutral-400"
-          >
-            <Link href="/" className="transition-colors hover:text-foreground">
-              Home
-            </Link>
-            <span aria-hidden className="mx-1.5">
-              /
-            </span>
-            <span className="text-foreground">Statistiche offerte</span>
-          </nav>
-
-          <p className="mt-5 text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">
             Dati{" "}
             <a
               href={PORTALE_OFFERTE_URL}

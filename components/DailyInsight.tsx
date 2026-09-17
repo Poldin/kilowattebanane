@@ -24,9 +24,9 @@ import {
 import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
 import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { MonthlyOutlookChart } from "@/components/MonthlyOutlookChart";
-import { ShareButton } from "@/components/ShareButton";
 import { SignupSlot } from "@/components/SignupForm";
 import { MarketLearnBanner } from "@/components/MarketLearnBanner";
+import { CapBanner } from "@/components/CapBanner";
 import { ShareBanner } from "@/components/ShareBanner";
 import { LoadShiftSim } from "@/components/LoadShiftSim";
 import { LookbackInsight } from "@/components/LookbackInsight";
@@ -37,7 +37,6 @@ import {
   REGION_QUERY_PARAM,
   SHOW_TODAY_PRICES_EVENT,
   dateFromParam,
-  pricesShareUrl,
   regionFromParam,
   zoneForRegion,
   type ItalianRegion,
@@ -1707,22 +1706,12 @@ export function DailyInsight({
       aria-busy={showSkeleton}
       className="w-full scroll-mt-20"
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2
-          id="daily-insight-heading"
-          className="text-lg font-medium tracking-tight text-foreground sm:text-xl"
-        >
-          I prezzi dell&apos;energia nella tua zona
-        </h2>
-        <span className="hidden sm:contents">
-          <ShareButton
-            getUrl={() => pricesShareUrl(window.location.origin, region)}
-            title={`kilowatt e banane🍌🍌🍌 prezzi in ${region}`}
-            text={`I prezzi dell'energia all'ingrosso in ${region}. Guarda quando conviene consumare.`}
-            ariaLabel={`Condividi i prezzi in ${region}`}
-          />
-        </span>
-      </div>
+      <h2
+        id="daily-insight-heading"
+        className="text-lg font-medium tracking-tight text-foreground sm:text-xl"
+      >
+        I prezzi dell&apos;energia nella tua zona
+      </h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Scegli giorno, regione e piano tariffario
         {dates.includes(today) ? (
@@ -1825,6 +1814,7 @@ export function DailyInsight({
             <div className="mt-6 flex w-full flex-col gap-3">
               <MarketLearnBanner />
               <SignupSlot className="w-full scroll-mt-20" />
+              <CapBanner />
               <ShareBanner />
             </div>
             <QuarterPriceTable day={day} showFruit={showFruit} />
