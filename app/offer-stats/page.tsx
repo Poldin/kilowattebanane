@@ -41,7 +41,7 @@ export default async function OfferStatsPage() {
           </h1>
           <OfferteStats stats={stats} />
 
-          <SignupSlot className="mx-auto mt-16 w-full max-w-md scroll-mt-20 sm:mt-20" />
+          <SignupSlot className="mt-16 w-full scroll-mt-20 sm:mt-20" />
         </main>
         <Footer />
       </div>

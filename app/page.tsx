@@ -51,7 +51,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             </a>
           </section>
 
-          <div className="mx-auto mt-10 w-full max-w-xl sm:mt-12">
+          <div className="mt-10 w-full sm:mt-12">
             <DailyInsight
               initialRegion={initialRegion}
               initialZone={initialZone}
@@ -60,7 +60,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             />
           </div>
 
-          <div className="mx-auto mt-16 hidden w-full max-w-xl sm:mt-20">
+          <div className="mt-16 hidden w-full sm:mt-20">
             <OfferteModule />
           </div>
 
