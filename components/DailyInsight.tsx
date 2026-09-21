@@ -261,7 +261,7 @@ function useMinuteChangeTransition<T>(value: T | null | undefined) {
     previous: null,
     current: value ?? null,
   }));
-  const prevRef = useRef(value);
+  const prevRef = useRef<T | null>(value ?? null);
   const mountedRef = useRef(false);
 
   useEffect(() => {
