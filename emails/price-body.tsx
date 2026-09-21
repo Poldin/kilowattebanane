@@ -1,4 +1,5 @@
 import { Button, Column, Img, Link, Row, Section, Text } from "react-email";
+import { MailPromoBanners } from "@/emails/promo-banners";
 import type { PriceMailModel } from "@/lib/mail/content";
 import { MAIL_CHART_DISPLAY_H, MAIL_CHART_DISPLAY_W } from "@/lib/mail/chart";
 import {
@@ -197,6 +198,13 @@ export function PriceDigestBody({
         Vedi il grafico interattivo
       </Button>
 
+      <MailPromoBanners
+        learnUrl={model.learnUrl}
+        offerCompareUrl={model.offerCompareUrl}
+        offerStatsUrl={model.offerStatsUrl}
+        shareUrl={model.shareUrl}
+      />
+
       {model.tariff === "dinamica" ? (
         <Section style={styles.tableWrap}>
           {model.hourly.map((row) => (
@@ -358,7 +366,7 @@ const styles = {
   tableWrap: {
     border: "1px solid #e5e5e5",
     borderRadius: "8px",
-    margin: 0,
+    margin: "0 0 22px",
     padding: "4px 12px",
   },
   tableRow: {

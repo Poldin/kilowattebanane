@@ -38,3 +38,22 @@ export function mailOutlookChartUrl(zone: string, date: string, tariff?: string)
   if (tariff) url.searchParams.set("piano", tariff);
   return url.toString();
 }
+
+export function mailLearnUrl() {
+  return `${publicSiteUrl()}/learn`;
+}
+
+export function mailOfferCompareUrl() {
+  return `${publicSiteUrl()}/offer-compare`;
+}
+
+export function mailOfferStatsUrl() {
+  return `${publicSiteUrl()}/offer-stats`;
+}
+
+export function mailShareUrl() {
+  const url = new URL("/", publicSiteUrl());
+  url.searchParams.set("utm_source", "mail");
+  url.searchParams.set("utm_medium", "share");
+  return url.toString();
+}

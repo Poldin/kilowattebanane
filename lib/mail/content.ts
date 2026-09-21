@@ -18,7 +18,15 @@ import {
   type MarketZoneId,
 } from "@/lib/market-zones";
 import { toHourlyAverages } from "@/lib/prices";
-import { mailChartUrl, mailOutlookChartUrl, publicSiteUrl } from "@/lib/app-url";
+import {
+  mailChartUrl,
+  mailLearnUrl,
+  mailOfferCompareUrl,
+  mailOfferStatsUrl,
+  mailOutlookChartUrl,
+  mailShareUrl,
+  publicSiteUrl,
+} from "@/lib/app-url";
 import {
   cheapPeakForTariff,
   fasciaAveragesFromQuarters,
@@ -96,6 +104,10 @@ export type ZoneMailContent = {
 export type PriceMailModel = ZoneMailContent & {
   region: ItalianRegion;
   ctaUrl: string;
+  learnUrl: string;
+  offerCompareUrl: string;
+  offerStatsUrl: string;
+  shareUrl: string;
 };
 
 export function formatMailDate(ymd: string, today = romeToday()) {
@@ -284,6 +296,10 @@ export function priceMailModelForRegion(
     ...content,
     region,
     ctaUrl: pricesShareUrl(publicSiteUrl(), region, content.deliveryDate),
+    learnUrl: mailLearnUrl(),
+    offerCompareUrl: mailOfferCompareUrl(),
+    offerStatsUrl: mailOfferStatsUrl(),
+    shareUrl: mailShareUrl(),
   };
 }
 

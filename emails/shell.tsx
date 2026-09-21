@@ -1,7 +1,6 @@
 import {
   Body,
   Container,
-  Head,
   Hr,
   Html,
   Link,
@@ -10,6 +9,7 @@ import {
   Text,
 } from "react-email";
 import type { ReactNode } from "react";
+import { MailHeadStyles } from "@/emails/mail-head-styles";
 
 type EmailShellProps = {
   preview: string;
@@ -20,7 +20,7 @@ type EmailShellProps = {
 export function EmailShell({ preview, unsubscribeUrl, children }: EmailShellProps) {
   return (
     <Html lang="it">
-      <Head />
+      <MailHeadStyles />
       <Preview>{preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>

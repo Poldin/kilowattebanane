@@ -2,7 +2,12 @@ import { render } from "react-email";
 import { Resend } from "resend";
 import { DigestEmail } from "@/emails/digest";
 import { WelcomeEmail } from "@/emails/welcome";
-import { resendFrom, unsubscribeApiUrl, unsubscribePageUrl } from "@/lib/app-url";
+import {
+  publicSiteUrl,
+  resendFrom,
+  unsubscribeApiUrl,
+  unsubscribePageUrl,
+} from "@/lib/app-url";
 import {
   digestSubjectLine,
   loadZoneMailHistory,
@@ -104,4 +109,26 @@ export async function sendZoneDigest(
   }
 
   return ids;
+}
+
+export async function sendDigestPreview(to: string, model: PriceMailModel) {
+  const unsubscribeUrl = publicSiteUrl();
+  const html = await render(
+    DigestEmail({ unsubscribeUrl, model }),
+  );
+  const text = await render(
+    DigestEmail({ unsubscribeUrl, model }),
+    { plainText: true },
+  );
+
+  const { data, error } = await getResend().emails.send({
+    from: resendFrom(),
+    to,
+    subject: `[Anteprima] ${digestSubjectLine(model)}`,
+    html,
+    text,
+  });
+
+  if (error) throw new Error(error.message);
+  return data?.id;
 }
