@@ -29,7 +29,7 @@ export default async function LearnPage() {
           Non ci sono ancora lezioni disponibili! Torna più tardi :)
         </p>
       ) : (
-        <ul className="mt-10 grid grid-cols-2 gap-3 sm:gap-4">
+        <ul className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           {chapters.map((chapter) => (
             <li key={chapter.id}>
               <LearnChapterCard chapter={chapter} />
