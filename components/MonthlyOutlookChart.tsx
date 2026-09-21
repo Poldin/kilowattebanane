@@ -91,14 +91,14 @@ export function MonthlyOutlookChart({
   const barCount = series.months.filter((month) => month.valueCents != null).length;
   const barGap = expanded && barCount > 16 ? 1.5 : expanded ? 2 : 3;
   const barW = (innerW - barGap * (barCount - 1)) / barCount;
-  const plotTop = PAD.t + VALUE_BAND;
+  const cramped = barW < 10;
+  const plotTop = PAD.t + (cramped ? 24 : VALUE_BAND);
   const plotBottom = PAD.t + innerH;
   const plotH = plotBottom - plotTop;
   const minBarH = plotH * 0.14;
   const labelPivotY = plotBottom + 20;
-  const showValues = barW >= 10;
   const monthFontSize = barW < 12 ? 7.5 : 9;
-  const valueFontSize = barW < 14 ? 6 : 7;
+  const valueFontSize = cramped ? 5.5 : barW < 14 ? 6 : 7;
 
   const yFor = (value: number) =>
     plotTop + plotH - minBarH - ((value - min) / span) * (plotH - minBarH);
@@ -108,7 +108,7 @@ export function MonthlyOutlookChart({
   return (
     <div className="mt-4 w-full max-w-full">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <p className="text-sm font-medium text-foreground">Prezzo medio mensile</p>
+        <p className="text-sm font-medium text-foreground">Prezzo medio mensile (c€/kWh)</p>
         {canExpand ? (
           <button
             type="button"
@@ -176,20 +176,19 @@ export function MonthlyOutlookChart({
                   fill={fill}
                   fillOpacity={fillOpacity}
                 />
-                {showValues ? (
-                  <text
-                    x={cx}
-                    y={y - 5}
-                    textAnchor="middle"
-                    fill={isAnchor ? BANANA : isForward ? FORWARD : PAST}
-                    fillOpacity={isForward ? 0.82 : 0.92}
-                    fontSize={valueFontSize}
-                    fontFamily="var(--font-geist-sans), system-ui, sans-serif"
-                    fontWeight="500"
-                  >
-                    {formatEurocent(month.valueCents, 1)}
-                  </text>
-                ) : null}
+                <text
+                  x={cx}
+                  y={y - 4}
+                  textAnchor="middle"
+                  transform={cramped ? `rotate(-40 ${cx} ${y - 4})` : undefined}
+                  fill={isAnchor ? BANANA : isForward ? FORWARD : PAST}
+                  fillOpacity={isForward ? 0.82 : 0.92}
+                  fontSize={valueFontSize}
+                  fontFamily="var(--font-geist-sans), system-ui, sans-serif"
+                  fontWeight="500"
+                >
+                  {formatEurocent(month.valueCents, 1)}
+                </text>
                 <text
                   x={cx}
                   y={labelPivotY}

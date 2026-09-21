@@ -73,7 +73,7 @@ function MailOutlookChartImage({ layout }: { layout: MailOutlookChartLayout }) {
           fontWeight: 600,
         }}
       >
-        <span>Prezzo medio mensile</span>
+        <span>Prezzo medio mensile (c€/kWh)</span>
       </div>
 
       <svg

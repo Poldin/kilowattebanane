@@ -1,4 +1,3 @@
-import type { ForwardPoint } from "@/lib/offerte/forward";
 import { GME_FORWARD_SOURCE } from "@/lib/offerte/forward-source";
 import { GME_MTE_PAGE_URL } from "@/lib/offerte/public-types";
 
@@ -11,6 +10,7 @@ export const GME_MTE_TAB_ID = "1532";
 
 const UA = "kilowattebanane/gme-mte (https://kilowattebanane.it)";
 const MONTHLY_BL = /^BL-M-(20\d{2})-(0[1-9]|1[0-2])$/;
+const QUARTERLY_BL = /^BL-Q-(20\d{2})-0?([1-4])$/;
 
 export type GmeMteRow = {
   Data?: unknown;
@@ -21,7 +21,14 @@ export type GmeMteRow = {
   VolumiMW?: unknown;
 };
 
-export type GmeMonthlyPoint = ForwardPoint & {
+export type GmeMonthlyPoint = {
+  asOf: string;
+  product: "baseload";
+  tenor: "month";
+  periodStart: string;
+  periodEnd: string;
+  priceEurMwh: number;
+  source: string;
   productCode: string;
   checkPriceEurMwh: number | null;
   refPriceEurMwh: number | null;
@@ -70,6 +77,43 @@ export function parseGmeMteMonthlyCode(code: string) {
   return monthBounds(Number(match[1]), Number(match[2]));
 }
 
+export function parseGmeMteQuarterlyCode(code: string) {
+  const match = code.trim().toUpperCase().match(QUARTERLY_BL);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const quarter = Number(match[2]);
+  const startMonth = (quarter - 1) * 3 + 1;
+  return {
+    year,
+    quarter,
+    months: [0, 1, 2].map((offset) => monthBounds(year, startMonth + offset)),
+  };
+}
+
+function pointFromGmeMteRow(
+  row: GmeMteRow,
+  code: string,
+  bounds: { start: string; end: string },
+  price: number,
+  fallbackAsOf: string,
+): GmeMonthlyPoint {
+  return {
+    asOf: ymdFromGmeDate(row.Data) ?? fallbackAsOf,
+    product: "baseload",
+    tenor: "month",
+    periodStart: bounds.start,
+    periodEnd: bounds.end,
+    priceEurMwh: price,
+    source: GME_FORWARD_SOURCE,
+    productCode: code.toUpperCase(),
+    checkPriceEurMwh: parseGmeNumber(row.PrezzoControllo),
+    refPriceEurMwh: parseGmeNumber(row.PrezzoRiferimento),
+    lastPriceEurMwh: parseGmeNumber(row.UltimoPrezzoAbbinato),
+    volumeMw: parseGmeNumber(row.VolumiMW),
+    raw: row,
+  };
+}
+
 export function pickGmeMtePrice(row: GmeMteRow) {
   const check = parseGmeNumber(row.PrezzoControllo);
   if (check != null && check > 0) return check;
@@ -82,28 +126,37 @@ export function pickGmeMtePrice(row: GmeMteRow) {
 
 export function pointsFromGmeMteRows(rows: GmeMteRow[], fallbackAsOf: string) {
   const byStart = new Map<string, GmeMonthlyPoint>();
+  const quarterRows: {
+    row: GmeMteRow;
+    code: string;
+    price: number;
+    months: { start: string; end: string }[];
+  }[] = [];
+
   for (const row of rows) {
     const code = String(row.Prodotto ?? "").trim();
-    const bounds = parseGmeMteMonthlyCode(code);
     const price = pickGmeMtePrice(row);
-    if (!bounds || price == null) continue;
-    const asOf = ymdFromGmeDate(row.Data) ?? fallbackAsOf;
-    byStart.set(bounds.start, {
-      asOf,
-      product: "baseload",
-      tenor: "month",
-      periodStart: bounds.start,
-      periodEnd: bounds.end,
-      priceEurMwh: price,
-      source: GME_FORWARD_SOURCE,
-      productCode: code.toUpperCase(),
-      checkPriceEurMwh: parseGmeNumber(row.PrezzoControllo),
-      refPriceEurMwh: parseGmeNumber(row.PrezzoRiferimento),
-      lastPriceEurMwh: parseGmeNumber(row.UltimoPrezzoAbbinato),
-      volumeMw: parseGmeNumber(row.VolumiMW),
-      raw: row,
-    });
+    if (price == null) continue;
+
+    const monthly = parseGmeMteMonthlyCode(code);
+    if (monthly) {
+      byStart.set(monthly.start, pointFromGmeMteRow(row, code, monthly, price, fallbackAsOf));
+      continue;
+    }
+
+    const quarterly = parseGmeMteQuarterlyCode(code);
+    if (quarterly) {
+      quarterRows.push({ row, code, price, months: quarterly.months });
+    }
   }
+
+  for (const { row, code, price, months } of quarterRows) {
+    for (const bounds of months) {
+      if (byStart.has(bounds.start)) continue;
+      byStart.set(bounds.start, pointFromGmeMteRow(row, code, bounds, price, fallbackAsOf));
+    }
+  }
+
   return [...byStart.values()].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
 }
 
@@ -180,7 +233,7 @@ export async function fetchGmeMteMonthlyForwards(
   const payload = JSON.parse(text) as unknown;
   const rows = Array.isArray(payload) ? (payload as GmeMteRow[]) : [];
   const points = pointsFromGmeMteRows(rows, snapshotDate);
-  if (points.length === 0) throw new Error("GME MTE parsed 0 monthly baseload points");
+  if (points.length === 0) throw new Error("GME MTE parsed 0 baseload points");
   const asOf = points.reduce((best, row) => (row.asOf > best ? row.asOf : best), points[0].asOf);
   return {
     asOf,
