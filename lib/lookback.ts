@@ -519,3 +519,159 @@ export function formatYearPercentile(
     tone: gloss.tone,
   };
 }
+
+export const PRICE_DELTA_YEAR_DAYS = 365;
+
+export const PRICE_DELTA_PERIODS = [
+  { label: "6 mesi", days: 180 },
+  { label: "3 mesi", days: 90 },
+  { label: "1 mese", days: 30 },
+] as const;
+
+const PRICE_DELTA_NEAREST_DAYS = 7;
+const PRICE_DELTA_MIN_YEAR_SPAN =
+  PRICE_DELTA_YEAR_DAYS - PRICE_DELTA_NEAREST_DAYS;
+
+export type PriceDeltaComparison = {
+  label: string;
+  days: number;
+  referenceDate: string;
+  changePercent: number;
+  kind: "year" | "max" | "period";
+};
+
+function hourlyValuesByDate(
+  hourly: { date: string; hours: (number | null)[] }[],
+  tariff: TariffPlanId,
+) {
+  const values = new Map<string, number>();
+  for (const day of hourly) {
+    const value = lookbackDayValueForTariff(day.date, day.hours, tariff);
+    if (value != null && Number.isFinite(value)) values.set(day.date, value);
+  }
+  return values;
+}
+
+function calendarDaysBetween(from: string, to: string) {
+  const [fromYear, fromMonth, fromDay] = from.split("-").map(Number);
+  const [toYear, toMonth, toDay] = to.split("-").map(Number);
+  const fromMs = Date.UTC(fromYear, fromMonth - 1, fromDay);
+  const toMs = Date.UTC(toYear, toMonth - 1, toDay);
+  return Math.round((toMs - fromMs) / 86_400_000);
+}
+
+function earliestDayValueBefore(values: Map<string, number>, date: string) {
+  let earliestDate: string | null = null;
+  for (const candidate of values.keys()) {
+    if (candidate >= date) continue;
+    if (earliestDate == null || candidate < earliestDate) earliestDate = candidate;
+  }
+  if (!earliestDate) return null;
+  return { date: earliestDate, value: values.get(earliestDate)! };
+}
+
+function nearestDayValue(
+  values: Map<string, number>,
+  targetDate: string,
+  maxOffset = PRICE_DELTA_NEAREST_DAYS,
+): { date: string; value: number } | null {
+  const exact = values.get(targetDate);
+  if (exact != null) return { date: targetDate, value: exact };
+  for (let offset = 1; offset <= maxOffset; offset++) {
+    const before = addCalendarDays(targetDate, -offset);
+    const after = addCalendarDays(targetDate, offset);
+    const beforeValue = values.get(before);
+    if (beforeValue != null) return { date: before, value: beforeValue };
+    const afterValue = values.get(after);
+    if (afterValue != null) return { date: after, value: afterValue };
+  }
+  return null;
+}
+
+function longHorizonComparison(
+  values: Map<string, number>,
+  date: string,
+  current: number,
+): PriceDeltaComparison | null {
+  const earliest = earliestDayValueBefore(values, date);
+  if (!earliest) return null;
+
+  const maxSpan = calendarDaysBetween(earliest.date, date);
+  if (maxSpan <= 0) return null;
+
+  if (maxSpan >= PRICE_DELTA_MIN_YEAR_SPAN) {
+    const targetDate = addCalendarDays(date, -PRICE_DELTA_YEAR_DAYS);
+    const reference = nearestDayValue(values, targetDate);
+    const changePercent =
+      reference == null ? null : percentChange(current, reference.value);
+    if (reference && changePercent != null) {
+      return {
+        label: "1 anno",
+        days: calendarDaysBetween(reference.date, date),
+        referenceDate: reference.date,
+        changePercent,
+        kind: "year",
+      };
+    }
+  }
+
+  const changePercent = percentChange(current, earliest.value);
+  if (changePercent == null) return null;
+  return {
+    label: "Max",
+    days: maxSpan,
+    referenceDate: earliest.date,
+    changePercent,
+    kind: "max",
+  };
+}
+
+export function percentChange(current: number, past: number): number | null {
+  if (!Number.isFinite(current) || !Number.isFinite(past) || past <= 0) return null;
+  return ((current - past) / past) * 100;
+}
+
+export function priceDeltaComparisonsForTariff(
+  hourly: { date: string; hours: (number | null)[] }[],
+  date: string,
+  tariff: TariffPlanId,
+): PriceDeltaComparison[] {
+  const values = hourlyValuesByDate(hourly, tariff);
+  const current = values.get(date);
+  if (current == null) return [];
+
+  const comparisons: PriceDeltaComparison[] = [];
+  const longHorizon = longHorizonComparison(values, date, current);
+  if (longHorizon) comparisons.push(longHorizon);
+
+  for (const period of PRICE_DELTA_PERIODS) {
+    const targetDate = addCalendarDays(date, -period.days);
+    const reference = nearestDayValue(values, targetDate);
+    if (!reference) continue;
+    const changePercent = percentChange(current, reference.value);
+    if (changePercent == null) continue;
+    comparisons.push({
+      label: period.label,
+      days: period.days,
+      referenceDate: reference.date,
+      changePercent,
+      kind: "period",
+    });
+  }
+  return comparisons;
+}
+
+export function formatDeltaPercent(changePercent: number): string {
+  const rounded = Math.round(changePercent);
+  if (rounded > 0) return `+${rounded}%`;
+  if (rounded < 0) return `${rounded}%`;
+  return "±0%";
+}
+
+export function deltaPercentTone(
+  changePercent: number,
+): "expensive" | "cheap" | "mid" {
+  if (changePercent >= 5) return "expensive";
+  if (changePercent <= -5) return "cheap";
+  return "mid";
+}

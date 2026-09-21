@@ -97,7 +97,10 @@ import {
 import { computeTariffTips, fasciaNowBadgeLabel, tariffNowAdvice } from "@/lib/tariff-tips";
 import {
   LOOKBACK_SECTION_ID,
+  deltaPercentTone,
+  formatDeltaPercent,
   formatYearPercentile,
+  priceDeltaComparisonsForTariff,
   yearWindowPercentileForTariff,
 } from "@/lib/lookback";
 import type { ZoneForwardPayload, ZoneHourlyPayload } from "@/lib/zone-home-types";
@@ -384,25 +387,42 @@ type DayKpiColumn = {
   key: string;
   label: ReactNode;
   labelColor?: string;
-  value: string;
+  value: ReactNode;
+  valueColor?: string;
   hint: string | null;
 };
+
+function deltaPercentBadgeClass(tone: "expensive" | "cheap" | "mid") {
+  if (tone === "expensive") {
+    return "inline-flex rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-semibold tabular-nums text-red-700 sm:text-sm dark:bg-red-500/20 dark:text-red-400";
+  }
+  if (tone === "cheap") {
+    return "inline-flex rounded-full bg-[#F5D547]/30 px-2 py-0.5 text-xs font-semibold tabular-nums text-[#111111] sm:text-sm";
+  }
+  return "inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-neutral-600 sm:text-sm dark:bg-neutral-800 dark:text-neutral-300";
+}
 
 function DayKpiTable({
   columns,
   compact,
   ariaLabel,
+  plainLabels = false,
 }: {
   columns: DayKpiColumn[];
   compact: boolean;
   ariaLabel?: string;
+  plainLabels?: boolean;
 }) {
   if (columns.length === 0) return null;
 
   const cellPad = compact ? "px-1.5 py-0.5" : "px-2 py-1";
-  const labelClass = compact
-    ? "text-[10px] font-medium tracking-wide uppercase"
-    : "text-[11px] font-medium tracking-wide uppercase";
+  const labelClass = plainLabels
+    ? compact
+      ? "text-xs font-medium text-neutral-600 dark:text-neutral-400"
+      : "text-sm font-medium text-neutral-600 dark:text-neutral-400"
+    : compact
+      ? "text-[10px] font-medium tracking-wide uppercase"
+      : "text-[11px] font-medium tracking-wide uppercase";
   const valueClass = compact
     ? "text-sm font-semibold tabular-nums tracking-tight"
     : "text-base font-semibold tabular-nums tracking-tight";
@@ -436,7 +456,7 @@ function DayKpiTable({
               <td
                 key={column.key}
                 className={`${cellPad} ${valueClass} whitespace-nowrap ${index > 0 ? colDivider : ""}`}
-                style={column.labelColor ? { color: column.labelColor } : undefined}
+                style={column.valueColor ? { color: column.valueColor } : undefined}
               >
                 {column.value}
               </td>
@@ -486,6 +506,10 @@ function DayStats({
     const context = yearWindowPercentileForTariff(hourly, date, tariff);
     return context ? formatYearPercentile(context, today) : null;
   }, [hourly, date, tariff, today]);
+  const priceDeltas = useMemo(
+    () => priceDeltaComparisonsForTariff(hourly, date, tariff),
+    [hourly, date, tariff],
+  );
   const lineStats = [
     { label: "min", value: formatEurocent(min), hint: minHours },
     { label: "medio", value: formatEurocent(avg), hint: "0–24" },
@@ -522,6 +546,7 @@ function DayStats({
             </span>
           ),
           value: formatFasciaValue(fasce[id]),
+          valueColor: color,
           hint: fasciaRangeLabel(date, id),
         };
       });
@@ -581,6 +606,26 @@ function DayStats({
             Approfondisci
           </a>
         </p>
+      ) : null}
+      {priceDeltas.length > 0 ? (
+        <DayKpiTable
+          columns={priceDeltas.map((delta) => {
+            const tone = deltaPercentTone(delta.changePercent);
+            return {
+              key: delta.kind === "period" ? String(delta.days) : delta.kind,
+              label: delta.label,
+              value: (
+                <span className={deltaPercentBadgeClass(tone)}>
+                  {formatDeltaPercent(delta.changePercent)}
+                </span>
+              ),
+              hint: null,
+            };
+          })}
+          compact
+          plainLabels
+          ariaLabel="Variazione del prezzo rispetto a periodi precedenti"
+        />
       ) : null}
       <MonthlyOutlookChart
         anchorDate={date}
@@ -1813,8 +1858,8 @@ export function DailyInsight({
             />
             <div className="mt-6 flex w-full flex-col gap-3">
               <MarketLearnBanner />
-              <SignupSlot className="w-full scroll-mt-20" />
               <CapBanner />
+              <SignupSlot className="w-full scroll-mt-20" />
               <ShareBanner />
             </div>
             <QuarterPriceTable day={day} showFruit={showFruit} />

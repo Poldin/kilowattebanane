@@ -12,6 +12,8 @@ import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
 
 export const MONTH_OUTLOOK_COUNT = 13;
 export const MONTH_OUTLOOK_RADIUS = 6;
+export const MONTH_OUTLOOK_PAST_MONTHS = 12;
+export const MONTH_OUTLOOK_FUTURE_MONTHS = 6;
 
 export type MonthOutlookKind = "realized" | "partial" | "forward";
 
@@ -46,12 +48,61 @@ export function monthOutlookPastStarts(anchorDate: string): string[] {
   );
 }
 
+function earliestMonthWithHourly(
+  hourly: ZoneHourlyPayload[],
+  anchorDate: string,
+): string | null {
+  const anchorMonth = monthStart(anchorDate);
+  let earliest: string | null = null;
+  for (const day of hourly) {
+    const month = monthStart(day.date);
+    if (month > anchorMonth) continue;
+    if (earliest == null || month < earliest) earliest = month;
+  }
+  return earliest;
+}
+
+function monthRangeInclusive(from: string, to: string): string[] {
+  if (from > to) return [];
+  const months: string[] = [];
+  for (let cursor = from; cursor <= to; cursor = addIsoMonths(cursor, 1)) {
+    months.push(cursor);
+  }
+  return months;
+}
+
+export function monthOutlookDefaultStarts(
+  anchorDate: string,
+  hourly: ZoneHourlyPayload[],
+): string[] {
+  const center = monthStart(anchorDate);
+  const targetPastStart = addIsoMonths(center, -MONTH_OUTLOOK_PAST_MONTHS);
+  const earliest = earliestMonthWithHourly(hourly, anchorDate);
+  const pastStart =
+    earliest == null
+      ? targetPastStart
+      : earliest > targetPastStart
+        ? earliest
+        : targetPastStart;
+
+  return [
+    ...monthRangeInclusive(pastStart, center),
+    ...Array.from({ length: MONTH_OUTLOOK_FUTURE_MONTHS }, (_, index) =>
+      addIsoMonths(center, index + 1),
+    ),
+  ];
+}
+
 export function monthOutlookStartsExpanded(
   anchorDate: string,
+  hourly: ZoneHourlyPayload[],
   forwardMonths: PunMonthPoint[],
 ): string[] {
   const center = monthStart(anchorDate);
-  const past = monthOutlookPastStarts(anchorDate);
+  const earliest = earliestMonthWithHourly(hourly, anchorDate);
+  const past = earliest
+    ? monthRangeInclusive(earliest, center)
+    : monthOutlookPastStarts(anchorDate);
   const future = forwardMonths
     .map((month) => month.start)
     .filter((start) => start > center)
@@ -71,9 +122,16 @@ export function expandableForwardMonthCount(
 
 export function canExpandMonthOutlook(
   anchorDate: string,
+  hourly: ZoneHourlyPayload[],
   forwardMonths: PunMonthPoint[],
 ): boolean {
-  return expandableForwardMonthCount(anchorDate, forwardMonths) > MONTH_OUTLOOK_RADIUS;
+  const defaultStarts = monthOutlookDefaultStarts(anchorDate, hourly);
+  const expandedStarts = monthOutlookStartsExpanded(
+    anchorDate,
+    hourly,
+    forwardMonths,
+  );
+  return expandedStarts.length > defaultStarts.length;
 }
 
 function zoneMonthAverage(
@@ -122,8 +180,8 @@ export function buildMonthOutlook({
   const todayMonth = monthStart(today);
   const forwards = forwardMonthMap(forwardMonths);
   const starts = expanded
-    ? monthOutlookStartsExpanded(anchorDate, forwardMonths)
-    : monthOutlookStarts(anchorDate);
+    ? monthOutlookStartsExpanded(anchorDate, hourly, forwardMonths)
+    : monthOutlookDefaultStarts(anchorDate, hourly);
 
   const months = starts.map((start, index) => {
     const realized = zoneMonthAverage(hourly, start, tariff);

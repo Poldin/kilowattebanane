@@ -60,7 +60,7 @@ export function MonthlyOutlookChart({
   useEffect(() => {
     setExpanded(false);
   }, [anchorDate]);
-  const canExpand = canExpandMonthOutlook(anchorDate, forward.months);
+  const canExpand = canExpandMonthOutlook(anchorDate, hourly, forward.months);
 
   const series = useMemo(
     () =>

@@ -13,6 +13,21 @@ const YEAR_TONE = {
   mid: "#A3A3A3",
 } as const;
 
+const DELTA_BADGE = {
+  expensive: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    color: "#B91C1C",
+  },
+  cheap: {
+    backgroundColor: "rgba(245, 213, 71, 0.3)",
+    color: "#111111",
+  },
+  mid: {
+    backgroundColor: "#F5F5F5",
+    color: "#525252",
+  },
+} as const;
+
 function lookbackHref(ctaUrl: string) {
   try {
     const url = new URL(ctaUrl);
@@ -124,10 +139,54 @@ export function PriceDigestBody({
         </Text>
       ) : null}
 
+      {model.priceDeltas.length > 0 ? (
+        <Section style={styles.deltaWrap}>
+          <table style={styles.deltaTable} cellPadding={0} cellSpacing={0}>
+            <thead>
+              <tr>
+                {model.priceDeltas.map((column, index) => (
+                  <th
+                    key={column.key}
+                    style={{
+                      ...styles.deltaHead,
+                      ...(index > 0 ? styles.kpiDivider : {}),
+                    }}
+                  >
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {model.priceDeltas.map((column, index) => (
+                  <td
+                    key={column.key}
+                    style={{
+                      ...styles.deltaValue,
+                      ...(index > 0 ? styles.kpiDivider : {}),
+                    }}
+                  >
+                    <span
+                      style={{
+                        ...styles.deltaBadge,
+                        ...DELTA_BADGE[column.tone],
+                      }}
+                    >
+                      {column.value}
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </Section>
+      ) : null}
+
       <Link href={model.ctaUrl} style={styles.chartLink}>
         <Img
           src={model.outlookChartUrl}
-          alt={`Prezzo medio mensile su 13 mesi, zona ${model.zoneName}, ${model.tariffLabel}`}
+          alt={`Prezzo medio mensile sull'ultimo anno, zona ${model.zoneName}, ${model.tariffLabel}`}
           width={MAIL_OUTLOOK_DISPLAY_W}
           height={MAIL_OUTLOOK_DISPLAY_H}
           style={styles.chart}
@@ -253,6 +312,36 @@ const styles = {
     fontWeight: 500,
     textDecoration: "underline",
     textUnderlineOffset: "2px",
+  },
+  deltaWrap: {
+    margin: "0 0 16px",
+  },
+  deltaTable: {
+    border: "1px solid #e5e5e5",
+    borderCollapse: "collapse" as const,
+    borderRadius: "6px",
+  },
+  deltaHead: {
+    backgroundColor: "#fafafa",
+    borderBottom: "1px solid #e5e5e5",
+    color: "#525252",
+    fontSize: "13px",
+    fontWeight: 500,
+    padding: "6px 10px",
+    textAlign: "left" as const,
+  },
+  deltaValue: {
+    padding: "6px 10px",
+    textAlign: "left" as const,
+  },
+  deltaBadge: {
+    borderRadius: "999px",
+    display: "inline-block",
+    fontSize: "14px",
+    fontVariantNumeric: "tabular-nums",
+    fontWeight: 600,
+    lineHeight: "20px",
+    padding: "2px 8px",
   },
   button: {
     backgroundColor: "#111111",

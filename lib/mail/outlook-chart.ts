@@ -1,5 +1,6 @@
 import { addCalendarDays } from "@/lib/entsoe";
 import { formatEurocent } from "@/lib/insights";
+import { YEAR_LOOKBACK_DAYS } from "@/lib/lookback";
 import {
   buildMonthOutlook,
   type MonthOutlookPoint,
@@ -109,14 +110,14 @@ export function buildMailOutlookChartLayout({
   const span = max - min || 1;
   const innerW = MAIL_OUTLOOK_W - PAD.l - PAD.r;
   const innerH = MAIL_OUTLOOK_H - PAD.t - PAD.b;
-  const barGap = 8;
+  const barGap = priced.length > 16 ? 5 : 8;
   const barW = (innerW - barGap * (priced.length - 1)) / priced.length;
   const plotTop = PAD.t + VALUE_BAND;
   const plotBottom = PAD.t + innerH;
   const plotH = plotBottom - plotTop;
   const minBarH = plotH * 0.14;
   const labelPivotY = plotBottom + 34;
-  const showValues = barW >= 28;
+  const showValues = barW >= 24;
 
   const yFor = (value: number) =>
     plotTop + plotH - minBarH - ((value - min) / span) * (plotH - minBarH);
@@ -167,5 +168,5 @@ export function buildMailOutlookChartLayout({
 }
 
 export function mailOutlookHistoryFrom(aroundDate: string) {
-  return addCalendarDays(aroundDate, -240);
+  return addCalendarDays(aroundDate, -(YEAR_LOOKBACK_DAYS + 7));
 }

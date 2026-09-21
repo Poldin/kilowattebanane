@@ -34,7 +34,10 @@ import {
 import { computeTariffTips } from "@/lib/tariff-tips";
 import { resolveMailTariff } from "@/lib/tariff-pref";
 import {
+  deltaPercentTone,
+  formatDeltaPercent,
   formatYearPercentile,
+  priceDeltaComparisonsForTariff,
   YEAR_LOOKBACK_DAYS,
   yearWindowPercentileForTariff,
   type YearPercentileCopy,
@@ -66,6 +69,13 @@ export type MailKpiColumn = {
   color?: string;
 };
 
+export type MailPriceDeltaColumn = {
+  key: string;
+  label: string;
+  value: string;
+  tone: "expensive" | "cheap" | "mid";
+};
+
 export type ZoneMailContent = {
   deliveryDate: string;
   dateLabel: string;
@@ -80,6 +90,7 @@ export type ZoneMailContent = {
   chartUrl: string;
   outlookChartUrl: string;
   yearPercentile: YearPercentileCopy | null;
+  priceDeltas: MailPriceDeltaColumn[];
 };
 
 export type PriceMailModel = ZoneMailContent & {
@@ -176,17 +187,38 @@ function mergeMailDayHourly(
   ];
 }
 
+function mergedMailHistory(day: ZoneMailDay, history: ZoneHourlyPayload[]) {
+  return mergeMailDayHourly(history, day);
+}
+
 function yearPercentileForMail(
   day: ZoneMailDay,
   tariff: TariffPlanId,
   history: ZoneHourlyPayload[],
 ) {
   const context = yearWindowPercentileForTariff(
-    mergeMailDayHourly(history, day),
+    mergedMailHistory(day, history),
     day.deliveryDate,
     tariff,
   );
   return context ? formatYearPercentile(context, romeToday()) : null;
+}
+
+function mailPriceDeltaColumns(
+  day: ZoneMailDay,
+  tariff: TariffPlanId,
+  history: ZoneHourlyPayload[],
+): MailPriceDeltaColumn[] {
+  return priceDeltaComparisonsForTariff(
+    mergedMailHistory(day, history),
+    day.deliveryDate,
+    tariff,
+  ).map((delta) => ({
+    key: delta.kind === "period" ? String(delta.days) : delta.kind,
+    label: delta.label,
+    value: formatDeltaPercent(delta.changePercent),
+    tone: deltaPercentTone(delta.changePercent),
+  }));
 }
 
 export function zoneMailContentFromDay(
@@ -216,6 +248,7 @@ export function zoneMailContentFromDay(
     chartUrl: mailChartUrl(day.zone, day.deliveryDate, resolved),
     outlookChartUrl: mailOutlookChartUrl(day.zone, day.deliveryDate, resolved),
     yearPercentile: yearPercentileForMail(day, resolved, history),
+    priceDeltas: mailPriceDeltaColumns(day, resolved, history),
   };
 }
 
