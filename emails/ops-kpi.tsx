@@ -8,7 +8,11 @@ import {
   Preview,
   Text,
 } from "react-email";
-import { shortItDate, type OpsKpiReport } from "@/lib/mail/ops-kpis";
+import {
+  formatLearnLine,
+  shortItDate,
+  type OpsKpiReport,
+} from "@/lib/mail/ops-kpis";
 
 export function OpsKpiEmail({ report }: { report: OpsKpiReport }) {
   const sign = (value: number) => (value > 0 ? `+${value}` : String(value));
@@ -54,6 +58,10 @@ export function OpsKpiEmail({ report }: { report: OpsKpiReport }) {
           <Text style={styles.row}>
             <span style={styles.label}>FORWARD</span>
             {forwardLine(report)}
+          </Text>
+          <Text style={styles.row}>
+            <span style={styles.label}>LEARN</span>
+            {formatLearnLine(report.learn)}
           </Text>
 
           <Hr style={styles.hr} />

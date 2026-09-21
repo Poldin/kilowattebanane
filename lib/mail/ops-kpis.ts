@@ -55,6 +55,22 @@ export type OpsForwardSource = {
   staleDays: number;
 };
 
+export type OpsLearnStats = {
+  activeChapters: number;
+  activeSlides: number;
+  today: {
+    sessions: number;
+    events: number;
+    answered: number;
+    correct: number;
+  };
+  week: {
+    sessions: number;
+    events: number;
+  };
+  topChapterToday: string | null;
+};
+
 export type OpsKpiReport = {
   reportDate: string;
   subject: string;
@@ -83,6 +99,7 @@ export type OpsKpiReport = {
     gme: OpsForwardSource;
     cme: OpsForwardSource;
   };
+  learn: OpsLearnStats;
 };
 
 type ImportRunRow = {
@@ -95,6 +112,65 @@ type ImportRunRow = {
   relisted: number | null;
   error: string | null;
 };
+
+type LearnEventRow = {
+  session_id: string;
+  chapter_id: string | null;
+  interactions: Record<string, unknown> | null;
+};
+
+function aggregateLearnEvents(
+  rows: LearnEventRow[],
+  chapters: Map<string, string>,
+) {
+  const sessions = new Set<string>();
+  let answered = 0;
+  let correct = 0;
+  const chapterSessions = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    sessions.add(row.session_id);
+    const interactions = row.interactions ?? {};
+    if ("correct" in interactions) {
+      answered++;
+      if (interactions.correct === true) correct++;
+    }
+    if (row.chapter_id) {
+      const bucket = chapterSessions.get(row.chapter_id) ?? new Set<string>();
+      bucket.add(row.session_id);
+      chapterSessions.set(row.chapter_id, bucket);
+    }
+  }
+
+  let topChapterToday: string | null = null;
+  let topCount = 0;
+  for (const [chapterId, bucket] of chapterSessions) {
+    if (bucket.size > topCount) {
+      topCount = bucket.size;
+      topChapterToday = chapters.get(chapterId) ?? null;
+    }
+  }
+
+  return {
+    sessions: sessions.size,
+    events: rows.length,
+    answered,
+    correct,
+    topChapterToday,
+  };
+}
+
+export function formatLearnLine(learn: OpsLearnStats) {
+  const accuracy =
+    learn.today.answered > 0
+      ? `${Math.round((learn.today.correct / learn.today.answered) * 100)}% giuste`
+      : "nessuna risposta";
+  const top =
+    learn.topChapterToday && learn.today.sessions > 0
+      ? ` · top ${learn.topChapterToday}`
+      : "";
+  return `oggi ${learn.today.sessions} sessioni / ${learn.today.events} viste / ${accuracy} · 7g ${learn.week.sessions} sessioni · ${learn.activeChapters} cap / ${learn.activeSlides} slide${top}`;
+}
 
 export function shortItDate(iso: string) {
   const [, month, day] = iso.split("-").map(Number);
@@ -221,6 +297,7 @@ export function formatOpsKpiText(report: OpsKpiReport) {
     `ENTSO ${shortItDate(report.entsoTomorrow.date).padEnd(6)} ${zoneLine(report.entsoTomorrow)}`,
     `OFFERTE      ${offerte}`,
     `FORWARD      ${forwardSourceLine(report.forward.gme)} · ${forwardSourceLine(report.forward.cme)}`,
+    `LEARN        ${formatLearnLine(report.learn)}`,
   ].join("\n");
 }
 
@@ -228,6 +305,7 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
   const supabase = createSecretClient();
   const today = romeToday();
   const tomorrow = addCalendarDays(today, 1);
+  const weekStart = romeMidnightUtc(addCalendarDays(today, -6)).toISOString();
   const start = romeMidnightUtc(today).toISOString();
   const end = romeMidnightUtc(tomorrow).toISOString();
 
@@ -241,6 +319,10 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     importRes,
     gmeRes,
     cmeRes,
+    learnChaptersRes,
+    learnSlidesRes,
+    learnTodayRes,
+    learnWeekRes,
   ] = await Promise.all([
     supabase
       .from("subscribers")
@@ -278,6 +360,24 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
       .limit(40),
     loadForwardSnapshot(supabase, "po_gme_mte_monthly", "GME", today),
     loadForwardSnapshot(supabase, "po_forward_curve", "CME", today),
+    supabase
+      .from("learn_chapters")
+      .select("id, title")
+      .eq("active", true),
+    supabase
+      .from("learn_slides")
+      .select("id", { count: "exact", head: true })
+      .eq("active", true),
+    supabase
+      .from("learn_events")
+      .select("session_id, chapter_id, interactions")
+      .gte("created_at", start)
+      .lt("created_at", end),
+    supabase
+      .from("learn_events")
+      .select("session_id")
+      .gte("created_at", weekStart)
+      .lt("created_at", end),
   ]);
 
   for (const result of [
@@ -288,6 +388,10 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     deliveriesRes,
     statsRes,
     importRes,
+    learnChaptersRes,
+    learnSlidesRes,
+    learnTodayRes,
+    learnWeekRes,
   ]) {
     if (result.error) throw new Error(result.error.message);
   }
@@ -361,6 +465,36 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     alerts.push(`gme fermo da ${gmeRes.staleDays}g`);
   }
 
+  const chapterTitles = new Map(
+    ((learnChaptersRes.data ?? []) as { id: string; title: string }[]).map(
+      (row) => [row.id, row.title],
+    ),
+  );
+  const todayLearn = aggregateLearnEvents(
+    (learnTodayRes.data ?? []) as LearnEventRow[],
+    chapterTitles,
+  );
+  const weekSessions = new Set(
+    ((learnWeekRes.data ?? []) as { session_id: string }[]).map(
+      (row) => row.session_id,
+    ),
+  );
+  const learn: OpsLearnStats = {
+    activeChapters: learnChaptersRes.data?.length ?? 0,
+    activeSlides: learnSlidesRes.count ?? 0,
+    today: {
+      sessions: todayLearn.sessions,
+      events: todayLearn.events,
+      answered: todayLearn.answered,
+      correct: todayLearn.correct,
+    },
+    week: {
+      sessions: weekSessions.size,
+      events: learnWeekRes.data?.length ?? 0,
+    },
+    topChapterToday: todayLearn.topChapterToday,
+  };
+
   const subject = `KPI ${shortItDate(today)} · ${alerts.length > 0 ? alerts.join(" · ") : "ok"}`;
 
   return {
@@ -384,5 +518,6 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     entsoTomorrow,
     offerte: { lastOkDate, staleDays, runs },
     forward: { gme: gmeRes, cme: cmeRes },
+    learn,
   };
 }

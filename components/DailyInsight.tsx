@@ -476,11 +476,13 @@ function DayKpiTable({
   compact,
   ariaLabel,
   plainLabels = false,
+  caption,
 }: {
   columns: DayKpiColumn[];
   compact: boolean;
   ariaLabel?: string;
   plainLabels?: boolean;
+  caption?: string;
 }) {
   if (columns.length === 0) return null;
 
@@ -504,6 +506,11 @@ function DayKpiTable({
       className="mt-3 w-fit max-w-full overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-800"
       aria-label={ariaLabel}
     >
+      {caption ? (
+        <p className="border-b border-neutral-200 bg-neutral-50 px-2 py-1.5 text-[11px] font-medium text-neutral-500 sm:text-xs dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400">
+          {caption}
+        </p>
+      ) : null}
       <table className="border-collapse text-left">
         <thead>
           <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/60">
@@ -693,6 +700,7 @@ function DayStats({
           })}
           compact
           plainLabels
+          caption="Variazione % del prezzo medio del giorno rispetto al passato"
           ariaLabel="Variazione del prezzo rispetto a periodi precedenti"
         />
       ) : null}
