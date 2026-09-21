@@ -96,6 +96,67 @@ body {
   }
 }
 
+@keyframes now-time-slide-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+}
+
+@keyframes now-time-slide-in {
+  from {
+    transform: translateY(-110%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes now-chart-line-out {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes now-chart-line-in {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.now-time-slide-out {
+  animation: now-time-slide-out 1s ease-in forwards;
+}
+
+.now-time-slide-in {
+  animation: now-time-slide-in 1s ease-out 1s both;
+}
+
+.now-chart-line-out {
+  transform-box: fill-box;
+  transform-origin: top;
+  animation: now-chart-line-out 1s ease-in forwards;
+}
+
+.now-chart-line-in {
+  transform-box: fill-box;
+  transform-origin: top;
+  animation: now-chart-line-in 1s ease-out 1s both;
+  transform: scaleY(0);
+}
+
 .insight-skeleton {
   --skeleton-from: #e5e5e5;
   --skeleton-via: #f4f4f4;

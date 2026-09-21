@@ -249,6 +249,76 @@ const NOW_BADGE =
 const YEAR_PERCENTILE_BADGE =
   "mx-0.5 inline-flex translate-y-px items-center rounded-full bg-[#F5D547] px-2 py-0.5 font-medium tabular-nums text-[#111111]";
 
+const MINUTE_TICK_MS = 2000;
+
+function useMinuteChangeTransition<T>(value: T | null | undefined) {
+  const [state, setState] = useState<{
+    transitioning: boolean;
+    previous: T | null;
+    current: T | null;
+  }>(() => ({
+    transitioning: false,
+    previous: null,
+    current: value ?? null,
+  }));
+  const prevRef = useRef(value);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    if (value == null) return;
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      prevRef.current = value;
+      setState({ transitioning: false, previous: null, current: value });
+      return;
+    }
+    if (Object.is(value, prevRef.current)) return;
+    const previous = prevRef.current;
+    prevRef.current = value;
+    setState({ transitioning: true, previous, current: value });
+    const timeoutId = window.setTimeout(
+      () => setState({ transitioning: false, previous: null, current: value }),
+      MINUTE_TICK_MS,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [value]);
+
+  return state;
+}
+
+function NowTimeBadge({ time }: { time: string }) {
+  const { transitioning, previous, current } = useMinuteChangeTransition(time);
+  const animating =
+    transitioning && previous != null && current != null;
+
+  return (
+    <span className="relative mx-0.5 inline-block translate-y-px align-middle">
+      <span className={`${NOW_BADGE} invisible tabular-nums`} aria-hidden>
+        00:00
+      </span>
+      <span className="absolute inset-0 overflow-hidden">
+        {animating ? (
+          <>
+            <span
+              className={`${NOW_BADGE} now-time-slide-out absolute inset-x-0 top-0`}
+            >
+              {previous}
+            </span>
+            <span
+              className={`${NOW_BADGE} now-time-slide-in absolute inset-x-0 top-0`}
+            >
+              {current}
+            </span>
+            <span className="sr-only">Orario aggiornato: {current}</span>
+          </>
+        ) : (
+          <span className={`${NOW_BADGE} absolute inset-x-0 top-0`}>{time}</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
 function nowLineForDay(
   day: DayInsight,
   now: RomeNow | null,
@@ -307,8 +377,7 @@ function PriceTips({
             className="mr-2 inline-block h-[1em] w-[2px] translate-y-[0.12em] align-middle"
             style={{ backgroundColor: NOW }}
           />
-          Sono le{" "}
-          <span className={NOW_BADGE}>{nowLine.time}</span>{" "}
+          Sono le <NowTimeBadge time={nowLine.time} />{" "}
           {nowLine.fasciaId ? (
             <>
               e sei in fascia{" "}
@@ -719,6 +788,57 @@ function pointerToHour(
   const x = ((event.clientX - rect.left) / rect.width) * chartW;
   const innerW = chartW - pad.l - pad.r;
   return Math.min(24, Math.max(0, ((x - pad.l) / innerW) * 24));
+}
+
+function NowChartLine({
+  nowHour,
+  chartW,
+  pad,
+  innerH,
+}: {
+  nowHour: number;
+  chartW: number;
+  pad: { t: number; r: number; b: number; l: number };
+  innerH: number;
+}) {
+  const { transitioning, previous, current } =
+    useMinuteChangeTransition(nowHour);
+  const nowX = hourToX(nowHour, chartW, pad);
+  const previousX =
+    previous != null ? hourToX(previous, chartW, pad) : null;
+
+  return (
+    <g pointerEvents="none">
+      {transitioning && previous != null && previousX != null ? (
+        <g transform={`translate(${previousX}, ${pad.t})`}>
+          <g className="now-chart-line-out">
+            <line
+              x1={0}
+              x2={0}
+              y1={0}
+              y2={innerH}
+              stroke={NOW}
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </g>
+        </g>
+      ) : null}
+      <g transform={`translate(${nowX}, ${pad.t})`}>
+        <g className={transitioning ? "now-chart-line-in" : undefined}>
+          <line
+            x1={0}
+            x2={0}
+            y1={0}
+            y2={innerH}
+            stroke={NOW}
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </g>
+      </g>
+    </g>
+  );
 }
 
 function PriceChart({
@@ -1135,14 +1255,11 @@ function PriceChart({
       ) : null}
 
       {nowHour != null ? (
-        <line
-          x1={hourToX(nowHour, chartW, pad)}
-          x2={hourToX(nowHour, chartW, pad)}
-          y1={pad.t}
-          y2={chartH - pad.b}
-          stroke={NOW}
-          strokeWidth="2"
-          strokeLinecap="round"
+        <NowChartLine
+          nowHour={nowHour}
+          chartW={chartW}
+          pad={pad}
+          innerH={innerH}
         />
       ) : null}
 
