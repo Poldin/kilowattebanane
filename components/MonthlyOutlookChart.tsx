@@ -83,9 +83,8 @@ export function MonthlyOutlookChart({
   if (priced.length < 2) return null;
 
   const values = priced.map((month) => month.valueCents);
-  const min = Math.min(...values);
   const max = Math.max(...values);
-  const span = max - min || 1;
+  const span = max || 1;
   const innerW = CHART_W - PAD.l - PAD.r;
   const innerH = CHART_H - PAD.t - PAD.b;
   const barCount = series.months.filter((month) => month.valueCents != null).length;
@@ -95,13 +94,11 @@ export function MonthlyOutlookChart({
   const plotTop = PAD.t + (cramped ? 24 : VALUE_BAND);
   const plotBottom = PAD.t + innerH;
   const plotH = plotBottom - plotTop;
-  const minBarH = plotH * 0.14;
   const labelPivotY = plotBottom + 20;
   const monthFontSize = barW < 12 ? 7.5 : 9;
   const valueFontSize = cramped ? 5.5 : barW < 14 ? 6 : 7;
 
-  const yFor = (value: number) =>
-    plotTop + plotH - minBarH - ((value - min) / span) * (plotH - minBarH);
+  const yFor = (value: number) => plotTop + plotH - (value / span) * plotH;
 
   let barIndex = -1;
 
