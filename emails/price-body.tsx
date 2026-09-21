@@ -143,7 +143,15 @@ export function PriceDigestBody({
       {model.priceDeltas.length > 0 ? (
         <Section style={styles.deltaWrap}>
           <table style={styles.deltaTable} cellPadding={0} cellSpacing={0}>
-            <thead>
+            <tbody>
+              <tr>
+                <td
+                  colSpan={model.priceDeltas.length}
+                  style={styles.deltaCaption}
+                >
+                  Variazione % del prezzo medio del giorno rispetto al passato
+                </td>
+              </tr>
               <tr>
                 {model.priceDeltas.map((column, index) => (
                   <th
@@ -157,8 +165,6 @@ export function PriceDigestBody({
                   </th>
                 ))}
               </tr>
-            </thead>
-            <tbody>
               <tr>
                 {model.priceDeltas.map((column, index) => (
                   <td
@@ -328,6 +334,15 @@ const styles = {
     border: "1px solid #e5e5e5",
     borderCollapse: "collapse" as const,
     borderRadius: "6px",
+  },
+  deltaCaption: {
+    backgroundColor: "#fafafa",
+    borderBottom: "1px solid #e5e5e5",
+    color: "#737373",
+    fontSize: "12px",
+    fontWeight: 500,
+    padding: "6px 10px",
+    textAlign: "left" as const,
   },
   deltaHead: {
     backgroundColor: "#fafafa",
