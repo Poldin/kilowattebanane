@@ -51,6 +51,10 @@ export function OpsKpiEmail({ report }: { report: OpsKpiReport }) {
             <span style={styles.label}>OFFERTE</span>
             {offerteLine(report)}
           </Text>
+          <Text style={styles.row}>
+            <span style={styles.label}>FORWARD</span>
+            {forwardLine(report)}
+          </Text>
 
           <Hr style={styles.hr} />
           <Text style={styles.footer}>
@@ -82,6 +86,15 @@ function offerteLine(report: OpsKpiReport) {
       ? `ultimo ok ${shortItDate(report.offerte.lastOkDate)}`
       : "oggi";
   return `${freshness} · ${report.offerte.runs.map((run) => `${run.label} ${run.status}`).join(", ")} · ${inserted} nuove / ${delisted} uscite`;
+}
+
+function forwardSourceLine(row: OpsKpiReport["forward"]["gme"]) {
+  if (!row.asOf) return `${row.label} assente`;
+  return `${row.label} ${shortItDate(row.asOf)} (${row.months} mesi)`;
+}
+
+function forwardLine(report: OpsKpiReport) {
+  return `${forwardSourceLine(report.forward.gme)} · ${forwardSourceLine(report.forward.cme)}`;
 }
 
 const styles = {

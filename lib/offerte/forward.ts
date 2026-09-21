@@ -181,12 +181,12 @@ function blendSource(points: ForwardPoint[]) {
 }
 
 function blendAsOf(points: ForwardPoint[]) {
-  const gme = points.filter((point) => point.source === GME_FORWARD_SOURCE);
-  const preferred = gme.length > 0 ? gme : points;
-  return preferred.reduce(
-    (best, row) => (row.asOf > best ? row.asOf : best),
-    preferred[0]?.asOf ?? "",
-  ) || null;
+  return (
+    points.reduce(
+      (best, row) => (row.asOf > best ? row.asOf : best),
+      points[0]?.asOf ?? "",
+    ) || null
+  );
 }
 
 export function blendPunFromPoints(points: ForwardPoint[], asOf: string): PunForwardBlend {

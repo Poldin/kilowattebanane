@@ -48,6 +48,13 @@ export type OpsCompleteness = {
   missing: string[];
 };
 
+export type OpsForwardSource = {
+  label: string;
+  asOf: string | null;
+  months: number;
+  staleDays: number;
+};
+
 export type OpsKpiReport = {
   reportDate: string;
   subject: string;
@@ -71,6 +78,10 @@ export type OpsKpiReport = {
     lastOkDate: string | null;
     staleDays: number;
     runs: OpsImportRun[];
+  };
+  forward: {
+    gme: OpsForwardSource;
+    cme: OpsForwardSource;
   };
 };
 
@@ -96,6 +107,48 @@ function daysBetween(from: string, to: string) {
   return Math.round(
     (Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86_400_000,
   );
+}
+
+function utcWeekday(iso: string) {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+function lastWeekdayOnOrBefore(iso: string) {
+  let cursor = iso;
+  while (utcWeekday(cursor) === 0 || utcWeekday(cursor) === 6) {
+    cursor = addCalendarDays(cursor, -1);
+  }
+  return cursor;
+}
+
+async function loadForwardSnapshot(
+  supabase: ReturnType<typeof createSecretClient>,
+  table: "po_forward_curve" | "po_gme_mte_monthly",
+  label: string,
+  today: string,
+): Promise<OpsForwardSource> {
+  const { data, error } = await supabase
+    .from(table)
+    .select("as_of")
+    .order("as_of", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const asOf = (data?.[0]?.as_of as string | undefined) ?? null;
+  if (!asOf) {
+    return { label, asOf: null, months: 0, staleDays: 99 };
+  }
+  const { count, error: countError } = await supabase
+    .from(table)
+    .select("id", { count: "exact", head: true })
+    .eq("as_of", asOf);
+  if (countError) throw new Error(countError.message);
+  return {
+    label,
+    asOf,
+    months: count ?? 0,
+    staleDays: Math.max(0, daysBetween(asOf, today)),
+  };
 }
 
 function asKind(value: string): ImportKind | null {
@@ -149,6 +202,11 @@ export function formatOpsKpiText(report: OpsKpiReport) {
       ].join(" · ")
     : "nessun sync";
 
+  const forwardSourceLine = (row: OpsForwardSource) =>
+    row.asOf
+      ? `${row.label} ${shortItDate(row.asOf)} (${row.months} mesi)`
+      : `${row.label} assente`;
+
   const zoneLine = (row: OpsCompleteness) => {
     const base = `${row.complete}/${row.total} complete`;
     if (row.missing.length === 0) return base;
@@ -162,6 +220,7 @@ export function formatOpsKpiText(report: OpsKpiReport) {
     `ENTSO oggi   ${zoneLine(report.entsoToday)}`,
     `ENTSO ${shortItDate(report.entsoTomorrow.date).padEnd(6)} ${zoneLine(report.entsoTomorrow)}`,
     `OFFERTE      ${offerte}`,
+    `FORWARD      ${forwardSourceLine(report.forward.gme)} · ${forwardSourceLine(report.forward.cme)}`,
   ].join("\n");
 }
 
@@ -180,6 +239,8 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     deliveriesRes,
     statsRes,
     importRes,
+    gmeRes,
+    cmeRes,
   ] = await Promise.all([
     supabase
       .from("subscribers")
@@ -215,6 +276,8 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
       )
       .order("started_at", { ascending: false })
       .limit(40),
+    loadForwardSnapshot(supabase, "po_gme_mte_monthly", "GME", today),
+    loadForwardSnapshot(supabase, "po_forward_curve", "CME", today),
   ]);
 
   for (const result of [
@@ -287,6 +350,16 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
   if (entsoToday.complete < entsoToday.total) {
     alerts.push("entso oggi incompleto");
   }
+  if (!cmeRes.asOf) {
+    alerts.push("cme mai sincronizzato");
+  } else if (cmeRes.asOf < lastWeekdayOnOrBefore(today)) {
+    alerts.push(`cme fermo da ${cmeRes.staleDays}g`);
+  }
+  if (!gmeRes.asOf) {
+    alerts.push("gme mai sincronizzato");
+  } else if (gmeRes.staleDays > 5) {
+    alerts.push(`gme fermo da ${gmeRes.staleDays}g`);
+  }
 
   const subject = `KPI ${shortItDate(today)} · ${alerts.length > 0 ? alerts.join(" · ") : "ok"}`;
 
@@ -310,5 +383,6 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     entsoToday,
     entsoTomorrow,
     offerte: { lastOkDate, staleDays, runs },
+    forward: { gme: gmeRes, cme: cmeRes },
   };
 }
