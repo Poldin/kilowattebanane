@@ -42,6 +42,7 @@ type ParsedMl = {
   dispacciamento: Record<string, unknown>[];
   indici: Record<string, unknown>[];
   sconti: Record<string, unknown>[];
+  condizioni: Record<string, unknown>[];
 };
 
 export async function ingestMlE(
@@ -121,6 +122,11 @@ export async function ingestMlE(
         "po_ml_e_sconti",
         attach(group, idByHash, (item) => item.sconti),
       );
+      await insertChildren(
+        client,
+        "po_ml_e_condizioni",
+        attach(group, idByHash, (item) => item.condizioni),
+      );
     }
 
     const currentByCod = new Map<string, ParsedMl>();
@@ -189,7 +195,7 @@ async function insertChildren(
   }
 }
 
-function parseMlOffers(xml: string, fallbackDate: string) {
+export function parseMlOffers(xml: string, fallbackDate: string) {
   const out: ParsedMl[] = [];
   for (const offer of xmlBlocks(xml, "offerta")) {
     const parsed = parseOneOffer(offer, fallbackDate);
@@ -251,6 +257,13 @@ function parseOneOffer(offer: string, fallbackDate: string): ParsedMl | null {
     tipo: xmlText(block, "TIPO_DISPACCIAMENTO"),
     nome: xmlText(block, "NOME"),
     valore: parseNumber(xmlText(block, "VALORE_DISP")),
+  }));
+
+  const condizioni = xmlBlocks(offer, "CondizioniContrattuali").map((block) => ({
+    tipologia: padCode(xmlText(block, "TIPOLOGIA_CONDIZIONE")),
+    altro: xmlText(block, "ALTRO"),
+    descrizione: xmlText(block, "DESCRIZIONE"),
+    limitante: padCode(xmlText(block, "LIMITANTE")),
   }));
 
   const sconti = xmlBlocks(offer, "Sconto").flatMap((block) => {
@@ -317,6 +330,7 @@ function parseOneOffer(offer: string, fallbackDate: string): ParsedMl | null {
     dispacciamento,
     indici,
     sconti,
+    condizioni,
   });
 
   return {
@@ -328,10 +342,17 @@ function parseOneOffer(offer: string, fallbackDate: string): ParsedMl | null {
     dispacciamento,
     indici,
     sconti,
+    condizioni,
     row: {
       ...business,
       cod_offerta: cod,
       content_hash: hash,
     },
   };
+}
+
+function padCode(value: string | null) {
+  const raw = value?.trim();
+  if (!raw) return null;
+  return /^\d+$/.test(raw) ? raw.padStart(2, "0") : raw;
 }

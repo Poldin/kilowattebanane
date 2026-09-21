@@ -86,6 +86,7 @@ export type OfferteHitDettaglio = {
   coefficiente: number | null;
   coverage: string | null;
   sconti: OfferteSconto[];
+  onereRecesso: string | null;
 };
 
 export type OfferteSearchHit = {

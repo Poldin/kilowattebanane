@@ -23,6 +23,7 @@ export function OfferDettaglio({ dettaglio }: { dettaglio: OfferteHitDettaglio }
   const hasBody =
     dettaglio.descrizione ||
     dettaglio.garanzie ||
+    dettaglio.onereRecesso ||
     rows.length > 0 ||
     dettaglio.sconti.length > 0;
 
@@ -39,6 +40,14 @@ export function OfferDettaglio({ dettaglio }: { dettaglio: OfferteHitDettaglio }
                 Garanzie
               </p>
               <p className="mt-0.5">{dettaglio.garanzie}</p>
+            </div>
+          ) : null}
+          {dettaglio.onereRecesso ? (
+            <div>
+              <p className="offerte-hit-muted text-xs text-neutral-500 dark:text-neutral-400">
+                Onere di recesso
+              </p>
+              <p className="mt-0.5">{dettaglio.onereRecesso}</p>
             </div>
           ) : null}
           {rows.length > 0 ? (

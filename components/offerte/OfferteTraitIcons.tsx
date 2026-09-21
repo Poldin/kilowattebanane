@@ -132,6 +132,20 @@ function CanoneIcon({ className = ICON }: { className?: string }) {
   );
 }
 
+function PlacePinIcon({ className = ICON }: { className?: string }) {
+  return (
+    <StrokeIcon className={className}>
+      <path
+        d="M8 14s4.6-4.1 4.6-7.4A4.6 4.6 0 0 0 8 2 4.6 4.6 0 0 0 3.4 6.6C3.4 9.9 8 14 8 14Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="6.6" r="1.45" stroke="currentColor" strokeWidth="1.25" />
+    </StrokeIcon>
+  );
+}
+
 function PrezzoFissoIcon({ className = ICON }: { className?: string }) {
   return (
     <StrokeIcon className={className}>
@@ -179,7 +193,7 @@ export function MercatoIcon({
   return <TuttiIcon className={className} />;
 }
 
-export { CanoneIcon };
+export { CanoneIcon, PlacePinIcon };
 
 export function PrezzoIcon({
   kind,

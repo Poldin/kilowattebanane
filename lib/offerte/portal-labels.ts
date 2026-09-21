@@ -165,7 +165,21 @@ export type PlacetDettaglioRow = {
   coverage: string | null;
 };
 
-export function mlOfferDettaglio(row: MlDettaglioRow, sconti: OfferteSconto[] = []): OfferteHitDettaglio {
+export type MlCondizioneRow = {
+  tipologia: string | null;
+  descrizione: string | null;
+};
+
+export function onereRecessoFrom(rows: MlCondizioneRow[] | undefined) {
+  const hit = (rows ?? []).find((row) => padCondizione(row.tipologia) === "05");
+  return cleanText(hit?.descrizione ?? null);
+}
+
+export function mlOfferDettaglio(
+  row: MlDettaglioRow,
+  sconti: OfferteSconto[] = [],
+  onereRecesso: string | null = null,
+): OfferteHitDettaglio {
   const singola = yesNo(row.offerta_singola);
   return {
     descrizione: cleanText(row.descrizione),
@@ -185,6 +199,7 @@ export function mlOfferDettaglio(row: MlDettaglioRow, sconti: OfferteSconto[] = 
     coefficiente: asNum(row.coefficiente),
     coverage: coverageLabel(row.coverage),
     sconti,
+    onereRecesso: cleanText(onereRecesso),
   };
 }
 
@@ -207,7 +222,14 @@ export function placetOfferDettaglio(row: PlacetDettaglioRow): OfferteHitDettagl
     coefficiente: null,
     coverage: coverageLabel(row.coverage),
     sconti: [],
+    onereRecesso: null,
   };
+}
+
+function padCondizione(value: string | null | undefined) {
+  const raw = value?.trim();
+  if (!raw) return null;
+  return /^\d+$/.test(raw) ? raw.padStart(2, "0") : raw;
 }
 
 export function formatScontoValore(valore: number | string | null, unita: string | null) {

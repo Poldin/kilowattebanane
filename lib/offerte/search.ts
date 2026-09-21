@@ -18,6 +18,7 @@ import {
   matchesContrattoFilter,
   matchesPagamentoFilter,
   mlOfferDettaglio,
+  onereRecessoFrom,
   placetOfferDettaglio,
 } from "@/lib/offerte/portal-labels";
 import {
@@ -124,6 +125,12 @@ type MlScontoRow = {
 };
 
 type MlDispRow = { offer_id: number; valore: number | string | null; nome: string | null };
+
+type MlCondizioneRow = {
+  offer_id: number;
+  tipologia: string | null;
+  descrizione: string | null;
+};
 
 type MlCompRow = MlComponentInput & { offer_id: number };
 
@@ -260,12 +267,13 @@ export async function searchOfferte(
 
   const mlIds = mlCovered.map((row) => row.id);
   const placetIds = placetCovered.map((row) => row.id);
-  const [componenti, kernels, dispacciamento, scontiAll, params, forward, shape] =
+  const [componenti, kernels, dispacciamento, scontiAll, condizioniAll, params, forward, shape] =
     await Promise.all([
       loadComponenti(mlIds),
       loadKernels(placetIds, mlIds),
       loadDispacciamento(mlIds),
       loadScontiRaw(mlIds),
+      loadCondizioni(mlIds),
       loadParametriMap(),
       loadPunForwardBlend(today),
       loadLatestPunShape(),
@@ -278,6 +286,7 @@ export async function searchOfferte(
   }
   const byDisp = groupByOffer(dispacciamento);
   const byScontoRaw = groupByOffer(scontiAll);
+  const byCondizione = groupByOffer(condizioniAll);
   const residente = query.residente !== false;
   const regulated = regulatedStack(params, {
     cliente: query.cliente,
@@ -401,7 +410,7 @@ export async function searchOfferte(
           eur,
         })) ?? null,
         breakdown: bill?.breakdown ?? null,
-        dettaglio: mlOfferDettaglio(row),
+        dettaglio: mlOfferDettaglio(row, [], onereRecessoFrom(byCondizione.get(row.id))),
       };
     }),
   ];
@@ -515,6 +524,24 @@ async function loadDispacciamento(offerIds: number[]) {
       client
         .from("po_ml_e_dispacciamento")
         .select("offer_id, valore, nome")
+        .in("offer_id", slice)
+        .range(from, to),
+    );
+    rows.push(...page);
+  }
+  return rows;
+}
+
+async function loadCondizioni(offerIds: number[]) {
+  if (offerIds.length === 0) return [] as MlCondizioneRow[];
+  const client = offerteReadClient();
+  const rows: MlCondizioneRow[] = [];
+  for (let i = 0; i < offerIds.length; i += 200) {
+    const slice = offerIds.slice(i, i + 200);
+    const page = await paginateSelect<MlCondizioneRow>((from, to) =>
+      client
+        .from("po_ml_e_condizioni")
+        .select("offer_id, tipologia, descrizione")
         .in("offer_id", slice)
         .range(from, to),
     );

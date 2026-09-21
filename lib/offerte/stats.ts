@@ -5,7 +5,7 @@ import { romeToday } from "@/lib/offerte/dates";
 import { mlFacts, placetFacts, type OfferteFasciaPlan } from "@/lib/offerte/metrics";
 import { OFFERTE_CACHE_REVALIDATE, OFFERTE_CACHE_TAG } from "@/lib/offerte/revalidate";
 import { POTENZA_STANDARD_CASA_KW } from "@/lib/offerte/potenza";
-import { formatScontoValore, mlOfferDettaglio, placetOfferDettaglio } from "@/lib/offerte/portal-labels";
+import { formatScontoValore, mlOfferDettaglio, onereRecessoFrom, placetOfferDettaglio } from "@/lib/offerte/portal-labels";
 import type {
   OfferteClusterBucket,
   OfferteClusterStats,
@@ -190,7 +190,8 @@ export const loadOfferteClusterStats = unstable_cache(
     const scontoRows = await loadLiveSconti(mlRows.map((row) => row.id));
     const sconti = scontoStats(mlRows, scontoRows);
     const componenti = await loadLiveComponenti(mlRows.map((row) => row.id));
-    const points = paretoInputs(placetRows, mlRows, componenti, scontoRows);
+    const condizioneRows = await loadLiveCondizioni(mlRows.map((row) => row.id));
+    const points = paretoInputs(placetRows, mlRows, componenti, scontoRows, condizioneRows);
     const pareto = buildParetoStats(points);
     const prezzi = buildPrezziStats(points);
 
@@ -239,7 +240,7 @@ export const loadOfferteClusterStats = unstable_cache(
       fornitori: vendorStats(rows),
     };
   },
-  ["offerte-cluster-stats-v14"],
+  ["offerte-cluster-stats-v15"],
   { revalidate: OFFERTE_CACHE_REVALIDATE, tags: [OFFERTE_CACHE_TAG] },
 );
 
@@ -367,6 +368,30 @@ async function loadLiveSconti(offerIds: number[]) {
   return rows;
 }
 
+type MlCondizioneStatRow = {
+  offer_id: number;
+  tipologia: string | null;
+  descrizione: string | null;
+};
+
+async function loadLiveCondizioni(offerIds: number[]) {
+  const rows: MlCondizioneStatRow[] = [];
+  if (offerIds.length === 0) return rows;
+  const client = offerteReadClient();
+  for (let i = 0; i < offerIds.length; i += 200) {
+    const slice = offerIds.slice(i, i + 200);
+    const page = await paginateSelect<MlCondizioneStatRow>((from, to) =>
+      client
+        .from("po_ml_e_condizioni")
+        .select("offer_id, tipologia, descrizione")
+        .in("offer_id", slice)
+        .range(from, to),
+    );
+    rows.push(...page);
+  }
+  return rows;
+}
+
 async function loadLiveComponenti(offerIds: number[]) {
   const rows: MlCompRow[] = [];
   if (offerIds.length === 0) return rows;
@@ -390,6 +415,7 @@ function paretoInputs(
   mlRows: MlClusterRow[],
   componenti: MlCompRow[],
   sconti: MlScontoStatRow[],
+  condizioni: MlCondizioneStatRow[],
 ): ParetoPointInput[] {
   const componentsByOffer = new Map<number, MlCompRow[]>();
   for (const row of componenti) {
@@ -402,6 +428,12 @@ function paretoInputs(
     const list = scontiByOffer.get(row.offer_id) ?? [];
     list.push(row);
     scontiByOffer.set(row.offer_id, list);
+  }
+  const condizioniByOffer = new Map<number, MlCondizioneStatRow[]>();
+  for (const row of condizioni) {
+    const list = condizioniByOffer.get(row.offer_id) ?? [];
+    list.push(row);
+    condizioniByOffer.set(row.offer_id, list);
   }
 
   const points: ParetoPointInput[] = [];
@@ -479,7 +511,11 @@ function paretoInputs(
       validFrom: row.valid_from,
       validTo: row.valid_to,
       durataMesi: normalizeDurata(row.durata),
-      dettaglio: mlOfferDettaglio(row, scontiDettaglio(scontiByOffer.get(row.id))),
+      dettaglio: mlOfferDettaglio(
+        row,
+        scontiDettaglio(scontiByOffer.get(row.id)),
+        onereRecessoFrom(condizioniByOffer.get(row.id)),
+      ),
     });
   }
 

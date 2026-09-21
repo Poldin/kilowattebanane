@@ -1,32 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LearnArrows } from "@/components/learn/LearnArrows";
-import { SignupSlot } from "@/components/SignupForm";
-import {
-  learnChapterPath,
-  nextChapter,
-  type LearnChapter,
-  type LearnHourQuestion,
-  type LearnQuestion,
-} from "@/lib/learn/questions";
+import { LearnChapterCard } from "@/components/learn/LearnChapterCard";
+import { LearnRichText } from "@/components/learn/LearnRichText";
+import { patchLearnEvent, startLearnEvent } from "@/components/learn/learn-log";
+import { learnChapterPath } from "@/lib/learn/types";
+import type {
+  LearnChapter,
+  LearnChapterWithSlides,
+  LearnMultiplePayload,
+  LearnOpenPayload,
+  LearnSinglePayload,
+  LearnSlide,
+} from "@/lib/learn/types";
 
-const BANANA = "#F5D547";
-
-export function LearnQuiz({ chapter }: { chapter: LearnChapter }) {
-  const questions = chapter.questions;
-  const total = questions.length;
-  const following = nextChapter(chapter.id);
+export function LearnQuiz({
+  chapter,
+  following,
+}: {
+  chapter: LearnChapterWithSlides;
+  following?: LearnChapter;
+}) {
+  const slides = chapter.slides;
+  const total = slides.length;
 
   const [index, setIndex] = useState(0);
-  const [picked, setPicked] = useState<string | number | null>(null);
-  const [revealed, setRevealed] = useState(false);
-  const [results, setResults] = useState<boolean[]>([]);
   const [done, setDone] = useState(false);
+  const [results, setResults] = useState<boolean[]>([]);
 
-  const question = questions[index];
+  const slide = slides[index];
   const correctCount = results.filter(Boolean).length;
+  const scoredTotal = results.length;
 
   useEffect(() => {
     document
@@ -36,16 +42,12 @@ export function LearnQuiz({ chapter }: { chapter: LearnChapter }) {
 
   function restart() {
     setIndex(0);
-    setPicked(null);
-    setRevealed(false);
-    setResults([]);
     setDone(false);
+    setResults([]);
   }
 
-  function lockAnswer(next: string | number, correct: boolean) {
-    if (revealed) return;
-    setPicked(next);
-    setRevealed(true);
+  function recordResult(correct: boolean | null) {
+    if (correct == null) return;
     setResults((prev) => [...prev, correct]);
   }
 
@@ -55,22 +57,16 @@ export function LearnQuiz({ chapter }: { chapter: LearnChapter }) {
       return;
     }
     setIndex((n) => n + 1);
-    setPicked(null);
-    setRevealed(false);
   }
 
   function skipNext() {
     if (index + 1 >= total) return;
     setIndex((n) => n + 1);
-    setPicked(null);
-    setRevealed(false);
   }
 
   function skipPrev() {
     if (index <= 0) return;
     setIndex((n) => n - 1);
-    setPicked(null);
-    setRevealed(false);
   }
 
   return (
@@ -79,59 +75,90 @@ export function LearnQuiz({ chapter }: { chapter: LearnChapter }) {
         <Done
           chapter={chapter}
           correctCount={correctCount}
-          total={total}
+          scoredTotal={scoredTotal}
           following={following}
           onRestart={restart}
         />
-      ) : question ? (
+      ) : slide ? (
         <Play
-          chapterTitle={chapter.title}
-          question={question}
+          key={slide.id}
+          chapter={chapter}
+          slide={slide}
           index={index}
           total={total}
-          picked={picked}
-          revealed={revealed}
-          onPick={lockAnswer}
+          onResult={recordResult}
           onNext={goNext}
           onPrev={skipPrev}
           onSkip={skipNext}
         />
-      ) : null}
+      ) : (
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          Questo capitolo non ha ancora lezioni attive.
+        </p>
+      )}
     </div>
   );
 }
 
 function Play({
-  chapterTitle,
-  question,
+  chapter,
+  slide,
   index,
   total,
-  picked,
-  revealed,
-  onPick,
+  onResult,
   onNext,
   onPrev,
   onSkip,
 }: {
-  chapterTitle: string;
-  question: LearnQuestion;
+  chapter: LearnChapterWithSlides;
+  slide: LearnSlide;
   index: number;
   total: number;
-  picked: string | number | null;
-  revealed: boolean;
-  onPick: (next: string | number, correct: boolean) => void;
+  onResult: (correct: boolean | null) => void;
   onNext: () => void;
   onPrev: () => void;
   onSkip: () => void;
 }) {
   const last = index + 1 === total;
+  const [revealed, setRevealed] = useState(slide.type === "info");
+  const [eventId, setEventId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void startLearnEvent({
+      slideId: slide.id,
+      chapterId: chapter.id,
+      interactions: { shown: true, type: slide.type },
+    }).then((id) => {
+      if (!cancelled) setEventId(id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [chapter.id, slide.id, slide.type]);
+
+  function log(interactions: Record<string, unknown>) {
+    if (!eventId) return;
+    void patchLearnEvent(eventId, {
+      shown: true,
+      type: slide.type,
+      ...interactions,
+    });
+  }
+
+  function reveal(correct: boolean | null, interactions: Record<string, unknown>) {
+    if (revealed && slide.type !== "info") return;
+    onResult(correct);
+    log(interactions);
+    if (slide.type === "open") {
+      onNext();
+      return;
+    }
+    setRevealed(true);
+  }
 
   return (
-    <section
-      aria-labelledby="learn-prompt"
-      className="insight-content-in"
-      key={question.id}
-    >
+    <section aria-labelledby="learn-title" className="insight-content-in">
       <LearnArrows
         canPrev={index > 0}
         canNext={!last}
@@ -144,61 +171,50 @@ function Play({
       </div>
 
       <p className="mt-5 text-xs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
-        {chapterTitle}
+        {chapter.title}
         <span className="mx-1.5 font-normal text-neutral-400">·</span>
         {index + 1} di {total}
       </p>
       <h1
-        id="learn-prompt"
+        id="learn-title"
         className="mt-2 text-2xl font-bold tracking-tight leading-tight text-foreground sm:text-3xl"
       >
-        {question.prompt}
+        <LearnRichText text={slide.payload.title} inline />
       </h1>
 
-      {question.kind === "choice" ? (
-        <div
-          role="radiogroup"
-          aria-labelledby="learn-prompt"
-          className="mt-6 flex flex-col gap-2"
-        >
-          {question.options.map((option) => {
-            const selected = picked === option.id;
-            const isCorrect = option.id === question.correctId;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                disabled={revealed}
-                onClick={() =>
-                  onPick(option.id, option.id === question.correctId)
-                }
-                className={optionClass(revealed, selected, isCorrect)}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <HourPicker
-          question={question}
-          picked={typeof picked === "number" ? picked : null}
-          revealed={revealed}
-          onPick={onPick}
+      {slide.payload.image ? (
+        <img
+          src={slide.payload.image}
+          alt=""
+          className="mt-5 w-full rounded-lg object-cover"
         />
-      )}
+      ) : null}
 
-      {revealed ? (
-        <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-4 sm:p-5 dark:border-neutral-800 dark:bg-neutral-950">
-          <p className="text-sm font-medium text-foreground">
-            {resultsLine(question, picked)}
-          </p>
-          <p className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-            {question.explanation}
-          </p>
-        </div>
+      {slide.type === "info" ? (
+        <LearnRichText
+          text={slide.payload.text}
+          className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
+        />
+      ) : null}
+
+      {slide.type === "single" ? (
+        <SinglePlay
+          payload={slide.payload}
+          revealed={revealed}
+          onReveal={reveal}
+        />
+      ) : null}
+
+      {slide.type === "multiple" ? (
+        <MultiplePlay
+          payload={slide.payload}
+          revealed={revealed}
+          onReveal={reveal}
+        />
+      ) : null}
+
+      {slide.type === "open" ? (
+        <OpenPlay payload={slide.payload} onReveal={reveal} />
       ) : null}
 
       {revealed ? (
@@ -215,146 +231,201 @@ function Play({
   );
 }
 
-function HourPicker({
-  question,
-  picked,
+function SinglePlay({
+  payload,
   revealed,
-  onPick,
+  onReveal,
 }: {
-  question: LearnHourQuestion;
-  picked: number | null;
+  payload: LearnSinglePayload;
   revealed: boolean;
-  onPick: (next: number, correct: boolean) => void;
+  onReveal: (correct: boolean, interactions: Record<string, unknown>) => void;
 }) {
-  const layout = useMemo(() => hourLayout(question.prices), [question.prices]);
+  const [picked, setPicked] = useState<string | null>(null);
 
   return (
-    <div className="mt-6">
-      <p className="mb-2 text-sm text-neutral-500 dark:text-neutral-400">
-        {question.hint}
-      </p>
-      <div className="relative overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
-        <svg
-          viewBox={`0 0 ${layout.width} ${layout.height}`}
-          className="block h-44 w-full sm:h-52"
-          role="img"
-          aria-hidden
-        >
-          <rect width={layout.width} height={layout.height} fill="#111111" />
-          {picked !== null ? (
-            <rect
-              x={layout.padX + picked * layout.colW}
-              y={layout.padY}
-              width={layout.colW}
-              height={layout.innerH}
-              fill={
-                question.cheapHours.includes(picked) ? BANANA : "#EF4444"
-              }
-              opacity={0.22}
-            />
-          ) : null}
-          <path d={layout.area} fill={BANANA} opacity="0.16" />
-          <path
-            d={layout.line}
-            fill="none"
-            stroke={BANANA}
-            strokeWidth="2.5"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-          {picked !== null ? (
-            <circle
-              cx={layout.padX + (picked + 0.5) * layout.colW}
-              cy={layout.yAt(question.prices[picked] ?? 0)}
-              r="4.5"
-              fill={BANANA}
-              stroke="#111111"
-              strokeWidth="2"
-            />
-          ) : null}
-        </svg>
-        <div
-          className="absolute inset-0 grid"
-          style={{ gridTemplateColumns: "repeat(24, minmax(0, 1fr))" }}
-          role="radiogroup"
-          aria-label="Scegli un'ora"
-        >
-          {question.prices.map((_, hour) => (
+    <>
+      <LearnRichText
+        text={payload.question}
+        className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
+      />
+      <div role="radiogroup" className="mt-6 flex flex-col gap-2">
+        {payload.options.map((option) => {
+          const selected = picked === option.id;
+          const isCorrect = option.id === payload.correctId;
+          return (
             <button
-              key={hour}
+              key={option.id}
               type="button"
               role="radio"
-              aria-checked={picked === hour}
+              aria-checked={selected}
               disabled={revealed}
-              aria-label={`${String(hour).padStart(2, "0")}:00`}
-              onClick={() =>
-                onPick(hour, question.cheapHours.includes(hour))
-              }
-              className="min-h-11 transition-colors hover:bg-white/6 disabled:hover:bg-transparent"
-            />
-          ))}
-        </div>
+              onClick={() => {
+                setPicked(option.id);
+                onReveal(isCorrect, {
+                  picked: option.id,
+                  correct: isCorrect,
+                });
+              }}
+              className={optionClass({ revealed, selected, isCorrect })}
+            >
+              <LearnRichText text={option.label} inline />
+            </button>
+          );
+        })}
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] text-neutral-500 dark:text-neutral-500">
-        <span>00</span>
-        <span>12</span>
-        <span>24</span>
+    </>
+  );
+}
+
+function MultiplePlay({
+  payload,
+  revealed,
+  onReveal,
+}: {
+  payload: LearnMultiplePayload;
+  revealed: boolean;
+  onReveal: (correct: boolean, interactions: Record<string, unknown>) => void;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+
+  function toggle(id: string) {
+    if (revealed) return;
+    setPicked((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  }
+
+  function submit() {
+    if (revealed) return;
+    const exact =
+      picked.length === payload.correctIds.length &&
+      payload.correctIds.every((id) => picked.includes(id));
+    onReveal(exact, { picked, correct: exact });
+  }
+
+  return (
+    <>
+      <LearnRichText
+        text={payload.question}
+        className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
+      />
+      <p className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">
+        Puoi selezionare più risposte.
+      </p>
+      <div className="mt-4 flex flex-col gap-2">
+        {payload.options.map((option) => {
+          const selected = picked.includes(option.id);
+          const isCorrect = payload.correctIds.includes(option.id);
+          return (
+            <button
+              key={option.id}
+              type="button"
+              role="checkbox"
+              aria-checked={selected}
+              disabled={revealed}
+              onClick={() => toggle(option.id)}
+              className={optionClass({ revealed, selected, isCorrect, checkbox: true })}
+            >
+              <CheckIcon checked={selected} />
+              <LearnRichText text={option.label} inline />
+            </button>
+          );
+        })}
       </div>
-    </div>
+      {!revealed ? (
+        <button
+          type="button"
+          onClick={submit}
+          className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90"
+        >
+          Rispondi
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+function OpenPlay({
+  payload,
+  onReveal,
+}: {
+  payload: LearnOpenPayload;
+  onReveal: (correct: null, interactions: Record<string, unknown>) => void;
+}) {
+  const [text, setText] = useState("");
+
+  return (
+    <>
+      <LearnRichText
+        text={payload.question}
+        className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
+      />
+      <label className="mt-6 block">
+        <span className="sr-only">La tua risposta</span>
+        <textarea
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          rows={4}
+          placeholder="Scrivi qui"
+          className="w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-800 dark:focus:border-neutral-600"
+        />
+      </label>
+      <button
+        type="button"
+        onClick={() => onReveal(null, { text: text.trim() })}
+        className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90"
+      >
+        Invia
+      </button>
+    </>
   );
 }
 
 function Done({
   chapter,
   correctCount,
-  total,
+  scoredTotal,
   following,
   onRestart,
 }: {
-  chapter: LearnChapter;
+  chapter: LearnChapterWithSlides;
   correctCount: number;
-  total: number;
-  following: LearnChapter | undefined;
+  scoredTotal: number;
+  following?: LearnChapter;
   onRestart: () => void;
 }) {
-  const headline =
-    correctCount === total
-      ? "Banana. Le hai prese tutte."
-      : correctCount === 0
-        ? "Sei in buona compagnia."
-        : "Ci sei quasi, e sei in ottima compagnia.";
+  const percent =
+    scoredTotal > 0 ? Math.round((correctCount / scoredTotal) * 100) : null;
 
   return (
     <section className="insight-content-in">
       <LearnArrows canPrev={false} canNext={false} />
       <div className="mt-4 rounded-lg bg-[#F5D547] p-5 text-[#111111] sm:p-6">
-        <p className="text-xs font-medium tracking-wide uppercase">
-          {correctCount} su {total} · {chapter.title}
-        </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight leading-tight sm:text-4xl">
-          {headline}
-        </h1>
-        <p className="mt-3 max-w-md text-sm leading-relaxed text-neutral-800">
-          {chapter.takeaway}
-        </p>
+        <p className="text-xs font-medium tracking-wide uppercase">{chapter.title}</p>
+        {percent != null ? (
+          <>
+            <h1 className="mt-3 text-5xl font-bold tracking-tight leading-none sm:text-6xl">
+              {correctCount} su {scoredTotal} {percent}% {scoreEmoji(percent)}
+            </h1>
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-neutral-800 sm:text-base">
+              {scoreLine(percent)}
+            </p>
+          </>
+        ) : (
+          <h1 className="mt-2 text-3xl font-bold tracking-tight leading-tight sm:text-4xl">
+            Fatto.
+          </h1>
+        )}
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           {following ? (
             <Link
-              href={learnChapterPath(following.id)}
+              href={learnChapterPath(following.slug)}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#111111] px-4 text-sm font-medium text-[#F5D547] transition-opacity hover:opacity-90"
             >
-              {following.title}
+              Vai a {following.title}
               <ArrowIcon />
             </Link>
-          ) : (
-            <Link
-              href="/learn"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#111111] px-4 text-sm font-medium text-[#F5D547] transition-opacity hover:opacity-90"
-            >
-              Tutti i capitoli
-              <ArrowIcon />
-            </Link>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={onRestart}
@@ -362,20 +433,39 @@ function Done({
           >
             Rifai
           </button>
-          {following ? (
-            <Link
-              href="/learn"
-              className="inline-flex h-10 items-center justify-center px-1 text-sm font-medium text-[#111111]/70 transition-colors hover:text-[#111111] sm:px-2"
-            >
-              Tutti i capitoli
-            </Link>
-          ) : null}
+          <Link
+            href="/learn"
+            className="inline-flex h-10 items-center justify-center rounded-md border border-[#111111]/20 px-4 text-sm font-medium text-[#111111] transition-colors hover:bg-[#111111]/8"
+          >
+            torna ai capitoli
+          </Link>
         </div>
+        {following ? (
+          <LearnChapterCard
+            chapter={following}
+            className="mt-5 border-[#111111]/15"
+            fallbackClassName="bg-[#111111]"
+          />
+        ) : null}
       </div>
-
-      <SignupSlot className="mt-6 w-full scroll-mt-20" />
     </section>
   );
+}
+
+function scoreEmoji(percent: number) {
+  if (percent >= 100) return "🍌";
+  if (percent >= 70) return "🤩";
+  if (percent >= 40) return "😬";
+  if (percent >= 1) return "🐵";
+  return "🙈";
+}
+
+function scoreLine(percent: number) {
+  if (percent >= 100) return "Banana piena. Ora puoi spiegare il PUN anche in ascensore.";
+  if (percent >= 70) return "Quasi tutta banana. Un kWh di attenzione e sei a posto.";
+  if (percent >= 40) return "Mezza banana. Sai dov'è il bosco, non ancora il sentiero.";
+  if (percent >= 1) return "Più scimmia che banana. Il grafico non morde: riprova.";
+  return "Zero banane. Il mercato ha vinto 1-0, ma il ritorno si gioca dopo.";
 }
 
 function Progress({
@@ -409,54 +499,58 @@ function Progress({
   );
 }
 
-function resultsLine(question: LearnQuestion, picked: string | number | null) {
-  if (question.kind === "hour") {
-    if (typeof picked !== "number") return "Ok.";
-    const hour = `${String(picked).padStart(2, "0")}:00`;
-    if (question.cheapHours.includes(picked)) {
-      return `🍌 ${hour}: sei sulla banana.`;
-    }
-    return `🐵 ${hour}: ora cara. La banana era intorno alle 13.`;
-  }
-  if (picked === question.correctId) return "Esatto.";
-  return "Quasi. Sei in buona compagnia.";
-}
-
-function optionClass(revealed: boolean, selected: boolean, isCorrect: boolean) {
-  const base =
-    "w-full rounded-md border px-4 py-3 text-left text-sm leading-snug transition-colors disabled:cursor-default";
+function optionClass({
+  revealed,
+  selected,
+  isCorrect,
+  checkbox = false,
+}: {
+  revealed: boolean;
+  selected: boolean;
+  isCorrect: boolean;
+  checkbox?: boolean;
+}) {
+  const base = checkbox
+    ? "flex w-full items-start gap-3 rounded-md border px-4 py-3 text-left text-sm leading-snug transition-colors disabled:cursor-default"
+    : "w-full rounded-md border px-4 py-3 text-left text-sm leading-snug transition-colors disabled:cursor-default";
   if (!revealed) {
+    if (selected && checkbox) {
+      return `${base} border-neutral-400 bg-neutral-50 text-foreground dark:border-neutral-500 dark:bg-neutral-900`;
+    }
     return `${base} border-neutral-200 bg-background text-foreground hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:border-neutral-600 dark:hover:bg-neutral-900`;
   }
   if (isCorrect) {
-    return `${base} border-[#F5D547] bg-[#F5D547] text-[#111111]`;
+    return `${base} border-emerald-600 bg-emerald-50 text-emerald-950 dark:border-emerald-500 dark:bg-emerald-950 dark:text-emerald-50`;
   }
   if (selected) {
-    return `${base} border-neutral-300 bg-neutral-100 text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400`;
+    return `${base} border-red-600 bg-red-50 text-red-950 dark:border-red-500 dark:bg-red-950 dark:text-red-50`;
   }
   return `${base} border-neutral-200 bg-background text-neutral-400 dark:border-neutral-800 dark:text-neutral-600`;
 }
 
-function hourLayout(prices: number[]) {
-  const width = 320;
-  const height = 140;
-  const padX = 0;
-  const padY = 12;
-  const innerW = width - padX * 2;
-  const innerH = height - padY * 2;
-  const colW = innerW / 24;
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const span = Math.max(max - min, 1);
-  const yAt = (price: number) => padY + ((max - price) / span) * innerH;
-  const points = prices.map((price, hour) => {
-    const x = padX + (hour + 0.5) * colW;
-    const y = yAt(price);
-    return `${hour === 0 ? "M" : "L"} ${x} ${y}`;
-  });
-  const line = points.join(" ");
-  const area = `${line} L ${padX + innerW} ${padY + innerH} L ${padX} ${padY + innerH} Z`;
-  return { width, height, padX, padY, innerH, colW, line, area, yAt };
+function CheckIcon({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border ${
+        checked
+          ? "border-current bg-current"
+          : "border-neutral-400 bg-transparent dark:border-neutral-500"
+      }`}
+    >
+      {checked ? (
+        <svg viewBox="0 0 12 12" className="h-3 w-3 text-background" fill="none">
+          <path
+            d="M2.5 6.2 5 8.5 9.5 3.5"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : null}
+    </span>
+  );
 }
 
 function ArrowIcon() {
