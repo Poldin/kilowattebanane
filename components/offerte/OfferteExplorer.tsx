@@ -343,8 +343,7 @@ export function OfferteExplorer({
           <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">Cerco il comune…</p>
         ) : (
           <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
-            Inserisci il CAP. Applichiamo un profilo standard: casa, residente, variabile,
-            monoraria.
+            Inserisci il CAP qui sopra👆
           </p>
         )}
       </div>
@@ -357,26 +356,6 @@ export function OfferteExplorer({
           setOpen={setFiltersOpen}
         />
       ) : null}
-
-      <div className="mt-8 min-h-40">
-        {prefs.cap.length !== 5 ? (
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Dal CAP in poi togliamo il rumore: restano le 3–4 offerte sul fronte, canone e{" "}
-            {energyName}.
-          </p>
-        ) : capError ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{capError}</p>
-        ) : lookupLoading && !capReady ? (
-          <p className="text-sm text-neutral-500">Cerco il comune…</p>
-        ) : capReady ? (
-          <MockResults
-            catalogo={stats.total}
-            cluster={clusterCount}
-            kept={kept}
-            prezzo={prefs.prezzo}
-          />
-        ) : null}
-      </div>
     </section>
   );
 }

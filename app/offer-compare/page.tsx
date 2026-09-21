@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { MarketLearnBanner } from "@/components/MarketLearnBanner";
+import { OpposizioniBanner } from "@/components/OpposizioniBanner";
 import { OfferteExplorer } from "@/components/offerte/OfferteExplorer";
 import { SignupProvider, SignupSlot } from "@/components/SignupForm";
 import { publicSiteUrl } from "@/lib/app-url";
@@ -33,6 +34,7 @@ export default async function OfferComparePage({
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12">
           <OfferteExplorer stats={stats} initialCap={initialCap} />
           <div className="mt-16 flex w-full flex-col gap-3 sm:mt-20">
+            <OpposizioniBanner />
             <MarketLearnBanner />
             <SignupSlot className="w-full scroll-mt-20" />
           </div>

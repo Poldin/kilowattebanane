@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import { OpposizioniCallout } from "@/components/OpposizioniBanner";
 
 const PREF_KEY = "kilowattebanane.offerte.v1";
 
@@ -68,12 +68,7 @@ export function CapBanner() {
           </svg>
         </button>
       </form>
-      <Link
-        href="/offer-stats"
-        className="mt-3 inline-block text-sm text-emerald-100 underline decoration-emerald-300/60 underline-offset-2 transition-colors hover:text-white hover:decoration-white/80"
-      >
-        Vedi le statistiche sulle offerte luce
-      </Link>
+      <OpposizioniCallout className="mt-4 text-sm font-medium leading-relaxed" />
     </div>
   );
 }
