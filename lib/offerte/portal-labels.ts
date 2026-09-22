@@ -271,6 +271,10 @@ function splitCodes(value: string[] | string | null | undefined) {
   return parts.map((part) => part.trim()).filter(Boolean);
 }
 
+export function indicePrezzoLabel(value: string | null | undefined) {
+  return labelOf(value, INDICE_PREZZO);
+}
+
 function labelOf(value: string | null | undefined, dict: Record<string, string>) {
   if (!value) return null;
   const key = value.trim();

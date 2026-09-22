@@ -20,19 +20,21 @@ export const metadata: Metadata = {
 export default async function OfferComparePage({
   searchParams,
 }: {
-  searchParams: Promise<{ cap?: string | string[] }>;
+  searchParams: Promise<{ cap?: string | string[]; tab?: string | string[] }>;
 }) {
   const params = await searchParams;
   const capRaw = typeof params.cap === "string" ? params.cap : "";
   const initialCap = capRaw.replace(/\D/g, "").slice(0, 5);
+  const tabRaw = typeof params.tab === "string" ? params.tab : "";
+  const initialTab = tabRaw === "compara" ? "compara" : "cerca";
   const stats = await loadOfferteHeadlineStats();
 
   return (
     <SignupProvider>
       <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
         <Header />
-        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12">
-          <OfferteExplorer stats={stats} initialCap={initialCap} />
+        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-8 sm:px-6 sm:pt-5">
+          <OfferteExplorer stats={stats} initialCap={initialCap} initialTab={initialTab} />
           <div className="mt-16 flex w-full flex-col gap-3 sm:mt-20">
             <OpposizioniBanner />
             <MarketLearnBanner />

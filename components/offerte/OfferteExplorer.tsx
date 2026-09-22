@@ -35,6 +35,10 @@ import {
   formatPotenzaKw,
   potenzeImpegnateKw,
 } from "@/lib/offerte/potenza";
+import { OfferteCompareSearch } from "@/components/offerte/OfferteCompareSearch";
+import { useRotatingCapPlaceholder } from "@/lib/use-rotating-cap-placeholder";
+
+type ExplorerTab = "cerca" | "compara";
 
 const PREF_KEY = "kilowattebanane.offerte.v1";
 const STATS_HREF = "/offer-stats";
@@ -145,13 +149,23 @@ const MOCK_OFFERS: MockOffer[] = [
   },
 ];
 
+function offerComparePath(cap: string, tab: ExplorerTab) {
+  const params = new URLSearchParams();
+  if (cap.length === 5) params.set("cap", cap);
+  if (tab === "compara") params.set("tab", "compara");
+  const qs = params.toString();
+  return qs ? `/offer-compare?${qs}` : "/offer-compare";
+}
+
 export function OfferteExplorer({
   stats,
   initialCap = "",
+  initialTab = "cerca",
   className,
 }: {
   stats: OfferteHeadlineStats;
   initialCap?: string;
+  initialTab?: ExplorerTab;
   className?: string;
 }) {
   const router = useRouter();
@@ -164,6 +178,10 @@ export function OfferteExplorer({
   const [places, setPlaces] = useState<CapPlace[]>([]);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [tab, setTab] = useState<ExplorerTab>(initialTab === "compara" ? "compara" : "cerca");
+  const [capFocused, setCapFocused] = useState(false);
+  const { text: capGhost, isTyping: capGhostTyping } = useRotatingCapPlaceholder();
+  const showCapGhost = prefs.cap.length === 0 && !capFocused;
 
   useEffect(() => {
     try {
@@ -221,13 +239,15 @@ export function OfferteExplorer({
   }, [prefs]);
 
   useEffect(() => {
-    if (prefs.cap.length !== 5) {
-      if (initialCap) router.replace("/offer-compare", { scroll: false });
-      return;
-    }
-    if (prefs.cap === initialCap) return;
-    router.replace(`/offer-compare?cap=${prefs.cap}`, { scroll: false });
-  }, [initialCap, prefs.cap, router]);
+    setTab(initialTab === "compara" ? "compara" : "cerca");
+  }, [initialTab]);
+
+  useEffect(() => {
+    const activeTab: ExplorerTab = tab === "compara" ? "compara" : "cerca";
+    const fromUrl: ExplorerTab = initialTab === "compara" ? "compara" : "cerca";
+    if (offerComparePath(prefs.cap, activeTab) === offerComparePath(initialCap, fromUrl)) return;
+    router.replace(offerComparePath(prefs.cap, activeTab), { scroll: false });
+  }, [initialCap, initialTab, prefs.cap, router, tab]);
 
   useEffect(() => {
     if (prefs.cap.length !== 5) {
@@ -286,7 +306,7 @@ export function OfferteExplorer({
   const energyName = prefs.prezzo === "prezzo fisso" ? "prezzo dell’energia" : "spread sul PUN";
 
   return (
-    <section className={className ? `${className} mt-5` : "mt-5"}>
+    <section className={className ?? undefined}>
       <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">
         Dati{" "}
         <a
@@ -312,50 +332,117 @@ export function OfferteExplorer({
         </a>
       </p>
 
-      <div className="mt-8">
-        <label htmlFor="offerte-cap" className="sr-only">
-          CAP della fornitura
-        </label>
-        <input
-          ref={capInputRef}
-          id="offerte-cap"
-          inputMode="numeric"
-          autoComplete="postal-code"
-          maxLength={5}
-          placeholder="CAP"
-          value={prefs.cap}
-          onChange={(event) => {
-            const next = event.target.value.replace(/\D/g, "").slice(0, 5);
-            setPrefs((prev) => ({ ...prev, cap: next }));
-            setCapError(null);
-            setFiltersOpen(false);
-          }}
-          className="w-full border-0 bg-transparent p-0 text-3xl font-semibold tracking-[0.14em] text-foreground outline-none placeholder:tracking-normal placeholder:text-neutral-400 sm:text-4xl"
-        />
-        {placeLabel ? (
-          <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-400">
-            <PlacePinIcon className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{placeLabel}</span>
-          </p>
-        ) : capError ? (
-          <p className="mt-0.5 text-sm text-red-600 dark:text-red-400">{capError}</p>
-        ) : lookupLoading && prefs.cap.length === 5 ? (
-          <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">Cerco il comune…</p>
-        ) : (
-          <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
-            Inserisci il CAP qui sopra👆
-          </p>
-        )}
+      <div
+        role="tablist"
+        aria-label="Modalità confronto offerte"
+        className="mt-5 flex gap-1 border-b border-neutral-200 dark:border-neutral-800"
+      >
+        {(
+          [
+            ["cerca", "cerca"],
+            ["compara", "compara"],
+          ] as const
+        ).map(([id, label]) => {
+          const active = tab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              aria-controls={`offerte-panel-${id}`}
+              id={`offerte-tab-${id}`}
+              onClick={() => setTab(id)}
+              className={
+                active
+                  ? "-mb-px border-b-2 border-foreground px-3 py-2 text-sm font-medium text-foreground"
+                  : "px-3 py-2 text-sm font-medium text-neutral-500 transition-colors hover:text-foreground dark:text-neutral-400 dark:hover:text-neutral-200"
+              }
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
-      {prefs.cap.length === 5 ? (
-        <FilterBar
-          prefs={prefs}
-          setPrefs={setPrefs}
-          open={filtersOpen}
-          setOpen={setFiltersOpen}
-        />
-      ) : null}
+      {tab === "cerca" ? (
+        <div
+          id="offerte-panel-cerca"
+          role="tabpanel"
+          aria-labelledby="offerte-tab-cerca"
+          className="mt-8"
+        >
+          <label htmlFor="offerte-cap" className="sr-only">
+            CAP della fornitura
+          </label>
+          <div className="relative">
+            {showCapGhost ? (
+              <span
+                className="pointer-events-none absolute inset-0 text-3xl font-semibold tracking-[0.14em] text-neutral-400 sm:text-4xl"
+                aria-hidden
+              >
+                {capGhost}
+                {capGhostTyping ? (
+                  <span
+                    className="ml-px inline-block h-[0.9em] w-0.5 translate-y-[0.12em] bg-neutral-400 align-baseline opacity-70"
+                    aria-hidden
+                  />
+                ) : null}
+              </span>
+            ) : null}
+            <input
+              ref={capInputRef}
+              id="offerte-cap"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              maxLength={5}
+              placeholder=""
+              value={prefs.cap}
+              onFocus={() => setCapFocused(true)}
+              onBlur={() => setCapFocused(false)}
+              onChange={(event) => {
+                const next = event.target.value.replace(/\D/g, "").slice(0, 5);
+                setPrefs((prev) => ({ ...prev, cap: next }));
+                setCapError(null);
+                setFiltersOpen(false);
+              }}
+              className="relative w-full border-0 bg-transparent p-0 text-3xl font-semibold tracking-[0.14em] text-foreground outline-none sm:text-4xl"
+            />
+          </div>
+          {placeLabel ? (
+            <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-400">
+              <PlacePinIcon className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{placeLabel}</span>
+            </p>
+          ) : capError ? (
+            <p className="mt-0.5 text-sm text-red-600 dark:text-red-400">{capError}</p>
+          ) : lookupLoading && prefs.cap.length === 5 ? (
+            <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">Cerco il comune…</p>
+          ) : (
+            <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+              Inserisci il CAP qui sopra👆
+            </p>
+          )}
+
+          {prefs.cap.length === 5 ? (
+            <FilterBar
+              prefs={prefs}
+              setPrefs={setPrefs}
+              open={filtersOpen}
+              setOpen={setFiltersOpen}
+            />
+          ) : null}
+        </div>
+      ) : (
+        <div
+          id="offerte-panel-compara"
+          role="tabpanel"
+          aria-labelledby="offerte-tab-compara"
+          className="mt-8"
+        >
+          <OfferteCompareSearch />
+        </div>
+      )}
     </section>
   );
 }

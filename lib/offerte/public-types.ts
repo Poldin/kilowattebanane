@@ -123,6 +123,42 @@ export type OfferteSearchResult = {
   totalMatched: number;
 };
 
+export type OfferteSuggestCategory = "fornitore" | "codice" | "nome";
+
+export const OFFERTE_SUGGEST_CATEGORY_LABELS: Record<OfferteSuggestCategory, string> = {
+  fornitore: "Fornitore",
+  codice: "Codice offerta",
+  nome: "Nome offerta",
+};
+
+export type OfferteSuggestItem = {
+  id: string;
+  category: OfferteSuggestCategory;
+  label: string;
+  detail: string | null;
+  codOfferta: string | null;
+  venditoreKey: string | null;
+  venditore: string | null;
+  source: "placet" | "ml" | null;
+};
+
+export type OfferteSuggestResult = {
+  q: string;
+  items: OfferteSuggestItem[];
+};
+
+export type OfferteExploreHit = {
+  source: "placet" | "ml";
+  codOfferta: string;
+  nome: string;
+  venditore: string;
+  venditoreKey: string;
+};
+
+export type OfferteExploreResult = {
+  items: OfferteExploreHit[];
+};
+
 export type OfferteHeadlineStats = {
   snapshotDate: string;
   placet: number;

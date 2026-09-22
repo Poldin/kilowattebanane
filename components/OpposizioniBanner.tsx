@@ -5,7 +5,7 @@ export function OpposizioniCallout({ className }: { className?: string }) {
     <>
       <p className={className ?? "text-sm font-medium leading-relaxed"}>
         <span className="box-decoration-clone rounded-full bg-[#f5f5f5] px-2.5 py-0.5 text-[#165B44]">
-          ti chiamano di continuo per proporti offerte e non ne puoi più?
+          ti chiamano di continuo per proporti offerte e non ne puoi più?😩
         </span>
       </p>
       <a
