@@ -78,6 +78,45 @@ body {
   background-clip: content-box;
 }
 
+.profile-month-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+
+.profile-month-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.profile-month-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.profile-month-scroll::-webkit-scrollbar-thumb {
+  background-color: #d4d4d4;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.profile-month-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #a3a3a3;
+}
+
+@media (prefers-color-scheme: dark) {
+  .profile-month-scroll {
+    scrollbar-color: #404040 transparent;
+  }
+
+  .profile-month-scroll::-webkit-scrollbar-thumb {
+    background-color: #404040;
+  }
+
+  .profile-month-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: #737373;
+  }
+}
+
 @keyframes insight-shimmer {
   0% {
     background-position: 200% 0;
