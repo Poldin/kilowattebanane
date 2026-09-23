@@ -130,12 +130,14 @@ export function toPoints(
   chartH: number,
   chartW = CHART_W,
   pad: { t: number; r: number; b: number; l: number } = PAD,
+  slotsPerHour = 1,
 ) {
   const range = max - min || 1;
   const innerH = chartH - pad.t - pad.b;
+  const slotHours = 1 / Math.max(1, slotsPerHour);
 
   return prices.map((price, i) => ({
-    x: hourToX(i + 0.5, chartW, pad),
+    x: hourToX(i * slotHours + slotHours / 2, chartW, pad),
     y: pad.t + (1 - (price - min) / range) * innerH,
   }));
 }

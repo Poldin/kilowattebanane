@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -44,6 +45,12 @@ import {
 } from "@/lib/market-zones";
 import { persistRegionPref, readRegionPref } from "@/lib/region-pref";
 import { persistTariffPref, readTariffPref, TARIFF_PREF_EVENT } from "@/lib/tariff-pref";
+import {
+  DEFAULT_CHART_RESOLUTION,
+  persistChartResolutionPref,
+  readChartResolutionPref,
+  type ChartResolution,
+} from "@/lib/chart-resolution-pref";
 import {
   QUARTERS_PER_HOUR,
   formatQuarterSlot,
@@ -284,6 +291,57 @@ function useMinuteChangeTransition<T>(value: T | null | undefined) {
   }, [value]);
 
   return state;
+}
+
+function EnergyPriceTooltip() {
+  const [open, setOpen] = useState(false);
+  const tooltipId = useId();
+  const rootRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const close = () => setOpen(false);
+    const onPointerDown = (event: globalThis.PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <span ref={rootRef} className="relative inline-flex shrink-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={tooltipId}
+        aria-label="Cosa significa componente energia"
+        onClick={() => setOpen((value) => !value)}
+        className="flex h-5 w-5 items-center justify-center rounded-full border border-neutral-300 text-xs font-semibold leading-none text-neutral-500 transition-colors hover:border-neutral-400 hover:text-neutral-700 dark:border-neutral-600 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:text-neutral-200"
+      >
+        ?
+      </button>
+      {open ? (
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className="absolute left-0 top-full z-20 mt-2 w-72 rounded-md border border-neutral-200 bg-background px-3 py-2.5 text-sm font-normal leading-relaxed text-neutral-600 shadow-sm dark:border-neutral-700 dark:text-neutral-300"
+        >
+          Il grafico mostra solo la componente energia all&apos;ingrosso, non
+          il prezzo totale in bolletta. Trasporto, oneri di sistema e imposte
+          non sono inclusi.
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 function NowTimeBadge({ time }: { time: string }) {
@@ -855,12 +913,16 @@ function PriceChart({
   layers,
   onLayersChange,
   tariff = DEFAULT_TARIFF_PLAN,
+  resolution,
+  onResolutionChange,
 }: {
   day: DayInsight;
   nowHour?: number;
   layers?: ChartLayers;
   onLayersChange?: (next: ChartLayers) => void;
   tariff?: TariffPlanId;
+  resolution: ChartResolution;
+  onResolutionChange: (next: ChartResolution) => void;
 }) {
   const { chartW, chartH, pad, axisFontSize, unitFontSize } = useChartLayout();
   const [pickedHour, setPickedHour] = useState<number | null>(null);
@@ -875,6 +937,7 @@ function PriceChart({
     F2: resolvedLayers.f2,
     F3: resolvedLayers.f3,
   };
+  const slotsPerHour = resolution === "15m" ? QUARTERS_PER_HOUR : 1;
 
   const hourly = useMemo(() => toHourlyAverages(day.prices), [day.prices]);
   const fasciaBands = useMemo(
@@ -898,13 +961,25 @@ function PriceChart({
     [tariff, fasciaAvgs, visibleFasciaStats],
   );
   const pricesCent = useMemo(
-    () => hourly.map(toEurocentPerKwh),
-    [hourly],
+    () =>
+      resolution === "15m"
+        ? day.prices.map(toEurocentPerKwh)
+        : hourly.map(toEurocentPerKwh),
+    [day.prices, hourly, resolution],
   );
   const scale = useMemo(() => yScale(pricesCent), [pricesCent]);
   const points = useMemo(
-    () => toPoints(pricesCent, scale.min, scale.max, chartH, chartW, pad),
-    [pricesCent, scale.min, scale.max, chartH, chartW, pad],
+    () =>
+      toPoints(
+        pricesCent,
+        scale.min,
+        scale.max,
+        chartH,
+        chartW,
+        pad,
+        slotsPerHour,
+      ),
+    [pricesCent, scale.min, scale.max, chartH, chartW, pad, slotsPerHour],
   );
   const line = useMemo(() => toLinearPath(points), [points]);
   const samples = useMemo(
@@ -971,13 +1046,20 @@ function PriceChart({
           if (next.line !== resolvedLayers.line) setPickedHour(null);
           onLayersChange?.(next);
         }}
+        resolution={resolution}
+        onResolutionChange={(next) => {
+          setPickedHour(null);
+          onResolutionChange(next);
+        }}
       />
       <div className="relative overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
         <svg
       viewBox={`0 0 ${chartW} ${chartH}`}
       className={`h-auto w-full touch-manipulation ${showLine ? "cursor-crosshair" : ""}`}
       role="img"
-      aria-label={`Andamento orario del prezzo in centesimi di euro per kilowattora. Tocca o clicca un punto per vedere ora e prezzo.${
+      aria-label={`Andamento ${
+        resolution === "15m" ? "a quarti d'ora" : "orario"
+      } del prezzo in centesimi di euro per kilowattora. Tocca o clicca un punto per vedere ora e prezzo.${
         nowHour != null
           ? ` L'ora attuale è alle ${formatTipHour(nowHour)}.`
           : ""
@@ -1651,6 +1733,9 @@ export function DailyInsight({
   const [layers, setLayers] = useState<ChartLayers>(() =>
     layersForTariff(DEFAULT_TARIFF_PLAN),
   );
+  const [resolution, setResolution] = useState<ChartResolution>(
+    DEFAULT_CHART_RESOLUTION,
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(() => {
     const dates = initialHome?.dates ?? [];
     if (initialDate && (dates.length === 0 || dates.includes(initialDate))) {
@@ -1852,6 +1937,9 @@ export function DailyInsight({
       setLayers(layersForTariff(storedTariff));
     }
 
+    const storedResolution = readChartResolutionPref();
+    if (storedResolution) setResolution(storedResolution);
+
     const hash = url.hash.replace(/^#/, "");
     const hadRegionParam = search.has(REGION_QUERY_PARAM);
     const hadDateParam = search.has(DATE_QUERY_PARAM);
@@ -1878,12 +1966,13 @@ export function DailyInsight({
     >
       <h2
         id="daily-insight-heading"
-        className="text-lg font-medium tracking-tight text-foreground sm:text-xl"
+        className="flex items-center gap-1.5 text-lg font-medium tracking-tight text-foreground sm:text-xl"
       >
-        I prezzi dell&apos;energia nella tua zona
+        <span>I prezzi dell&apos;energia nella tua zona</span>
+        <EnergyPriceTooltip />
       </h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-        Scegli giorno, regione e piano tariffario
+        Scegli giorno, regione e profilo di consumo
         {dates.includes(today) ? (
           <>
             {" "}
@@ -1966,6 +2055,11 @@ export function DailyInsight({
               layers={layers}
               onLayersChange={setLayers}
               tariff={tariff}
+              resolution={resolution}
+              onResolutionChange={(next) => {
+                setResolution(next);
+                persistChartResolutionPref(next);
+              }}
             />
             <PriceTips
               best={showFruit ? tips.bestTip : stripFruitFromTip(tips.bestTip)}
