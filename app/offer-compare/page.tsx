@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { MarketLearnBanner } from "@/components/MarketLearnBanner";
@@ -23,10 +24,7 @@ export default async function OfferComparePage({
   searchParams: Promise<{ cap?: string | string[]; tab?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const capRaw = typeof params.cap === "string" ? params.cap : "";
-  const initialCap = capRaw.replace(/\D/g, "").slice(0, 5);
-  const tabRaw = typeof params.tab === "string" ? params.tab : "";
-  const initialTab = tabRaw === "compara" ? "compara" : "cerca";
+  if (params.cap || params.tab) redirect("/offer-compare");
   const stats = await loadOfferteHeadlineStats();
 
   return (
@@ -34,7 +32,7 @@ export default async function OfferComparePage({
       <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
         <Header />
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-8 sm:px-6 sm:pt-5">
-          <OfferteExplorer stats={stats} initialCap={initialCap} initialTab={initialTab} />
+          <OfferteExplorer stats={stats} />
           <div className="mt-16 flex w-full flex-col gap-3 sm:mt-20">
             <OpposizioniBanner />
             <MarketLearnBanner />

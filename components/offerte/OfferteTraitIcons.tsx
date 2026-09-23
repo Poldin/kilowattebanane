@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { FasciaPlanIcon, fasciaPlanLabel } from "@/components/offerte/FasciaPlanIcon";
+import type { OfferteFasciaPlan } from "@/lib/offerte/metrics";
 import type { OfferteCliente, OfferteMercato, OffertePrezzo } from "@/lib/offerte/public-types";
 
 const ICON = "h-3.5 w-3.5 shrink-0";
@@ -170,6 +172,39 @@ function PrezzoVariabileIcon({ className = ICON }: { className?: string }) {
   );
 }
 
+function ResidenteGlyph({ className = ICON }: { className?: string }) {
+  return (
+    <StrokeIcon className={className}>
+      <path
+        d="M3 7.5 8 3.5l5 4V13H10v-3.5H6V13H3V7.5Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="9.15" r="1.15" fill="currentColor" />
+    </StrokeIcon>
+  );
+}
+
+function NonResidenteGlyph({ className = ICON }: { className?: string }) {
+  return (
+    <StrokeIcon className={className}>
+      <path
+        d="M3 7.5 8 3.5l5 4V13H10v-3.5H6V13H3V7.5Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4.2 12.6 11.8 5"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+      />
+    </StrokeIcon>
+  );
+}
+
 export function ClienteIcon({
   kind,
   className,
@@ -193,7 +228,7 @@ export function MercatoIcon({
   return <TuttiIcon className={className} />;
 }
 
-export { CanoneIcon, PlacePinIcon };
+export { CanoneIcon, PlacePinIcon, TuttiIcon };
 
 export function PrezzoIcon({
   kind,
@@ -225,6 +260,20 @@ export function prezzoLabel(kind: OffertePrezzo | "prezzo fisso" | "prezzo varia
   return "Tutti";
 }
 
+export function ResidenzaIcon({
+  residente,
+  className,
+}: {
+  residente: boolean;
+  className?: string;
+}) {
+  return residente ? (
+    <ResidenteGlyph className={className} />
+  ) : (
+    <NonResidenteGlyph className={className} />
+  );
+}
+
 export function clienteKindFromTipo(tipoCliente: string | null): OfferteCliente | "condominio" | null {
   if (!tipoCliente) return null;
   if (tipoCliente.includes("non domestico")) return "non domestico";
@@ -239,4 +288,51 @@ export function prezzoKindFromTipo(
   if (tipoOfferta.includes("variabile")) return "prezzo variabile";
   if (tipoOfferta.includes("fisso")) return "prezzo fisso";
   return null;
+}
+
+export function OfferTraitIcons({
+  tipoCliente,
+  tipoOfferta,
+  plan,
+  source,
+  className = "inline-flex shrink-0 items-center gap-1.5 text-neutral-400",
+}: {
+  tipoCliente?: string | null;
+  tipoOfferta?: string | null;
+  plan?: OfferteFasciaPlan | null;
+  source?: OfferteMercato | "placet" | "ml" | null;
+  className?: string;
+}) {
+  const cliente = clienteKindFromTipo(tipoCliente ?? null);
+  const prezzo = tipoOfferta ? prezzoKindFromTipo(tipoOfferta) : null;
+  const mercato = source === "placet" || source === "ml" ? source : null;
+  if (!cliente && !prezzo && !plan && !mercato) return null;
+  return (
+    <span className={className}>
+      {cliente ? (
+        <span title={clienteLabel(cliente)} className="inline-flex">
+          <ClienteIcon kind={cliente} />
+          <span className="sr-only">{clienteLabel(cliente)}</span>
+        </span>
+      ) : null}
+      {prezzo ? (
+        <span title={prezzoLabel(prezzo)} className="inline-flex">
+          <PrezzoIcon kind={prezzo} />
+          <span className="sr-only">{prezzoLabel(prezzo)}</span>
+        </span>
+      ) : null}
+      {plan ? (
+        <span title={fasciaPlanLabel(plan)} className="inline-flex">
+          <FasciaPlanIcon plan={plan} />
+          <span className="sr-only">{fasciaPlanLabel(plan)}</span>
+        </span>
+      ) : null}
+      {mercato ? (
+        <span title={mercatoLabel(mercato)} className="inline-flex">
+          <MercatoIcon kind={mercato} />
+          <span className="sr-only">{mercatoLabel(mercato)}</span>
+        </span>
+      ) : null}
+    </span>
+  );
 }

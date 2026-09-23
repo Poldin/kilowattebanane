@@ -48,7 +48,7 @@ export function OfferteLanding({
     } catch {
       /* ignore */
     }
-    router.push(`/offer-compare?cap=${next}`);
+    router.push("/offer-compare");
   }
 
   return (
@@ -81,6 +81,8 @@ export function OfferteLanding({
         Apri le{" "}
         <a
           href={STATS_HREF}
+          target="_blank"
+          rel="noreferrer"
           className="rounded-md border border-neutral-200 bg-transparent px-2 py-0.5 text-sm text-foreground transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-900"
         >
           statistiche

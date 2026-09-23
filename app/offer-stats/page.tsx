@@ -12,7 +12,7 @@ export const revalidate = 86400;
 export const metadata: Metadata = {
   title: "Statistiche offerte luce",
   description:
-    "Quante offerte luce ci sono sul Portale Offerte, e come si dividono: casa o partita IVA, fisso o variabile, PLACET o libero.",
+    "Quante offerte luce ci sono sul Portale Offerte, e come si dividono: casa o partita IVA, fisso o variabile, PLACET o libero, e per quanti mesi.",
   alternates: { canonical: `${publicSiteUrl()}/offer-stats` },
 };
 

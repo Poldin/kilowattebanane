@@ -146,7 +146,16 @@ export function effectiveCommodityEurKwh(options: {
   );
 }
 
-export function pricedMonth(options: {
+export type MonthSpendBreakdown = {
+  canoneEur: number;
+  energiaEur: number;
+  perditeReteEur: number;
+  acciseEur: number;
+  ivaEur: number;
+  totalEur: number;
+};
+
+export type PricedMonthOptions = {
   bands: CompareEnergyBand[];
   variabile: boolean;
   plan: OfferteFasciaPlan | null;
@@ -159,13 +168,51 @@ export function pricedMonth(options: {
   consumoKwh: number;
   monthShare: number;
   carico: CompareCaricoRates | null;
-}) {
+};
+
+export function monthSpendBreakdown(options: PricedMonthOptions): MonthSpendBreakdown | null {
   if (options.quotaMonthEur == null) return null;
   const commodity = effectiveCommodityEurKwh(options);
   if (commodity == null || !(options.monthShare >= 0)) return null;
+  const kwh = options.consumoKwh * options.monthShare;
+  const canoneEur = options.quotaMonthEur;
+  const energiaEur = commodity * kwh;
+  if (!options.carico) {
+    return {
+      canoneEur,
+      energiaEur,
+      perditeReteEur: 0,
+      acciseEur: 0,
+      ivaEur: 0,
+      totalEur: canoneEur + energiaEur,
+    };
+  }
+  const perditeReteEur = commodity * options.carico.lambda * kwh;
+  const acciseEur = options.carico.accisaPerKwh * kwh;
+  const imponibile = energiaEur + perditeReteEur + acciseEur;
+  const ivaEur = imponibile * options.carico.ivaRate;
+  return {
+    canoneEur,
+    energiaEur,
+    perditeReteEur,
+    acciseEur,
+    ivaEur,
+    totalEur: canoneEur + imponibile + ivaEur,
+  };
+}
+
+export function pricedMonth(options: PricedMonthOptions) {
+  const breakdown = monthSpendBreakdown(options);
+  if (!breakdown) return null;
+  const kwh = options.consumoKwh * options.monthShare;
+  if (!(kwh > 0)) {
+    return { eurKwh: 0, spendEur: breakdown.totalEur };
+  }
+  const commodity = effectiveCommodityEurKwh(options);
+  if (commodity == null) return null;
   const eurKwh = allInCommodityEurKwh(commodity, options.carico);
   return {
     eurKwh,
-    spendEur: options.quotaMonthEur + options.consumoKwh * options.monthShare * eurKwh,
+    spendEur: breakdown.totalEur,
   };
 }

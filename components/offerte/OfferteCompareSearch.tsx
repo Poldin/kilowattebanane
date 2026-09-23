@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  memo,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -11,26 +13,44 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
+import { CompareSynthesis } from "@/components/offerte/CompareSynthesis";
 import { FasciaPlanIcon } from "@/components/offerte/FasciaPlanIcon";
 import { OfferCodeLink, formatOfferPeriod } from "@/components/offerte/OfferHitDettaglio";
 import {
+  OwnOfferDialog,
+  buildCustomCompareOffer,
+  isCustomOfferId,
+  type OwnOfferDraft,
+} from "@/components/offerte/OwnOfferDialog";
+import {
+  ClienteIcon,
   MercatoIcon,
+  OfferTraitIcons,
   PrezzoIcon,
 } from "@/components/offerte/OfferteTraitIcons";
 import { FASCIA_COLOR } from "@/lib/fasce";
+import { buildCompareSynthesis } from "@/lib/offerte/compare-synthesis";
 import { billHorizon } from "@/lib/offerte/bill";
 import type { CompareScheda } from "@/lib/offerte/compare-scheda";
 import type { OfferteCompareProfile } from "@/lib/offerte/compare-profile";
 import {
+  monthSpendBreakdown,
   pricedMonth,
   type ComparePunShape,
+  type MonthSpendBreakdown,
 } from "@/lib/offerte/compare-spend";
-import { hourShares, STANDARD_MONTH_WEIGHT } from "@/lib/offerte/consumo-profile";
-import { romeToday } from "@/lib/offerte/dates";
+import {
+  hourShares,
+  monthKwhShares,
+  STANDARD_MONTH_WEIGHT,
+} from "@/lib/offerte/consumo-profile";
+import { defaultOfferStartDate } from "@/lib/offerte/dates";
 import { addDaysIso, fasciaForHour } from "@/lib/offerte/fasce";
 import type { OfferteConsumoProfilo, OfferteHitDettaglio } from "@/lib/offerte/public-types";
 import {
   OFFERTE_SUGGEST_CATEGORY_LABELS,
+  PORTALE_OFFERTE_URL,
+  type OfferteCatalogFilters,
   type OfferteExploreHit,
   type OfferteSuggestCategory,
   type OfferteSuggestItem,
@@ -66,6 +86,8 @@ type CompareSpend = {
 };
 
 const DEFAULT_ANNUAL_KWH = 2700;
+const MIN_ANNUAL_KWH = 800;
+const MAX_ANNUAL_KWH = 20000;
 const MONTH_ABBREV = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"] as const;
 const FASCIA_BANDS = [
   { key: "f1", label: "F1", color: FASCIA_COLOR.F1 },
@@ -96,12 +118,12 @@ function addCalendarMonths(iso: string, months: number) {
   return utc.toISOString().slice(0, 10);
 }
 
-/** Calendar months clipped to [today, the day before the same date next year]. */
-function contractSpans(from: string) {
-  const windowEnd = addDaysIso(addCalendarMonths(from, 12), -1);
+/** Calendar months clipped to [from, the day before the same date N months later]. */
+function contractSpans(from: string, months = 12) {
+  const windowEnd = addDaysIso(addCalendarMonths(from, months), -1);
   const spans: Array<{ start: string; end: string }> = [];
   let cursor = from;
-  for (let guard = 0; cursor <= windowEnd && guard < 16; guard++) {
+  for (let guard = 0; cursor <= windowEnd && guard < months + 4; guard++) {
     const monthEnd = inclusiveEnd(cursor, undefined);
     const end = monthEnd < windowEnd ? monthEnd : windowEnd;
     spans.push({ start: cursor, end });
@@ -152,6 +174,19 @@ function defaultSpanKwh(spans: Array<{ start: string; end: string }>, annual = D
   const weights = spans.map((span) => spanSeasonWeight(span.start, span.end));
   const sum = weights.reduce((total, value) => total + value, 0);
   const out = weights.map((weight) => Math.round(annual * (sum > 0 ? weight / sum : 0)));
+  const drift = annual - out.reduce((total, value) => total + value, 0);
+  if (out.length > 0) out[out.length - 1] = Math.max(0, (out[out.length - 1] ?? 0) + drift);
+  return out;
+}
+
+function oculatoSpanKwh(
+  spans: Array<{ start: string; end: string }>,
+  annual: number,
+  punBySpan: Array<number | null | undefined>,
+) {
+  const starts = spans.map((span) => span.start);
+  const shares = monthKwhShares({ profilo: "oculato", starts, punEurKwh: punBySpan });
+  const out = shares.map((share) => Math.round(annual * share));
   const drift = annual - out.reduce((total, value) => total + value, 0);
   if (out.length > 0) out[out.length - 1] = Math.max(0, (out[out.length - 1] ?? 0) + drift);
   return out;
@@ -249,11 +284,20 @@ function shareDistance(a: FasciaKwh, b: FasciaKwh) {
   return Math.abs(a.f1 - b.f1) + Math.abs(a.f2 - b.f2) + Math.abs(a.f3 - b.f3);
 }
 
-function consumptionModeLabel(rows: MonthConsumption[]) {
+function consumptionModeLabel(
+  rows: MonthConsumption[],
+  preset: OfferteConsumoProfilo,
+  edits: Record<string, FasciaKwh>,
+) {
   if (rows.length === 0) return "Standard";
-  if (rows.every((row) => sameFascia(row, row.standard))) return "Standard";
-  if (rows.every((row) => sameFascia(row, row.oculato))) return "Oculato";
-  return "Personalizzato";
+  const customized = rows.some((row) => {
+    const edit = edits[row.start];
+    if (!edit) return false;
+    const baseline = preset === "oculato" ? row.oculato : row.standard;
+    return !sameFascia(edit, baseline);
+  });
+  if (customized) return "Personalizzato";
+  return preset === "oculato" ? "Oculato" : "Standard";
 }
 
 function formatKwh(value: number) {
@@ -273,9 +317,52 @@ const COMPARE_OFFER_COLORS = [
 
 type OfferteCompareSearchProps = {
   className?: string;
+  filters?: ReactNode;
+  filterQuery?: OfferteCatalogFilters;
+  filtersReady?: boolean;
+  headlineTotal?: number;
 };
 
-export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
+function catalogSearchParams(filters?: OfferteCatalogFilters) {
+  const params = new URLSearchParams();
+  if (!filters) return params;
+  if (filters.cliente) params.set("cliente", filters.cliente);
+  if (filters.mercato && filters.mercato !== "tutti") params.set("mercato", filters.mercato);
+  if (filters.prezzo && filters.prezzo !== "tutti") params.set("prezzo", filters.prezzo);
+  if (filters.fascia && filters.fascia !== "tutti") params.set("fascia", filters.fascia);
+  if (filters.residente === false) params.set("residente", "0");
+  if (filters.residente === true) params.set("residente", "1");
+  if (filters.pagamento?.length) params.set("pagamento", filters.pagamento.join(","));
+  if (filters.attivazione?.length) params.set("attivazione", filters.attivazione.join(","));
+  if (filters.contratto?.length) params.set("contratto", filters.contratto.join(","));
+  return params;
+}
+
+function CompareSearchGhost() {
+  const { text, isTyping } = useRotatingComparePlaceholder();
+  return (
+    <span
+      className="pointer-events-none absolute inset-0 truncate text-3xl font-semibold tracking-tight text-neutral-400 sm:text-4xl"
+      aria-hidden
+    >
+      {text}
+      {isTyping ? (
+        <span
+          className="ml-px inline-block h-[0.9em] w-0.5 translate-y-[0.12em] bg-neutral-400 align-baseline opacity-70"
+          aria-hidden
+        />
+      ) : null}
+    </span>
+  );
+}
+
+export function OfferteCompareSearch({
+  className,
+  filters,
+  filterQuery,
+  filtersReady = true,
+  headlineTotal,
+}: OfferteCompareSearchProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -284,7 +371,6 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
   const [query, setQuery] = useState("");
   const [vendorKey, setVendorKey] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
-  const { text: compareGhost, isTyping: compareGhostTyping } = useRotatingComparePlaceholder();
   const showCompareGhost = query.length === 0 && !focused;
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -295,11 +381,13 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Record<string, OfferteCompareProfile>>({});
   const [hotOffers, setHotOffers] = useState<OfferteExploreHit[]>([]);
+  const [ownOfferOpen, setOwnOfferOpen] = useState(false);
   const compareOffers = useMemo(
     () => selected.filter((item) => item.category !== "fornitore"),
     [selected],
   );
 
+  const filterKey = catalogSearchParams(filterQuery).toString();
   const flatItems = useMemo(() => items, [items]);
   const grouped = useMemo(() => {
     const map = new Map<OfferteSuggestCategory, OfferteSuggestItem[]>();
@@ -328,7 +416,8 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
 
     const timer = window.setTimeout(async () => {
       try {
-        const params = new URLSearchParams({ q });
+        const params = catalogSearchParams(filterQuery);
+        params.set("q", q);
         if (vendorKey) params.set("vendor", vendorKey);
         const response = await fetch(`/api/offerte/suggest?${params.toString()}`, {
           signal: controller.signal,
@@ -354,13 +443,16 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query, vendorKey]);
+  }, [filterKey, filterQuery, query, vendorKey]);
 
   useEffect(() => {
+    if (!filtersReady) return;
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetch("/api/offerte/explore?limit=5", {
+        const params = catalogSearchParams(filterQuery);
+        params.set("limit", "5");
+        const response = await fetch(`/api/offerte/explore?${params.toString()}`, {
           signal: controller.signal,
         });
         const payload = (await response.json()) as
@@ -374,7 +466,7 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [filterKey, filterQuery, filtersReady]);
 
   useEffect(() => {
     if (!open) return;
@@ -409,7 +501,7 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
       if (prev.some((entry) => entry.id === item.id)) return prev;
       return [...prev, item];
     });
-    setFocusedId(item.id);
+    setFocusedId((current) => current ?? item.id);
     if (vendorKey) {
       setOpen(true);
       if (focusInput) inputRef.current?.focus();
@@ -454,7 +546,17 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
     return () => controller.abort();
   }, [compareOffers]);
 
-  function remove(id: string) {
+  function addOwnOffer(draft: OwnOfferDraft) {
+    const customCount = selected.filter((entry) => isCustomOfferId(entry.id)).length;
+    const nome = customCount === 0 ? "La tua offerta" : `La tua offerta ${customCount + 1}`;
+    const { item, profile } = buildCustomCompareOffer(nome, draft);
+    setSelected((prev) => [...prev, item]);
+    setProfiles((prev) => ({ ...prev, [item.id]: profile }));
+    setFocusedId((current) => current ?? item.id);
+    setOwnOfferOpen(false);
+  }
+
+  const remove = useCallback((id: string) => {
     setSelected((prev) => {
       const next = prev.filter((entry) => entry.id !== id);
       setFocusedId((focused) => {
@@ -469,7 +571,7 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
       delete next[id];
       return next;
     });
-  }
+  }, []);
 
   function onInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
@@ -501,26 +603,48 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
   let runningIndex = -1;
 
   return (
-    <div className={className}>
+    <div className={className ? `min-w-0 ${className}` : "min-w-0"}>
+      {headlineTotal != null ? (
+        <header className="mb-8">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Confronta offerte luce
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+            Confronta tra {formatKwh(headlineTotal)} offerte del{" "}
+            <a
+              href={PORTALE_OFFERTE_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground dark:decoration-neutral-600"
+            >
+              Portale Offerte
+            </a>{" "}
+            o{" "}
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={ownOfferOpen}
+              onClick={() => setOwnOfferOpen(true)}
+              className="mx-0.5 inline-flex translate-y-[-0.08em] items-center rounded-md bg-foreground px-2.5 py-1 text-sm font-medium text-background transition-opacity hover:opacity-85"
+            >
+              aggiungine una tua
+            </button>
+          </p>
+          <OwnOfferDialog
+            open={ownOfferOpen}
+            onClose={() => setOwnOfferOpen(false)}
+            onSubmit={addOwnOffer}
+          />
+        </header>
+      ) : null}
       <section aria-label="Cerca offerte">
+        {filters}
+
         <div ref={rootRef} className="relative">
           <label htmlFor="offerte-compare-q" className="sr-only">
             Cerca fornitore, codice o nome offerta
           </label>
-        {showCompareGhost ? (
-          <span
-            className="pointer-events-none absolute inset-0 truncate text-3xl font-semibold tracking-tight text-neutral-400 sm:text-4xl"
-            aria-hidden
-          >
-            {compareGhost}
-            {compareGhostTyping ? (
-              <span
-                className="ml-px inline-block h-[0.9em] w-0.5 translate-y-[0.12em] bg-neutral-400 align-baseline opacity-70"
-                aria-hidden
-              />
-            ) : null}
-          </span>
-        ) : null}
+        {showCompareGhost ? <CompareSearchGhost /> : null}
         <input
           ref={inputRef}
           id="offerte-compare-q"
@@ -601,12 +725,13 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
                                   </span>
                                 ) : null}
                               </span>
-                              {item.source ? (
-                                <MercatoIcon
-                                  kind={item.source}
-                                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400"
-                                />
-                              ) : null}
+                              <OfferTraitIcons
+                                tipoCliente={item.tipoCliente}
+                                tipoOfferta={item.tipoOfferta}
+                                plan={item.plan}
+                                source={item.source}
+                                className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 text-neutral-400"
+                              />
                             </button>
                           </li>
                         );
@@ -625,7 +750,7 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
         </p>
 
         {hotOffers.length > 0 ? (
-          <HotOfferStrip
+          <HotOfferList
             offers={hotOffers}
             selectedIds={new Set(selected.map((entry) => entry.id))}
             onPick={(offer) => pick(offerToSuggestItem(offer), { focusInput: false })}
@@ -633,11 +758,11 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
         ) : null}
       </section>
 
-      <CompareReveal watch={`${compareOffers.length}:${focusedId ?? ""}`}>
+      <CompareReveal watch={compareOffers.length}>
         {compareOffers.length > 0 ? (
           <section
             aria-label="Confronto e condizioni"
-            className="mt-10 rounded-xl border border-neutral-200 bg-neutral-50/70 p-5 pt-6 sm:p-6 dark:border-neutral-800 dark:bg-neutral-900/50"
+            className="mt-16 rounded-xl border border-neutral-200 bg-neutral-50/70 p-5 pt-6 sm:p-6 dark:border-neutral-800 dark:bg-neutral-900/50"
           >
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
               {compareOffers.length} selezionat{compareOffers.length === 1 ? "a" : "e"}
@@ -647,6 +772,9 @@ export function OfferteCompareSearch({ className }: OfferteCompareSearchProps) {
               colors={COMPARE_OFFER_COLORS}
               focusedId={focusedId}
               profiles={profiles}
+              initialCliente={catalogCliente(filterQuery?.cliente)}
+              initialPrezzo={catalogPrezzo(filterQuery?.prezzo)}
+              initialResidente={filterQuery?.residente !== false}
               onFocus={setFocusedId}
               onRemove={remove}
             />
@@ -709,7 +837,7 @@ function CompareReveal({ watch, children }: { watch: string | number; children: 
 
   return (
     <div
-      className="overflow-hidden transition-[height] duration-500 ease-out motion-reduce:transition-none"
+      className="overflow-hidden overflow-anchor-none transition-[height] duration-500 ease-out motion-reduce:transition-none"
       style={{ height }}
     >
       <div ref={innerRef}>{children}</div>
@@ -727,86 +855,13 @@ function offerToSuggestItem(offer: OfferteExploreHit): OfferteSuggestItem {
     venditoreKey: offer.venditoreKey,
     venditore: offer.venditore,
     source: offer.source,
+    tipoCliente: offer.tipoCliente,
+    tipoOfferta: offer.tipoOfferta,
+    plan: offer.plan,
   };
 }
 
-const STRIP_ARROW =
-  "hidden h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-lg leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:flex dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900";
-
-function HorizontalScrollStrip({
-  ariaLabelLeft,
-  ariaLabelRight,
-  className,
-  children,
-  watch,
-}: {
-  ariaLabelLeft: string;
-  ariaLabelRight: string;
-  className?: string;
-  children: ReactNode;
-  watch?: unknown;
-}) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    function sync() {
-      const node = scrollerRef.current;
-      if (!node) return;
-      const max = node.scrollWidth - node.clientWidth;
-      setCanLeft(node.scrollLeft > 1);
-      setCanRight(max > 1 && node.scrollLeft < max - 1);
-    }
-    sync();
-    el.addEventListener("scroll", sync, { passive: true });
-    const observer = new ResizeObserver(sync);
-    observer.observe(el);
-    if (el.firstElementChild) observer.observe(el.firstElementChild);
-    return () => {
-      el.removeEventListener("scroll", sync);
-      observer.disconnect();
-    };
-  }, [watch]);
-
-  function scrollStrip(dir: -1 | 1) {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const card = el.querySelector("li");
-    const delta = (card?.getBoundingClientRect().width ?? 176) + 8;
-    el.scrollBy({ left: dir * delta, behavior: "smooth" });
-  }
-
-  return (
-    <div className={`flex items-center gap-1.5 ${className ?? ""}`}>
-      <button
-        type="button"
-        disabled={!canLeft}
-        aria-label={ariaLabelLeft}
-        onClick={() => scrollStrip(-1)}
-        className={STRIP_ARROW}
-      >
-        ‹
-      </button>
-      <div ref={scrollerRef} className="min-w-0 flex-1 overflow-x-auto scrollbar-none">
-        {children}
-      </div>
-      <button
-        type="button"
-        disabled={!canRight}
-        aria-label={ariaLabelRight}
-        onClick={() => scrollStrip(1)}
-        className={STRIP_ARROW}
-      >
-        ›
-      </button>
-    </div>
-  );
-}
-
-function HotOfferStrip({
+function HotOfferList({
   offers,
   selectedIds,
   onPick,
@@ -816,42 +871,42 @@ function HotOfferStrip({
   onPick: (offer: OfferteExploreHit) => void;
 }) {
   return (
-    <HorizontalScrollStrip
-      className="mt-3"
-      ariaLabelLeft="Scorri le offerte hot a sinistra"
-      ariaLabelRight="Scorri le offerte hot a destra"
-      watch={offers}
-    >
-      <ul className="flex w-max flex-nowrap gap-2">
-        {offers.map((offer) => {
-          const id = `nome:${offer.source}:${offer.codOfferta}`;
-          const picked = selectedIds.has(id);
-          return (
-            <li key={id} className="shrink-0">
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onPick(offer)}
-                disabled={picked}
-                className={`flex w-max flex-col rounded-md border px-3 py-2.5 text-left transition-colors ${
-                  picked
-                    ? "cursor-default border-neutral-200/70 opacity-45 dark:border-neutral-800/70"
-                    : "border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:border-neutral-700 dark:hover:bg-neutral-900/60"
-                }`}
-              >
-                <span className="whitespace-nowrap text-sm font-medium text-foreground">
-                  <span aria-hidden>🔥 </span>
-                  {offer.nome}
-                </span>
-                <span className="mt-1 whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400">
-                  {offer.venditore}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </HorizontalScrollStrip>
+    <ul className="mt-3 flex flex-wrap gap-2">
+      {offers.map((offer) => {
+        const id = `nome:${offer.source}:${offer.codOfferta}`;
+        const picked = selectedIds.has(id);
+        return (
+          <li key={id} className="max-w-full">
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onPick(offer)}
+              disabled={picked}
+              className={`flex w-max max-w-full flex-col rounded-md border px-3 py-2.5 text-left transition-colors ${
+                picked
+                  ? "cursor-default border-neutral-200/70 opacity-45 dark:border-neutral-800/70"
+                  : "border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:border-neutral-700 dark:hover:bg-neutral-900/60"
+              }`}
+            >
+              <span className="text-sm font-medium text-foreground">
+                <span aria-hidden>🔥 </span>
+                {offer.nome}
+              </span>
+              <span className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                {offer.venditore}
+              </span>
+              <OfferTraitIcons
+                tipoCliente={offer.tipoCliente}
+                tipoOfferta={offer.tipoOfferta}
+                plan={offer.plan}
+                source={offer.source}
+                className="mt-1.5 inline-flex items-center gap-1.5 text-neutral-400"
+              />
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -874,15 +929,73 @@ function SuggestBadge({
   );
 }
 
-function offerCompareSlice(profile: OfferteCompareProfile | undefined): {
+type CompareSlice = {
   cliente: CompareCliente;
   prezzo: ComparePrezzo;
-} | null {
+};
+
+const COMPARE_SLICE_ORDER = [
+  "domestico:variabile",
+  "domestico:fisso",
+  "non domestico:variabile",
+  "non domestico:fisso",
+] as const;
+
+function offerCompareSlice(profile: OfferteCompareProfile | undefined): CompareSlice | null {
   if (!profile) return null;
   return {
     cliente: profile.tipoCliente === "non domestico" ? "non domestico" : "domestico",
     prezzo: profile.tipoOfferta.includes("variabile") ? "variabile" : "fisso",
   };
+}
+
+function compareSliceKey(slice: CompareSlice) {
+  return `${slice.cliente}:${slice.prezzo}`;
+}
+
+function compareSliceLabel(slice: CompareSlice) {
+  const clienteLabel = slice.cliente === "domestico" ? "Casa" : "Partita IVA";
+  const prezzoLabel = slice.prezzo === "variabile" ? "Variabile" : "Fisso";
+  return `${clienteLabel} · ${prezzoLabel}`;
+}
+
+function compareSliceSortIndex(key: string) {
+  const index = COMPARE_SLICE_ORDER.indexOf(key as (typeof COMPARE_SLICE_ORDER)[number]);
+  return index === -1 ? COMPARE_SLICE_ORDER.length : index;
+}
+
+function catalogCliente(cliente?: OfferteCatalogFilters["cliente"]): CompareCliente {
+  return cliente === "non domestico" ? "non domestico" : "domestico";
+}
+
+function catalogPrezzo(prezzo?: OfferteCatalogFilters["prezzo"]): ComparePrezzo {
+  return prezzo === "prezzo fisso" ? "fisso" : "variabile";
+}
+
+function scrollChildX(container: HTMLElement | null, selector: string) {
+  if (!container) return;
+  const el = container.querySelector<HTMLElement>(selector);
+  if (!el) return;
+  const frame = container.getBoundingClientRect();
+  const box = el.getBoundingClientRect();
+  if (box.left < frame.left) container.scrollLeft += box.left - frame.left;
+  else if (box.right > frame.right) container.scrollLeft += box.right - frame.right;
+}
+
+function groupOffersByCompareSlice(
+  offers: OfferteSuggestItem[],
+  profiles: Record<string, OfferteCompareProfile>,
+) {
+  const groups = new Map<string, { slice: CompareSlice; offers: OfferteSuggestItem[] }>();
+  for (const offer of offers) {
+    const slice = offerCompareSlice(profiles[offer.id]);
+    if (!slice) continue;
+    const key = compareSliceKey(slice);
+    const group = groups.get(key);
+    if (group) group.offers.push(offer);
+    else groups.set(key, { slice, offers: [offer] });
+  }
+  return groups;
 }
 
 function MonthScrub({
@@ -927,9 +1040,124 @@ const PROFILE_CHART_H = 136;
 const PROFILE_PAD_Y = 14;
 const PROFILE_BAR_RATIO = 0.62;
 
+function clampAnnualKwh(value: number) {
+  return Math.min(MAX_ANNUAL_KWH, Math.max(MIN_ANNUAL_KWH, Math.round(value)));
+}
+
+const ANNUAL_KWH_PREF_KEY = "kilowattebanane.offerte.compare-kwh";
+
+function readAnnualKwhPref(): number | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(ANNUAL_KWH_PREF_KEY);
+    if (raw == null) return undefined;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return undefined;
+    return clampAnnualKwh(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function persistAnnualKwhPref(value: number) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ANNUAL_KWH_PREF_KEY, String(clampAnnualKwh(value)));
+  } catch {
+    // private mode / disabled storage
+  }
+}
+
+function AnnualTotalControl({
+  totalKwh,
+  onChange,
+}: {
+  totalKwh: number;
+  onChange: (kwh: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(totalKwh));
+
+  useEffect(() => {
+    setDraft(String(totalKwh));
+  }, [totalKwh]);
+
+  const commitDraft = () => {
+    const parsed = Number(draft.replace(/\s/g, ""));
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(totalKwh));
+      return;
+    }
+    onChange(clampAnnualKwh(parsed));
+  };
+
+  return (
+    <label className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-600 dark:text-neutral-400">
+      <span className="shrink-0">Totale annuo</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={MIN_ANNUAL_KWH}
+        max={MAX_ANNUAL_KWH}
+        step={10}
+        aria-label="Totale annuo in kWh"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commitDraft();
+          }
+        }}
+        className="w-20 rounded-md border border-neutral-200 bg-background px-2 py-1 tabular-nums text-foreground dark:border-neutral-800"
+      />
+      <span className="shrink-0">kWh</span>
+      <input
+        type="range"
+        min={MIN_ANNUAL_KWH}
+        max={MAX_ANNUAL_KWH}
+        step={10}
+        value={totalKwh}
+        aria-label="Regola il totale annuo"
+        aria-valuetext={`${formatKwh(totalKwh)} kWh`}
+        onChange={(event) => onChange(clampAnnualKwh(Number(event.target.value)))}
+        className="h-1 min-w-32 flex-1 cursor-pointer accent-foreground"
+      />
+    </label>
+  );
+}
+
+function ProfilePresetSelect({
+  value,
+  onChange,
+}: {
+  value: OfferteConsumoProfilo;
+  onChange: (value: OfferteConsumoProfilo) => void;
+}) {
+  const id = useId();
+  return (
+    <label htmlFor={id} className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+      <span>Profilo</span>
+      <select
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value === "oculato" ? "oculato" : "standard")}
+        className="rounded-md border border-neutral-200 bg-background px-2 py-1 text-sm text-foreground dark:border-neutral-800"
+      >
+        <option value="standard">Standard</option>
+        <option value="oculato">Oculato</option>
+      </select>
+    </label>
+  );
+}
+
 function ConsumptionProfilePanel({
   id,
   rows,
+  totalKwh,
+  onTotalChange,
+  profilePreset,
+  onProfilePresetChange,
   selectedStart,
   onSelect,
   onFascia,
@@ -937,6 +1165,10 @@ function ConsumptionProfilePanel({
 }: {
   id: string;
   rows: MonthConsumption[];
+  totalKwh: number;
+  onTotalChange: (kwh: number) => void;
+  profilePreset: OfferteConsumoProfilo;
+  onProfilePresetChange: (value: OfferteConsumoProfilo) => void;
   selectedStart: string | null;
   onSelect: (start: string) => void;
   onFascia: (start: string, band: keyof FasciaKwh, kwh: number) => void;
@@ -971,9 +1203,7 @@ function ConsumptionProfilePanel({
 
   useEffect(() => {
     if (!selectedStart) return;
-    scrollRef.current
-      ?.querySelector<HTMLElement>(`[data-month="${selectedStart}"]`)
-      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    scrollChildX(scrollRef.current, `[data-month="${selectedStart}"]`);
   }, [selectedStart]);
 
   const baseline = PROFILE_CHART_H - PROFILE_PAD_Y;
@@ -1015,6 +1245,12 @@ function ConsumptionProfilePanel({
 
   return (
     <section id={id} aria-label="Profilo di consumo" className="space-y-3">
+      {rows.length > 0 ? (
+        <div className="space-y-2">
+          <AnnualTotalControl totalKwh={totalKwh} onChange={onTotalChange} />
+          <ProfilePresetSelect value={profilePreset} onChange={onProfilePresetChange} />
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <p className="text-sm text-neutral-500">Mesi del contratto in caricamento.</p>
       ) : (
@@ -1408,18 +1644,58 @@ function SelectedOfferDot({
   );
 }
 
+function SelectedOfferClusterBox({
+  label,
+  offers,
+  colors,
+  allOffers,
+  isMuted,
+  onSelect,
+}: {
+  label: string;
+  offers: OfferteSuggestItem[];
+  colors: readonly string[];
+  allOffers: OfferteSuggestItem[];
+  isMuted: (item: OfferteSuggestItem) => boolean;
+  onSelect: (item: OfferteSuggestItem) => void;
+}) {
+  return (
+    <div className="rounded-md border border-neutral-200 bg-background px-2.5 py-2 dark:border-neutral-800">
+      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-neutral-500 dark:text-neutral-400">
+        {label}
+      </p>
+      <ul className="flex flex-wrap gap-0.5" aria-label={label}>
+        {offers.map((item) => {
+          const index = allOffers.findIndex((offer) => offer.id === item.id);
+          return (
+            <SelectedOfferDot
+              key={item.id}
+              item={item}
+              color={colors[index % colors.length]!}
+              muted={isMuted(item)}
+              onSelect={() => onSelect(item)}
+            />
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function SelectedOffersCluster({
   offers,
   colors,
+  profiles,
   heroId,
-  mutedIds,
+  activeSlice,
   onSelect,
   onRemove,
 }: {
   offers: OfferteSuggestItem[];
   colors: readonly string[];
+  profiles: Record<string, OfferteCompareProfile>;
   heroId: string;
-  mutedIds: Set<string>;
+  activeSlice: CompareSlice;
   onSelect: (item: OfferteSuggestItem) => void;
   onRemove: (id: string) => void;
 }) {
@@ -1430,7 +1706,18 @@ function SelectedOffersCluster({
     0,
   );
   const hero = offers[heroIndex]!;
-  const others = offers.filter((offer) => offer.id !== hero.id);
+  const heroSlice = offerCompareSlice(profiles[hero.id]) ?? activeSlice;
+  const heroKey = compareSliceKey(heroSlice);
+  const groups = groupOffersByCompareSlice(offers, profiles);
+  const comparable = (groups.get(heroKey)?.offers ?? []).filter((offer) => offer.id !== hero.id);
+  const otherClusters = [...groups.entries()]
+    .filter(([key]) => key !== heroKey)
+    .sort(([a], [b]) => compareSliceSortIndex(a) - compareSliceSortIndex(b))
+    .map(([, group]) => group);
+  const isMuted = (item: OfferteSuggestItem) => {
+    const slice = offerCompareSlice(profiles[item.id]);
+    return slice != null && compareSliceKey(slice) !== compareSliceKey(activeSlice);
+  };
 
   useLayoutEffect(() => {
     const el = cardRef.current;
@@ -1443,43 +1730,59 @@ function SelectedOffersCluster({
   }, [hero.id, hero.label, hero.venditore, hero.codOfferta]);
 
   return (
-    <div className="flex items-start gap-3">
-      <div ref={cardRef} className="shrink-0">
-        <SelectedOfferCard
-          item={hero}
-          color={colors[heroIndex % colors.length]!}
-          onRemove={() => onRemove(hero.id)}
-        />
+    <div className="flex flex-wrap items-start gap-3">
+      <div className="flex items-start gap-3">
+        <div ref={cardRef} className="shrink-0">
+          <SelectedOfferCard
+            item={hero}
+            color={colors[heroIndex % colors.length]!}
+            onRemove={() => onRemove(hero.id)}
+          />
+        </div>
+        {comparable.length > 0 ? (
+          <ul
+            aria-label="Offerte confrontabili"
+            className="flex min-h-0 min-w-0 flex-col flex-wrap content-start gap-0.5 overflow-x-auto overflow-y-hidden"
+            style={cardHeight != null ? { height: cardHeight } : undefined}
+          >
+            {comparable.map((item) => {
+              const index = offers.findIndex((offer) => offer.id === item.id);
+              return (
+                <SelectedOfferDot
+                  key={item.id}
+                  item={item}
+                  color={colors[index % colors.length]!}
+                  muted={isMuted(item)}
+                  onSelect={() => onSelect(item)}
+                />
+              );
+            })}
+          </ul>
+        ) : null}
       </div>
-      {others.length > 0 ? (
-        <ul
-          aria-label="Altre offerte selezionate"
-          className="flex min-h-0 min-w-0 flex-1 flex-col flex-wrap content-start gap-0.5 overflow-x-auto overflow-y-hidden"
-          style={cardHeight != null ? { height: cardHeight } : undefined}
-        >
-          {others.map((item) => {
-            const index = offers.findIndex((offer) => offer.id === item.id);
-            return (
-              <SelectedOfferDot
-                key={item.id}
-                item={item}
-                color={colors[index % colors.length]!}
-                muted={mutedIds.has(item.id)}
-                onSelect={() => onSelect(item)}
-              />
-            );
-          })}
-        </ul>
-      ) : null}
+      {otherClusters.map((cluster) => (
+        <SelectedOfferClusterBox
+          key={compareSliceKey(cluster.slice)}
+          label={compareSliceLabel(cluster.slice)}
+          offers={cluster.offers}
+          colors={colors}
+          allOffers={offers}
+          isMuted={isMuted}
+          onSelect={onSelect}
+        />
+      ))}
     </div>
   );
 }
 
-function CompareWorkspace({
+const CompareWorkspace = memo(function CompareWorkspace({
   offers,
   colors,
   focusedId,
   profiles,
+  initialCliente = "domestico",
+  initialPrezzo = "variabile",
+  initialResidente = true,
   onFocus,
   onRemove,
 }: {
@@ -1487,11 +1790,16 @@ function CompareWorkspace({
   colors: readonly string[];
   focusedId: string | null;
   profiles: Record<string, OfferteCompareProfile>;
+  initialCliente?: CompareCliente;
+  initialPrezzo?: ComparePrezzo;
+  initialResidente?: boolean;
   onFocus: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
-  const [cliente, setCliente] = useState<CompareCliente>("domestico");
-  const [prezzo, setPrezzo] = useState<ComparePrezzo>("variabile");
+  const [cliente, setCliente] = useState<CompareCliente>(initialCliente);
+  const [prezzo, setPrezzo] = useState<ComparePrezzo>(initialPrezzo);
+  const [residente, setResidente] = useState(initialResidente);
+  const syncedFocusRef = useRef<string | null>(null);
   const [months, setMonths] = useState<ComparePunMonth[] | null>(null);
   const [carico, setCarico] = useState<CompareCaricoByCliente | null>(null);
   const [shape, setShape] = useState<ComparePunShape | null>(null);
@@ -1500,25 +1808,55 @@ function CompareWorkspace({
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileMonth, setProfileMonth] = useState<string | null>(null);
   const profilePanelId = useId();
+  const [annualKwh, setAnnualKwh] = useState(DEFAULT_ANNUAL_KWH);
+  const [profilePreset, setProfilePreset] = useState<OfferteConsumoProfilo>("standard");
   const [monthEdits, setMonthEdits] = useState<Record<string, FasciaKwh>>({});
-  const visible = offers.filter((offer) => {
-    const slice = offerCompareSlice(profiles[offer.id]);
-    return slice?.cliente === cliente && slice?.prezzo === prezzo;
-  });
+  const [offerStart, setOfferStart] = useState(defaultOfferStartDate);
+  useEffect(() => {
+    const stored = readAnnualKwhPref();
+    if (stored != null) setAnnualKwh(stored);
+  }, []);
+  const visible = useMemo(
+    () =>
+      offers.filter((offer) => {
+        const slice = offerCompareSlice(profiles[offer.id]);
+        return slice?.cliente === cliente && slice?.prezzo === prezzo;
+      }),
+    [offers, profiles, cliente, prezzo],
+  );
   const focused = visible.find((offer) => offer.id === focusedId) ?? visible[0] ?? null;
   const hero = focused ?? offers.find((offer) => offer.id === focusedId) ?? offers[0];
-  const chartOffers = visible.length > 0 ? visible : hero ? [hero] : [];
+  const chartOffers = visible;
   const chartColors = chartOffers.map(
     (offer) => colors[Math.max(offers.findIndex((item) => item.id === offer.id), 0) % colors.length]!,
   );
-  const chartFocus = focused ?? hero ?? null;
-  const chartPrezzo =
-    visible.length > 0
-      ? prezzo
-      : (offerCompareSlice(chartFocus ? profiles[chartFocus.id] : undefined)?.prezzo ?? prezzo);
+  const chartFocus = focused;
+  const chartPrezzo = prezzo;
+
+  useEffect(() => {
+    if (!focusedId) {
+      syncedFocusRef.current = null;
+      return;
+    }
+    const slice = offerCompareSlice(profiles[focusedId]);
+    if (!slice) return;
+    if (syncedFocusRef.current === focusedId) return;
+    syncedFocusRef.current = focusedId;
+    setCliente(slice.cliente);
+    setPrezzo(slice.prezzo);
+  }, [focusedId, profiles]);
   const focusedProfile = chartFocus ? profiles[chartFocus.id] : undefined;
-  const windowStart = useMemo(() => romeToday(), []);
-  const windowSpans = useMemo(() => contractSpans(windowStart), [windowStart]);
+  const compareHorizon = useMemo(() => {
+    if (chartOffers.length === 0) return 12;
+    return Math.max(
+      ...chartOffers.map((offer) => billHorizon(profiles[offer.id]?.durataMesi)),
+      1,
+    );
+  }, [chartOffers, profiles]);
+  const windowSpans = useMemo(
+    () => contractSpans(offerStart, compareHorizon),
+    [offerStart, compareHorizon],
+  );
   const windowMonths = useMemo(
     () =>
       windowSpans.map((span) => ({
@@ -1532,26 +1870,37 @@ function CompareWorkspace({
   const punEurKwh = windowMonths[monthIndex]?.eurKwh ?? null;
   const monthLabel = windowMonths[monthIndex]?.label ?? null;
   const includeMarket = chartPrezzo === "fisso" || includeEnergy;
+  const punBySpan = useMemo(
+    () => windowSpans.map((span) => (months ? blendPun(span.start, span.end, months) : null)),
+    [windowSpans, months],
+  );
   const monthRows = useMemo<MonthConsumption[]>(() => {
-    const totals = defaultSpanKwh(windowSpans);
+    const standardTotals = defaultSpanKwh(windowSpans, annualKwh);
+    const oculatoTotals = oculatoSpanKwh(windowSpans, annualKwh, punBySpan);
     return windowSpans.map((month, index) => {
       const end = month.end;
       const standardHours = hourShares("standard", shape?.hourlyRel);
       const oculatoHours = hourShares("oculato", shape?.hourlyRel);
       const standardShares = fasciaSharesForSpan(month.start, end, standardHours);
       const oculatoShares = fasciaSharesForSpan(month.start, end, oculatoHours);
-      const standard = splitKwh(totals[index] ?? 0, standardShares);
-      const oculato = splitKwh(totals[index] ?? 0, oculatoShares);
-      const fascia = monthEdits[month.start] ?? standard;
+      const standard = splitKwh(standardTotals[index] ?? 0, standardShares);
+      const oculato = splitKwh(oculatoTotals[index] ?? 0, oculatoShares);
+      const presetBaseline = profilePreset === "oculato" ? oculato : standard;
+      const edit = monthEdits[month.start];
+      const customized = edit != null && !sameFascia(edit, presetBaseline);
+      const fascia = customized ? edit : presetBaseline;
       const kwh = fascia.f1 + fascia.f2 + fascia.f3;
       const shares =
         kwh > 0
           ? { f1: fascia.f1 / kwh, f2: fascia.f2 / kwh, f3: fascia.f3 / kwh }
-          : standardShares;
-      const profilo: OfferteConsumoProfilo =
-        shareDistance(shares, oculatoShares) + 0.02 < shareDistance(shares, standardShares)
+          : profilePreset === "oculato"
+            ? oculatoShares
+            : standardShares;
+      const profilo: OfferteConsumoProfilo = customized
+        ? shareDistance(shares, oculatoShares) + 0.02 < shareDistance(shares, standardShares)
           ? "oculato"
-          : "standard";
+          : "standard"
+        : profilePreset;
       return {
         start: month.start,
         end,
@@ -1567,9 +1916,33 @@ function CompareWorkspace({
         oculato,
       };
     });
-  }, [windowSpans, monthEdits, shape]);
+  }, [windowSpans, monthEdits, shape, annualKwh, profilePreset, punBySpan]);
   const totalKwh = monthRows.reduce((sum, row) => sum + row.kwh, 0);
-  const modeLabel = consumptionModeLabel(monthRows);
+  const monthRowsRef = useRef(monthRows);
+  monthRowsRef.current = monthRows;
+  const handleTotalChange = useCallback((target: number) => {
+    const next = clampAnnualKwh(target);
+    const rows = monthRowsRef.current;
+    const current = rows.reduce((sum, row) => sum + row.kwh, 0);
+    setAnnualKwh(next);
+    persistAnnualKwhPref(next);
+    if (!(current > 0)) return;
+    setMonthEdits((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      const factor = next / current;
+      return Object.fromEntries(
+        rows.map((row) => [
+          row.start,
+          scaleFascia({ f1: row.f1, f2: row.f2, f3: row.f3 }, row.kwh * factor),
+        ]),
+      );
+    });
+  }, []);
+  const handleProfilePresetChange = useCallback((preset: OfferteConsumoProfilo) => {
+    setProfilePreset(preset);
+    setMonthEdits({});
+  }, []);
+  const modeLabel = consumptionModeLabel(monthRows, profilePreset, monthEdits);
   const spend = useMemo(() => {
     if (monthRows.length === 0) return null;
     return {
@@ -1585,6 +1958,61 @@ function CompareWorkspace({
     };
   }, [monthRows, shape, includeMarket]);
   const activeCarico = carico?.[cliente === "non domestico" ? "nonDomestico" : "domestico"] ?? null;
+  const profileMode = useMemo((): "standard" | "oculato" | "custom" => {
+    if (monthRows.length === 0) return "standard";
+    const customized = monthRows.some((row) => {
+      const edit = monthEdits[row.start];
+      if (!edit) return false;
+      const baseline = profilePreset === "oculato" ? row.oculato : row.standard;
+      return !sameFascia(edit, baseline);
+    });
+    if (customized) return "custom";
+    return profilePreset;
+  }, [monthRows, monthEdits, profilePreset]);
+  const synthesis = useMemo(
+    () =>
+      buildCompareSynthesis({
+        offers: chartOffers.flatMap((offer) => {
+          const profile = profiles[offer.id];
+          if (!profile) return [];
+          return [{ id: offer.id, label: compareOfferFields(offer).nome, profile }];
+        }),
+        spans: windowSpans,
+        punBySpan,
+        carico: activeCarico,
+        shape,
+        includeMarket,
+        prezzo: chartPrezzo,
+        includeEnergy,
+        annualKwh: totalKwh,
+        profileMode,
+        spend,
+      }),
+    [
+      chartOffers,
+      profiles,
+      windowSpans,
+      punBySpan,
+      activeCarico,
+      shape,
+      includeMarket,
+      chartPrezzo,
+      includeEnergy,
+      totalKwh,
+      profileMode,
+      spend,
+    ],
+  );
+  const synthesisColors = useMemo(
+    () =>
+      Object.fromEntries(
+        chartOffers.map((offer, index) => [
+          offer.id,
+          chartColors[index % chartColors.length]!,
+        ]),
+      ),
+    [chartOffers, chartColors],
+  );
 
   useEffect(() => {
     setMonthIndex((index) => Math.min(index, Math.max(windowMonths.length - 1, 0)));
@@ -1613,22 +2041,15 @@ function CompareWorkspace({
     return () => controller.abort();
   }, []);
 
-  const mutedIds = new Set(
-    offers.flatMap((offer) => {
-      const slice = offerCompareSlice(profiles[offer.id]);
-      const muted = slice != null && (slice.cliente !== cliente || slice.prezzo !== prezzo);
-      return muted ? [offer.id] : [];
-    }),
-  );
-
   return (
     <div className="mt-5 space-y-8">
       {hero ? (
         <SelectedOffersCluster
           offers={offers}
           colors={colors}
+          profiles={profiles}
           heroId={hero.id}
-          mutedIds={mutedIds}
+          activeSlice={{ cliente, prezzo }}
           onSelect={(item) => {
             const slice = offerCompareSlice(profiles[item.id]);
             if (slice) {
@@ -1642,6 +2063,20 @@ function CompareWorkspace({
       ) : null}
 
       <div aria-label="Confronto offerte" className="space-y-2 border-t border-neutral-200 pt-8 dark:border-neutral-800">
+        <label className="flex flex-wrap items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-400">
+          <span>Offerta parte il</span>
+          <input
+            type="date"
+            value={offerStart}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (!next) return;
+              setOfferStart(next);
+              setMonthIndex(0);
+            }}
+            className="rounded-md border border-neutral-200 bg-background px-2 py-1 text-sm tabular-nums text-foreground scheme-light dark:border-neutral-800 dark:scheme-dark [&::-webkit-calendar-picker-indicator]:cursor-pointer dark:[&::-webkit-calendar-picker-indicator]:invert"
+          />
+        </label>
         <div className="flex flex-wrap items-center gap-3">
           <CompareFilterSelect
             label="Cliente"
@@ -1652,6 +2087,9 @@ function CompareWorkspace({
               { value: "non domestico", label: "Partita IVA" },
             ]}
           />
+          {cliente === "domestico" ? (
+            <CompareResidenzaToggle checked={residente} onChange={setResidente} />
+          ) : null}
           <CompareFilterSelect
             label="Tipo prezzo"
             value={prezzo}
@@ -1682,6 +2120,10 @@ function CompareWorkspace({
           <ConsumptionProfilePanel
             id={profilePanelId}
             rows={monthRows}
+            totalKwh={totalKwh}
+            onTotalChange={handleTotalChange}
+            profilePreset={profilePreset}
+            onProfilePresetChange={handleProfilePresetChange}
             selectedStart={profileMonth}
             onSelect={setProfileMonth}
             onFascia={(start, band, kwh) => {
@@ -1706,7 +2148,7 @@ function CompareWorkspace({
           punEurKwh={punEurKwh}
           months={windowMonths}
           monthIndex={monthIndex}
-          horizon={windowMonths.length}
+          horizon={compareHorizon}
           carico={activeCarico}
           includeEnergy={includeEnergy}
           spend={spend}
@@ -1720,18 +2162,37 @@ function CompareWorkspace({
           disabled={windowMonths.length === 0}
           onChange={setMonthIndex}
         />
-        <CompareTable
-          offers={chartOffers}
-          colors={chartColors}
-          profiles={profiles}
-          focusedId={chartFocus?.id ?? null}
-          punEurKwh={punEurKwh}
-          monthIndex={monthIndex}
-          carico={activeCarico}
-          includeEnergy={includeEnergy}
-          spend={spend}
-          onFocus={onFocus}
-        />
+        {spend?.includeMarket && chartFocus && profiles[chartFocus.id] ? (
+          <CompareSpendHistogram
+            months={windowMonths}
+            monthIndex={monthIndex}
+            onMonthSelect={setMonthIndex}
+            offerLabel={compareOfferFields(chartFocus).nome}
+            color={chartColors[Math.max(chartOffers.findIndex((item) => item.id === chartFocus.id), 0)]!}
+            breakdowns={windowMonths.map((month, index) =>
+              offerMonthBreakdown(profiles[chartFocus.id]!, index, month.eurKwh, activeCarico, spend),
+            )}
+          />
+        ) : null}
+        {chartOffers.length > 0 ? (
+          <CompareTable
+            offers={chartOffers}
+            colors={chartColors}
+            profiles={profiles}
+            focusedId={chartFocus?.id ?? null}
+            prezzo={chartPrezzo}
+            punEurKwh={punEurKwh}
+            punBySpan={punBySpan}
+            monthIndex={monthIndex}
+            carico={activeCarico}
+            includeEnergy={includeEnergy}
+            spend={spend}
+            onFocus={onFocus}
+          />
+        ) : null}
+        {chartOffers.length > 0 ? (
+          <CompareSynthesis synthesis={synthesis} colors={synthesisColors} onFocus={onFocus} />
+        ) : null}
       </div>
 
       {chartFocus ? (
@@ -1751,7 +2212,7 @@ function CompareWorkspace({
       ) : null}
     </div>
   );
-}
+});
 
 type CompareSpaceTrack = {
   id: string;
@@ -1777,6 +2238,109 @@ const SPACE_VIEWS: Record<SpaceView, { yaw: number; pitch: number; label: string
 };
 
 const SPACE_VIEW_ORDER: SpaceView[] = ["space", "energyTime", "quotaEnergy", "quotaTime"];
+
+const ENERGY_PRICE_HELP =
+  "Prezzo atteso mese per mese: indice di mercato stimato più condizioni contrattuali, profilato sul consumo impostato. Non è una bolletta reale.";
+
+const SPEND_BREAKDOWN_COLORS = {
+  canone: "#64748b",
+  energia: "#3b82f6",
+  perdite: "#a855f7",
+  accise: "#eab308",
+  iva: "#f43f5e",
+} as const;
+
+const SPEND_BREAKDOWN_LEGEND = [
+  { key: "canoneEur" as const, label: "Canone", color: SPEND_BREAKDOWN_COLORS.canone },
+  { key: "energiaEur" as const, label: "Energia", color: SPEND_BREAKDOWN_COLORS.energia },
+  { key: "perditeReteEur" as const, label: "Perdite di rete", color: SPEND_BREAKDOWN_COLORS.perdite },
+  { key: "acciseEur" as const, label: "Accise", color: SPEND_BREAKDOWN_COLORS.accise },
+  { key: "ivaEur" as const, label: "IVA", color: SPEND_BREAKDOWN_COLORS.iva },
+];
+
+function CompareHelpTip({ text }: { text: string }) {
+  return (
+    <button
+      type="button"
+      title={text}
+      aria-label={text}
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-neutral-300 text-[10px] leading-none text-neutral-400 hover:border-neutral-400 hover:text-foreground dark:border-neutral-700 dark:hover:border-neutral-500"
+    >
+      ?
+    </button>
+  );
+}
+
+function CompareSwitchToggle({
+  checked,
+  onChange,
+  label,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={ariaLabel}
+        onClick={() => onChange(!checked)}
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+          checked ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-300 dark:bg-neutral-700"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 block h-4 w-4 rounded-full bg-white transition-[left] dark:bg-neutral-900 ${
+            checked ? "left-4.5" : "left-0.5"
+          }`}
+        />
+      </button>
+      <span className="text-sm text-neutral-600 dark:text-neutral-400">{label}</span>
+    </div>
+  );
+}
+
+function IncludeEnergyToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="ml-1 flex items-center gap-1.5 border-l border-neutral-200 pl-2 dark:border-neutral-800">
+      <CompareSwitchToggle
+        checked={checked}
+        onChange={onChange}
+        label="Includi prezzo energia"
+        ariaLabel="Includi prezzo energia"
+      />
+      <CompareHelpTip text={ENERGY_PRICE_HELP} />
+    </div>
+  );
+}
+
+function CompareResidenzaToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <CompareSwitchToggle
+      checked={checked}
+      onChange={onChange}
+      label={checked ? "Residente" : "Non residente"}
+      ariaLabel="Residente"
+    />
+  );
+}
 
 function CompareChart({
   offers,
@@ -1818,7 +2382,7 @@ function CompareChart({
   const formatY = spend ? formatEuro : formatCentesimi;
   const formatTick = spend ? formatAxisEuro : formatAxisCents;
   const monthValue = (profile: OfferteCompareProfile | undefined, index: number, pun: number | null) => {
-    if (!profile || !spend) return null;
+    if (!profile || !spend || index >= billHorizon(profile.durataMesi)) return null;
     return offerSpendEur(profile, index, pun, carico, spend);
   };
   const plotted = offers.flatMap((offer, index) => {
@@ -1830,7 +2394,9 @@ function CompareChart({
           if (!base || y == null) return null;
           return { ...base, y };
         })()
-      : offerEnergyPoint(profile, punEurKwh, carico, includeEnergy);
+      : monthIndex < billHorizon(profile?.durataMesi)
+        ? offerEnergyPoint(profile, punEurKwh, carico, includeEnergy)
+        : null;
     if (!point) return [];
     return [
       {
@@ -1843,11 +2409,31 @@ function CompareChart({
   });
   const waiting = offers.some((offer) => !profiles[offer.id]);
   const chartMonths = months != null && months.length > 0 ? months.slice(0, Math.max(horizon, 1)) : [];
+  if (offers.length === 0) {
+    if (chartMonths.length >= 2) {
+      return (
+        <CompareChartSpace
+          tracks={[]}
+          months={chartMonths}
+          monthIndex={monthIndex}
+          energyLabel={energyLabel}
+          energyHelp={spend?.includeMarket ? ENERGY_PRICE_HELP : null}
+          formatTick={formatTick}
+          formatValue={formatY}
+          focusedId={null}
+          includeEnergy={prezzo === "variabile" ? includeEnergy : null}
+          onIncludeEnergy={onIncludeEnergy}
+          onFocus={onFocus}
+        />
+      );
+    }
+    return null;
+  }
   const tracks = offers.flatMap((offer, index) => {
     const profile = profiles[offer.id];
     const base = comparePlotPoint(profile);
     if (!base || !profile || chartMonths.length === 0) return [];
-    const offerHorizon = chartMonths.length;
+    const offerHorizon = billHorizon(profile.durataMesi);
     const values = chartMonths.map((month, index) => {
       if (index >= offerHorizon) return null;
       if (spend) return monthValue(profile, index, month.eurKwh);
@@ -1886,6 +2472,7 @@ function CompareChart({
         months={chartMonths}
         monthIndex={monthIndex}
         energyLabel={energyLabel}
+        energyHelp={spend?.includeMarket ? ENERGY_PRICE_HELP : null}
         formatTick={formatTick}
         formatValue={formatY}
         focusedId={focusedId}
@@ -1909,8 +2496,11 @@ function CompareChart({
       plotted={plotted}
       focusedId={focusedId}
       energyLabel={energyLabel}
+      energyHelp={spend?.includeMarket ? ENERGY_PRICE_HELP : null}
       formatTick={formatTick}
       formatValue={formatY}
+      includeEnergy={prezzo === "variabile" ? includeEnergy : null}
+      onIncludeEnergy={onIncludeEnergy}
       ariaLabel={
         spend
           ? "Grafico a due assi: quota fissa in euro l’anno, spesa del mese in euro per il consumo scelto"
@@ -1929,8 +2519,11 @@ function CompareChartFlat({
   plotted,
   focusedId,
   energyLabel,
+  energyHelp,
   formatTick,
   formatValue,
+  includeEnergy,
+  onIncludeEnergy,
   ariaLabel,
   onFocus,
 }: {
@@ -1945,8 +2538,11 @@ function CompareChartFlat({
   }>;
   focusedId: string | null;
   energyLabel: string;
+  energyHelp: string | null;
   formatTick: (value: number) => string;
   formatValue: (value: number) => string;
+  includeEnergy: boolean | null;
+  onIncludeEnergy: (value: boolean) => void;
   ariaLabel: string;
   onFocus: (id: string) => void;
 }) {
@@ -1966,6 +2562,11 @@ function CompareChartFlat({
 
   return (
     <figure className="mt-2">
+      {includeEnergy != null ? (
+        <div className="flex items-center gap-0.5" role="toolbar" aria-label="Opzioni grafico">
+          <IncludeEnergyToggle checked={includeEnergy} onChange={onIncludeEnergy} />
+        </div>
+      ) : null}
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
@@ -2025,6 +2626,20 @@ function CompareChartFlat({
         >
           {energyLabel}
         </text>
+        {energyHelp ? (
+          <g transform={`translate(26 ${pad.top + innerH / 2 - 14})`}>
+            <title>{energyHelp}</title>
+            <circle r={7} className="fill-neutral-200 dark:fill-neutral-800" />
+            <text
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={10}
+              className="fill-neutral-500 dark:fill-neutral-400"
+            >
+              ?
+            </text>
+          </g>
+        ) : null}
         {[...plotted].sort((a, b) => Number(a.id === focusedId) - Number(b.id === focusedId)).map((point) => {
           const cx = xOf(point.x);
           const cy = yOf(point.y);
@@ -2074,6 +2689,7 @@ function CompareChartSpace({
   months,
   monthIndex,
   energyLabel,
+  energyHelp,
   formatTick,
   formatValue,
   focusedId,
@@ -2085,6 +2701,7 @@ function CompareChartSpace({
   months: ComparePunMonth[];
   monthIndex: number;
   energyLabel: string;
+  energyHelp: string | null;
   formatTick: (value: number) => string;
   formatValue: (value: number) => string;
   focusedId: string | null;
@@ -2219,15 +2836,7 @@ function CompareChartSpace({
           );
         })}
         {includeEnergy != null ? (
-          <label className="ml-auto flex items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-400">
-            <input
-              type="checkbox"
-              checked={includeEnergy}
-              onChange={(event) => onIncludeEnergy(event.target.checked)}
-              className="accent-foreground"
-            />
-            Prezzo energia
-          </label>
+          <IncludeEnergyToggle checked={includeEnergy} onChange={onIncludeEnergy} />
         ) : null}
       </div>
       <svg
@@ -2473,6 +3082,20 @@ function CompareChartSpace({
         >
           {energyLabel}
         </text>
+        {energyHelp ? (
+          <g transform={`translate(${yEnd.x + 2} ${yEnd.y - 18})`}>
+            <title>{energyHelp}</title>
+            <circle r={7} className="fill-neutral-200 dark:fill-neutral-800" />
+            <text
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={10}
+              className="fill-neutral-500 dark:fill-neutral-400"
+            >
+              ?
+            </text>
+          </g>
+        ) : null}
         <text
           x={(origin.x + zEnd.x) / 2 - 8}
           y={(origin.y + zEnd.y) / 2 + 28}
@@ -2708,7 +3331,7 @@ function monthCanoneEur(
   monthIndex: number,
   dayFraction = 1,
 ) {
-  if (!profile) return null;
+  if (!profile || monthIndex >= billHorizon(profile.durataMesi)) return null;
   const monthly = recurringQuotaEur(profile);
   if (monthly == null) return null;
   return monthly * dayFraction + (monthIndex === 0 ? (profile.scheda.unaTantumEur ?? 0) : 0);
@@ -2728,19 +3351,20 @@ function offerBands(profile: OfferteCompareProfile) {
   return [{ label: null, eurKwh: profile.spreadEurKwh }];
 }
 
-function offerPriced(
+function offerPricedOptions(
   profile: OfferteCompareProfile,
   monthIndex: number,
   punEurKwh: number | null,
   carico: CompareCarico | null,
   spend: CompareSpend,
 ) {
+  if (monthIndex >= billHorizon(profile.durataMesi)) return null;
   const monthKwh = spend.monthKwh[monthIndex];
   const hours = spend.hoursByMonth[monthIndex];
   const shares = spend.sharesByMonth[monthIndex];
   const recurring = recurringQuotaEur(profile);
   if (monthKwh == null || !hours || !shares || recurring == null) return null;
-  return pricedMonth({
+  return {
     bands: offerBands(profile),
     variabile: profile.scheda.variabile,
     plan: profile.plan,
@@ -2753,7 +3377,29 @@ function offerPriced(
     consumoKwh: monthKwh,
     monthShare: 1,
     carico: spend.includeMarket ? carico : null,
-  });
+  };
+}
+
+function offerPriced(
+  profile: OfferteCompareProfile,
+  monthIndex: number,
+  punEurKwh: number | null,
+  carico: CompareCarico | null,
+  spend: CompareSpend,
+) {
+  const options = offerPricedOptions(profile, monthIndex, punEurKwh, carico, spend);
+  return options ? pricedMonth(options) : null;
+}
+
+function offerMonthBreakdown(
+  profile: OfferteCompareProfile,
+  monthIndex: number,
+  punEurKwh: number | null,
+  carico: CompareCarico | null,
+  spend: CompareSpend,
+) {
+  const options = offerPricedOptions(profile, monthIndex, punEurKwh, carico, spend);
+  return options ? monthSpendBreakdown(options) : null;
 }
 
 function offerSpendEur(
@@ -2766,6 +3412,33 @@ function offerSpendEur(
   return offerPriced(profile, monthIndex, punEurKwh, carico, spend)?.spendEur ?? null;
 }
 
+function contractDurataMesi(profile: OfferteCompareProfile | undefined) {
+  if (!profile) return 12;
+  const durata = profile.durataMesi;
+  if (durata == null || !Number.isFinite(durata) || durata <= 0) return 12;
+  return Math.round(durata);
+}
+
+function offerPeriodTotalSpend(
+  profile: OfferteCompareProfile,
+  monthCount: number,
+  punBySpan: Array<number | null>,
+  carico: CompareCarico | null,
+  spend: CompareSpend,
+) {
+  let total = 0;
+  let hasAny = false;
+  const limit = Math.min(monthCount, spend.monthKwh.length);
+  for (let monthIndex = 0; monthIndex < limit; monthIndex++) {
+    if (monthIndex >= billHorizon(profile.durataMesi)) continue;
+    const part = offerSpendEur(profile, monthIndex, punBySpan[monthIndex] ?? null, carico, spend);
+    if (part == null) continue;
+    total += part;
+    hasAny = true;
+  }
+  return hasAny ? total : null;
+}
+
 function ValueBadge({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full bg-neutral-900 px-2.5 py-0.5 text-sm font-medium tabular-nums text-white dark:bg-neutral-100 dark:text-neutral-900">
@@ -2774,12 +3447,335 @@ function ValueBadge({ children }: { children: ReactNode }) {
   );
 }
 
+function formatSpendShare(value: number, total: number) {
+  if (!(total > 0)) return "—";
+  const pct = (value / total) * 100;
+  return `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: pct >= 10 ? 0 : 1 }).format(pct)}%`;
+}
+
+const SPEND_HIST_DAY_PX = 2.9;
+const SPEND_HIST_SLOT_PX = 31 * SPEND_HIST_DAY_PX;
+const SPEND_HIST_BAR_RATIO = 0.62;
+const SPEND_HIST_CHART_H = 120;
+const SPEND_HIST_PAD_Y = 12;
+
+function SpendColumnTotalBadge({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex max-w-full items-center justify-center rounded-full px-2.5 tabular-nums font-semibold leading-none ${
+        active
+          ? "bg-neutral-900 py-1.5 text-base text-white shadow-sm dark:bg-neutral-100 dark:text-neutral-900"
+          : "bg-neutral-200 py-1 text-sm text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function CompareSpendHistogram({
+  months,
+  monthIndex,
+  onMonthSelect,
+  offerLabel,
+  color,
+  breakdowns,
+}: {
+  months: ComparePunMonth[];
+  monthIndex: number;
+  onMonthSelect: (index: number) => void;
+  offerLabel: string;
+  color: string;
+  breakdowns: Array<MonthSpendBreakdown | null>;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const layout = useMemo(() => {
+    let x = 0;
+    return months.map((month, index) => {
+      const end = month.end ?? inclusiveEnd(month.start, months[index + 1]?.start);
+      const days = inclusiveDays(month.start, end);
+      const width = SPEND_HIST_SLOT_PX;
+      const placed = { index, start: month.start, end, days, width, x, breakdown: breakdowns[index] };
+      x += width;
+      return placed;
+    });
+  }, [months, breakdowns]);
+  const trackWidth = layout.reduce((sum, row) => sum + row.width, 0);
+  const peak = Math.max(...layout.map((row) => row.breakdown?.totalEur ?? 0), 1);
+  const yTop = axisTicks(peak).at(-1) ?? peak;
+  const yTicks = axisTicks(peak);
+  const innerH = SPEND_HIST_CHART_H - SPEND_HIST_PAD_Y * 2;
+  const yOf = (eur: number) => SPEND_HIST_PAD_Y + innerH - (eur / yTop) * innerH;
+  const baseline = SPEND_HIST_CHART_H - SPEND_HIST_PAD_Y;
+  const selectedStart = months[monthIndex]?.start ?? null;
+
+  const selectedMonth = months[monthIndex];
+  const selectedBreakdown = breakdowns[monthIndex] ?? null;
+
+  useEffect(() => {
+    if (!selectedStart) return;
+    scrollChildX(scrollRef.current, `[data-spend-month="${selectedStart}"]`);
+  }, [selectedStart]);
+
+  return (
+    <section aria-label="Spesa mensile stimata" className="mt-4 space-y-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <h4 className="text-sm text-neutral-600 dark:text-neutral-400">
+          Spesa mensile stimata
+          <span className="text-neutral-400"> · </span>
+          <span style={{ color }}>{offerLabel}</span>
+        </h4>
+        <CompareHelpTip text={ENERGY_PRICE_HELP} />
+      </div>
+      <div className="flex min-w-0">
+        <div className="w-11 shrink-0">
+          <div className="flex h-9 items-end justify-end pr-1 text-[10px] text-neutral-400">€</div>
+          <svg width={44} height={SPEND_HIST_CHART_H} aria-hidden="true" className="block">
+            {yTicks.map((tick) => (
+              <text
+                key={tick}
+                x={40}
+                y={yOf(tick)}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fontSize={10}
+                className="fill-neutral-400"
+              >
+                {formatAxisEuro(tick)}
+              </text>
+            ))}
+          </svg>
+        </div>
+        <div ref={scrollRef} className="profile-month-scroll min-w-0 flex-1 overflow-x-auto">
+          <div style={{ width: trackWidth }}>
+            <div className="relative h-9">
+              {layout.map((row, index) => {
+                const year = row.start.slice(0, 4);
+                const showYear = index === 0 || year !== layout[index - 1]?.start.slice(0, 4);
+                const active = row.index === monthIndex;
+                return (
+                  <button
+                    key={row.start}
+                    type="button"
+                    data-spend-month={row.start}
+                    aria-pressed={active}
+                    onClick={() => onMonthSelect(row.index)}
+                    style={{ left: row.x, width: row.width }}
+                    className="absolute top-0 flex h-9 cursor-pointer flex-col items-center justify-end pb-1"
+                  >
+                    <span className="text-[10px] tabular-nums leading-none text-neutral-400">
+                      {showYear ? `'${year.slice(2)}` : ""}
+                    </span>
+                    <span
+                      className={`text-[11px] uppercase leading-none tracking-wide ${
+                        active
+                          ? "font-semibold text-foreground"
+                          : "text-neutral-500 dark:text-neutral-400"
+                      }`}
+                    >
+                      {monthAbbrev(row.start)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <svg
+              width={trackWidth}
+              height={SPEND_HIST_CHART_H}
+              role="img"
+              aria-label="Istogramma della spesa mensile stimata, mese per mese. Clicca una colonna per cambiare mese."
+              className="block"
+            >
+              <line
+                x1={0}
+                x2={trackWidth}
+                y1={baseline}
+                y2={baseline}
+                className="stroke-neutral-200 dark:stroke-neutral-800"
+              />
+              {layout.map((row, rowIndex) => {
+                const active = row.index === monthIndex;
+                const breakdown = row.breakdown;
+                const dim = daysInCalendarMonth(row.start);
+                const barWidth = Math.max((row.days / Math.max(dim, 1)) * row.width * SPEND_HIST_BAR_RATIO, 8);
+                const barX = row.x + (row.width - barWidth) / 2;
+                const stackH =
+                  breakdown && breakdown.totalEur > 0 ? (breakdown.totalEur / yTop) * innerH : 0;
+                const top = baseline - stackH;
+                const radius = Math.min(12, barWidth / 2, Math.max(stackH / 2, 0));
+                const clipId = `spend-bar-${rowIndex}`;
+                let cursor = baseline;
+                return (
+                  <g
+                    key={row.start}
+                    opacity={active ? 1 : 0.72}
+                    className="cursor-pointer"
+                    onClick={() => onMonthSelect(row.index)}
+                  >
+                    <rect
+                      x={row.x}
+                      y={0}
+                      width={row.width}
+                      height={SPEND_HIST_CHART_H}
+                      fill="transparent"
+                      aria-label={`${monthAbbrev(row.start)} ${row.start.slice(0, 4)}`}
+                    />
+                    {breakdown && breakdown.totalEur > 0 ? (
+                      <>
+                        {active ? (
+                          <rect
+                            x={row.x + 2}
+                            y={SPEND_HIST_PAD_Y}
+                            width={Math.max(row.width - 4, 1)}
+                            height={innerH}
+                            rx={10}
+                            className="fill-neutral-100 dark:fill-neutral-900"
+                          />
+                        ) : null}
+                        <clipPath id={clipId}>
+                          <rect
+                            x={barX}
+                            y={top}
+                            width={barWidth}
+                            height={Math.max(stackH, 0)}
+                            rx={radius}
+                          />
+                        </clipPath>
+                        <g clipPath={`url(#${clipId})`}>
+                          {SPEND_BREAKDOWN_LEGEND.map((band) => {
+                            const value = breakdown[band.key];
+                            if (!(value > 0)) return null;
+                            const height = (value / yTop) * innerH;
+                            cursor -= height;
+                            return (
+                              <rect
+                                key={band.key}
+                                x={barX}
+                                y={cursor}
+                                width={barWidth}
+                                height={Math.max(height, 0)}
+                                fill={band.color}
+                              >
+                                <title>{`${band.label}: ${formatEuro(value)}`}</title>
+                              </rect>
+                            );
+                          })}
+                        </g>
+                      </>
+                    ) : null}
+                  </g>
+                );
+              })}
+            </svg>
+            <div className="relative mt-2 min-h-10">
+              {layout.map((row) => {
+                const breakdown = row.breakdown;
+                if (!breakdown || breakdown.totalEur <= 0) return null;
+                const active = row.index === monthIndex;
+                return (
+                  <button
+                    key={`total-${row.start}`}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => onMonthSelect(row.index)}
+                    style={{ left: row.x, width: row.width }}
+                    className="absolute top-0 flex cursor-pointer justify-center px-0.5"
+                  >
+                    <SpendColumnTotalBadge active={active}>
+                      {formatEuro(breakdown.totalEur)}
+                    </SpendColumnTotalBadge>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+      {selectedMonth && selectedBreakdown ? (
+        <div className="ml-11 max-w-sm">
+          <table className="w-full border-collapse text-sm">
+            <caption className="mb-1 text-left text-xs text-neutral-500 dark:text-neutral-400">
+              {selectedMonth.label}
+            </caption>
+            <thead>
+              <tr className="text-xs text-neutral-500 dark:text-neutral-400">
+                <th scope="col" className="pb-1 text-left font-normal">
+                  Voce
+                </th>
+                <th scope="col" className="pb-1 text-right font-normal">
+                  Importo
+                </th>
+                <th scope="col" className="pb-1 pl-3 text-right font-normal">
+                  %
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {SPEND_BREAKDOWN_LEGEND.map((band) => {
+                const value = selectedBreakdown[band.key];
+                if (!(value > 0)) return null;
+                return (
+                  <tr key={band.key}>
+                    <th
+                      scope="row"
+                      className="py-0.5 pr-3 text-left font-normal text-neutral-600 dark:text-neutral-400"
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className="inline-block h-2 w-2 rounded-sm"
+                          style={{ backgroundColor: band.color }}
+                          aria-hidden="true"
+                        />
+                        {band.label}
+                      </span>
+                    </th>
+                    <td className="py-0.5 text-right tabular-nums text-foreground">{formatEuro(value)}</td>
+                    <td className="py-0.5 pl-3 text-right tabular-nums text-neutral-500 dark:text-neutral-400">
+                      {formatSpendShare(value, selectedBreakdown.totalEur)}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr className="border-t border-neutral-200 dark:border-neutral-800">
+                <th scope="row" className="py-1 pr-3 text-left font-medium text-foreground">
+                  Totale
+                </th>
+                <td className="py-1 text-right">
+                  <ValueBadge>{formatEuro(selectedBreakdown.totalEur)}</ValueBadge>
+                </td>
+                <td className="py-1 pl-3 text-right tabular-nums font-medium text-foreground">100%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function compareTableEnergyLabel(
+  prezzo: ComparePrezzo,
+  includeEnergy: boolean,
+  punEurKwh: number | null,
+) {
+  if (prezzo === "fisso") return "Prezzo";
+  return includeEnergy && punEurKwh != null ? "Energia" : "Spread";
+}
+
 function CompareTable({
   offers,
   colors,
   profiles,
   focusedId,
+  prezzo,
   punEurKwh,
+  punBySpan,
   monthIndex,
   carico,
   includeEnergy,
@@ -2790,13 +3786,21 @@ function CompareTable({
   colors: readonly string[];
   profiles: Record<string, OfferteCompareProfile>;
   focusedId: string | null;
+  prezzo: ComparePrezzo;
   punEurKwh: number | null;
+  punBySpan: Array<number | null>;
   monthIndex: number;
   carico: CompareCarico | null;
   includeEnergy: boolean;
   spend: CompareSpend | null;
   onFocus: (id: string) => void;
 }) {
+  const energyLabel = compareTableEnergyLabel(prezzo, includeEnergy, punEurKwh);
+  const showPeriodTotals = spend?.includeMarket === true;
+  const maxContractDurata = offers.reduce(
+    (max, offer) => Math.max(max, contractDurataMesi(profiles[offer.id])),
+    12,
+  );
   const rows = [
     {
       label: "Canone mensile",
@@ -2806,9 +3810,9 @@ function CompareTable({
       },
     },
     {
-      label: spend ? "Energia effettiva" : "Energia",
+      label: energyLabel,
       value: (profile: OfferteCompareProfile | undefined) => {
-        if (!profile) return "—";
+        if (!profile || monthIndex >= billHorizon(profile.durataMesi)) return "—";
         if (spend) {
           const priced = offerPriced(profile, monthIndex, punEurKwh, carico, spend);
           return priced ? <ValueBadge>{formatCentesimi(priced.eurKwh)}</ValueBadge> : "—";
@@ -2817,16 +3821,30 @@ function CompareTable({
         return point ? <ValueBadge>{formatCentesimi(point.y)}</ValueBadge> : "—";
       },
     },
-    ...(spend
+    ...(showPeriodTotals
       ? [
           {
-            label: "Spesa del mese",
+            label: "Tot primi 12 mesi",
             value: (profile: OfferteCompareProfile | undefined) => {
-              if (!profile) return "—";
-              const priced = offerPriced(profile, monthIndex, punEurKwh, carico, spend);
-              return priced ? <ValueBadge>{formatEuro(priced.spendEur)}</ValueBadge> : "—";
+              if (!profile || !spend) return "—";
+              const total = offerPeriodTotalSpend(profile, 12, punBySpan, carico, spend);
+              return total != null ? <ValueBadge>{formatEuro(total)}</ValueBadge> : "—";
             },
           },
+          ...(maxContractDurata > 12
+            ? [
+                {
+                  label: `Tot ${formatMonthsCount(maxContractDurata)} mesi`,
+                  value: (profile: OfferteCompareProfile | undefined) => {
+                    if (!profile || !spend) return "—";
+                    const durata = contractDurataMesi(profile);
+                    if (durata <= 12) return "—";
+                    const total = offerPeriodTotalSpend(profile, durata, punBySpan, carico, spend);
+                    return total != null ? <ValueBadge>{formatEuro(total)}</ValueBadge> : "—";
+                  },
+                },
+              ]
+            : []),
         ]
       : []),
     {
@@ -2949,17 +3967,20 @@ function CompareOfferDetail({
   color: string;
 }) {
   const fields = compareOfferFields(item);
+  const custom = isCustomOfferId(item.id);
   const nome = profile?.nome ?? fields.nome;
   const venditore = profile?.venditore ?? fields.venditore;
-  const codOfferta = profile?.codOfferta ?? fields.codOfferta;
-  const source = profile?.source ?? item.source;
-  const period = profile
+  const codOfferta = custom ? null : (profile?.codOfferta ?? fields.codOfferta);
+  const source = custom ? null : (profile?.source ?? item.source);
+  const period = profile && !custom
     ? formatOfferPeriod({
         validFrom: profile.validFrom,
         validTo: profile.validTo,
         durataMesi: profile.durataMesi,
       })
-    : null;
+    : profile && custom && profile.durataMesi
+      ? `${profile.durataMesi} mesi di contratto`
+      : null;
 
   return (
     <article className="rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
@@ -2988,6 +4009,14 @@ function CompareOfferDetail({
             <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{period}</p>
           ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
+            {profile?.tipoCliente ? (
+              <span className="inline-flex items-center gap-1">
+                <ClienteIcon
+                  kind={profile.tipoCliente === "non domestico" ? "non domestico" : "domestico"}
+                />
+                {profile.tipoCliente === "non domestico" ? "Partita IVA" : "Casa"}
+              </span>
+            ) : null}
             {source ? (
               <span className="inline-flex items-center gap-1">
                 <MercatoIcon kind={source} />
@@ -3239,9 +4268,13 @@ function comparePlanLabel(plan: NonNullable<OfferteCompareProfile["plan"]>) {
   return plan;
 }
 
+function formatMonthsCount(value: number) {
+  return new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0 }).format(Math.round(value));
+}
+
 function formatDurata(durataMesi: number | null | undefined) {
   if (durataMesi == null || !Number.isFinite(durataMesi) || durataMesi <= 0) return "12 mesi";
-  return `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0 }).format(Math.round(durataMesi))} mesi`;
+  return `${formatMonthsCount(durataMesi)} mesi`;
 }
 
 function formatEuro(value: number) {

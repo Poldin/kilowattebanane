@@ -32,7 +32,7 @@ const BAR_FILL = [
 const CLUSTERS: {
   key: keyof Pick<
     OfferteClusterStats,
-    "cliente" | "prezzo" | "mercato" | "copertura"
+    "cliente" | "prezzo" | "mercato" | "copertura" | "durata"
   >;
   title: string;
   lead: string;
@@ -57,6 +57,11 @@ const CLUSTERS: {
     title: "Dove vale",
     lead: "Le selettive le vedi col CAP.",
   },
+  {
+    key: "durata",
+    title: "Quanto dura",
+    lead: "I mesi del contratto, come arrivano. Senza scadenza è il −1 del tracciato. Le PLACET durano 12 mesi.",
+  },
 ];
 
 export function OfferteStats({ stats }: { stats: OfferteClusterStats }) {
@@ -78,6 +83,9 @@ export function OfferteStats({ stats }: { stats: OfferteClusterStats }) {
           >
             <p className="sr-only">{cluster.lead}</p>
             <ClusterSplit buckets={stats[cluster.key]} total={stats.total} barSize="thick" />
+            {cluster.key === "cliente" ? (
+              <ResidenzaSplit buckets={stats.residenza} />
+            ) : null}
           </section>
         ))}
         <section aria-label="Che orario">
@@ -388,6 +396,20 @@ function ClusterBucketLegend({
   );
 }
 
+function ResidenzaSplit({ buckets }: { buckets: OfferteClusterBucket[] }) {
+  const total = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
+  if (total === 0) return null;
+
+  return (
+    <div className="mt-4">
+      <p className="sr-only">
+        Delle offerte casa: dedicate solo a residenti, solo a non residenti, o a entrambe.
+      </p>
+      <ClusterSplit buckets={buckets} total={total} barSize="thick" />
+    </div>
+  );
+}
+
 function ClusterSplit({
   buckets,
   total,
@@ -404,7 +426,7 @@ function ClusterSplit({
       label: bucket.label,
       pct: total > 0 ? (bucket.count / total) * 100 : 0,
       color: undefined,
-      fillClass: BAR_FILL[index] ?? BAR_FILL[BAR_FILL.length - 1],
+      fillClass: BAR_FILL[index % BAR_FILL.length] ?? BAR_FILL[BAR_FILL.length - 1],
     }))
     .filter((segment) => segment.pct > 0);
   const dualLegend = barSize !== "default" && visibleBuckets.length === 2;
@@ -614,6 +636,15 @@ function ClusterIcon({
   if (bucketKey === "domestico" || bucketKey === "non domestico" || bucketKey === "condominio") {
     return <ClienteIcon kind={bucketKey} className={className} />;
   }
+  if (bucketKey === "residente") {
+    return <ClienteIcon kind="domestico" className={className} />;
+  }
+  if (bucketKey === "non residente") {
+    return <NonResidenteIcon className={className} />;
+  }
+  if (bucketKey === "entrambe") {
+    return <EntrambeResidenzaIcon className={className} />;
+  }
   if (bucketKey === "fisso") return <PrezzoIcon kind="prezzo fisso" className={className} />;
   if (bucketKey === "canone") return <CanoneIcon className={className} />;
   if (bucketKey === "variabile") {
@@ -628,8 +659,11 @@ function ClusterIcon({
   if (bucketKey === "selettiva") {
     return <CoperturaSelettivaIcon className={className} />;
   }
-  if (bucketKey === "altro") {
+  if (bucketKey === "altro" || bucketKey === "altre") {
     return <AltroIcon className={className} />;
+  }
+  if (bucketKey === "indeterminata" || bucketKey === "mancante" || /^\d+$/.test(bucketKey)) {
+    return <DurataIcon className={className} />;
   }
   if (
     bucketKey === "monoraria" ||
@@ -666,6 +700,59 @@ function CoperturaSelettivaIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
       />
       <circle cx="8" cy="6" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function NonResidenteIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden fill="none">
+      <path
+        d="M3 7.5 8 3.5l5 4V13H10v-3.5H6V13H3V7.5Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4.2 12.6 11.8 5"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function EntrambeResidenzaIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden fill="none">
+      <path
+        d="M2.4 8 5.8 5.2 9.2 8v4.2H7.2V9.6H4.4v2.6H2.4V8Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.1 7.2 10.4 4.5 13.7 7.2v4.2h-2V8.9H9.1"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DurataIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden fill="none">
+      <circle cx="8" cy="8" r="5.25" stroke="currentColor" strokeWidth="1.35" />
+      <path
+        d="M8 5.1V8.2l2.1 1.3"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

@@ -28,6 +28,8 @@ import type { MlComponentInput } from "@/lib/offerte/estimate";
 const SCONTO_RANK_CONSUMO_KWH = 2700;
 const SCONTO_RANK_TOP = 5;
 const PLACET_DURATA_MESI = 12;
+/** How many duration slices fit on one row. Extra values share the last bucket. */
+const DURATA_ROW_BUCKETS = 6;
 
 export type { OfferteClusterStats, OfferteHeadlineStats } from "@/lib/offerte/public-types";
 
@@ -111,9 +113,11 @@ type ClusterRow = {
   denominazione: string | null;
   url: string | null;
   cliente: string;
+  residenza: string;
   prezzo: string;
   coverage: string;
   fascia: string;
+  durata: string;
 };
 
 export const loadOfferteHeadlineStats = unstable_cache(
@@ -152,22 +156,27 @@ export const loadOfferteClusterStats = unstable_cache(
     ]);
 
     const rows: ClusterRow[] = [
-      ...placetRows.map((row) => ({
-        source: "placet" as const,
-        p_iva: row.p_iva,
-        last_seen_on: row.last_seen_on,
-        denominazione: row.denominazione,
-        url: row.url_sito_venditore,
-        cliente: clienteKey(row.tipo_cliente),
-        prezzo: prezzoKey(row.tipo_offerta),
-        coverage: coverageKey(row.coverage),
-        fascia: fasciaKey({
-          source: "placet",
-          tipoOfferta: row.tipo_offerta ?? "",
-          codOfferta: row.cod_offerta,
-          plan: placetFacts(row).plan,
-        }),
-      })),
+      ...placetRows.map((row) => {
+        const cliente = clienteKey(row.tipo_cliente);
+        return {
+          source: "placet" as const,
+          p_iva: row.p_iva,
+          last_seen_on: row.last_seen_on,
+          denominazione: row.denominazione,
+          url: row.url_sito_venditore,
+          cliente,
+          residenza: cliente === "domestico" ? "entrambe" : "altro",
+          prezzo: prezzoKey(row.tipo_offerta),
+          coverage: coverageKey(row.coverage),
+          durata: String(PLACET_DURATA_MESI),
+          fascia: fasciaKey({
+            source: "placet",
+            tipoOfferta: row.tipo_offerta ?? "",
+            codOfferta: row.cod_offerta,
+            plan: placetFacts(row).plan,
+          }),
+        };
+      }),
       ...mlRows.map((row) => ({
         source: "ml" as const,
         p_iva: row.p_iva,
@@ -175,8 +184,10 @@ export const loadOfferteClusterStats = unstable_cache(
         denominazione: null,
         url: row.url_sito_venditore,
         cliente: clienteKey(row.tipo_cliente),
+        residenza: residenzaKey(row.domestico_residente),
         prezzo: prezzoKey(row.tipo_offerta),
         coverage: coverageKey(row.coverage),
+        durata: durataKey(row.durata),
         fascia: fasciaKey({
           source: "ml",
           tipoOfferta: row.tipo_offerta ?? "",
@@ -210,6 +221,16 @@ export const loadOfferteClusterStats = unstable_cache(
           ["altro", "Altro"],
         ],
       ),
+      residenza: buckets(
+        rows.filter((row) => row.cliente === "domestico"),
+        (row) => row.residenza,
+        [
+          ["residente", "Residente"],
+          ["non residente", "Non residente"],
+          ["entrambe", "Entrambe"],
+          ["altro", "Non classificata"],
+        ],
+      ),
       prezzo: buckets(
         rows,
         (row) => row.prezzo,
@@ -236,11 +257,12 @@ export const loadOfferteClusterStats = unstable_cache(
           ["altro", "Altro"],
         ],
       ),
+      durata: durataBuckets(rows),
       fascia: fasciaBuckets(rows),
       fornitori: vendorStats(rows),
     };
   },
-  ["offerte-cluster-stats-v15"],
+  ["offerte-cluster-stats-v18"],
   { revalidate: OFFERTE_CACHE_REVALIDATE, tags: [OFFERTE_CACHE_TAG] },
 );
 
@@ -306,6 +328,61 @@ function headlineFromRows(
         : (row.tipo_offerta ?? "").includes("variabile"),
     ).length,
   };
+}
+
+function durataKey(value: number | null) {
+  if (value == null || !Number.isFinite(value) || value === 0) return "mancante";
+  if (value < 0) return "indeterminata";
+  return String(Math.round(value));
+}
+
+function durataBuckets(rows: ClusterRow[]): OfferteClusterBucket[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) counts.set(row.durata, (counts.get(row.durata) ?? 0) + 1);
+
+  const ranked = [...counts.entries()]
+    .map(([key, count]) => ({ key, count, months: durataMonths(key) }))
+    .sort((a, b) => b.count - a.count || durataSort(a, b));
+
+  const kept =
+    ranked.length > DURATA_ROW_BUCKETS ? ranked.slice(0, DURATA_ROW_BUCKETS - 1) : ranked;
+  const folded = ranked.length > DURATA_ROW_BUCKETS ? ranked.slice(DURATA_ROW_BUCKETS - 1) : [];
+
+  const buckets = kept.map((item) => ({
+    key: item.key,
+    label: durataLabel(item.key, item.months),
+    count: item.count,
+  }));
+
+  const altre = folded.reduce((sum, item) => sum + item.count, 0);
+  if (altre > 0) buckets.push({ key: "altre", label: "Altre durate", count: altre });
+  return buckets.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "it"));
+}
+
+function durataMonths(key: string) {
+  if (key === "indeterminata" || key === "mancante") return null;
+  const months = Number(key);
+  return Number.isFinite(months) ? months : null;
+}
+
+function durataSort(
+  a: { key: string; months: number | null },
+  b: { key: string; months: number | null },
+) {
+  return durataOrder(a) - durataOrder(b) || (a.months ?? 0) - (b.months ?? 0);
+}
+
+function durataOrder(item: { key: string; months: number | null }) {
+  if (item.months != null) return 0;
+  if (item.key === "indeterminata") return 1;
+  return 2;
+}
+
+function durataLabel(key: string, months: number | null) {
+  if (key === "indeterminata") return "Senza scadenza";
+  if (key === "mancante") return "Non indicata";
+  if (months === 1) return "1 mese";
+  return `${months} mesi`;
 }
 
 function fasciaBuckets(rows: ClusterRow[]): OfferteFasciaBucket[] {
@@ -1065,6 +1142,14 @@ function median(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function residenzaKey(value: string | null) {
+  const code = padCode(value);
+  if (code === "01") return "residente";
+  if (code === "02") return "non residente";
+  if (code === "03") return "entrambe";
+  return "altro";
 }
 
 function clienteKey(tipo: string | null) {

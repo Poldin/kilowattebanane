@@ -29,6 +29,11 @@ export function addIsoMonths(isoDate: string, months: number) {
   return `${utc.getUTCFullYear()}-${String(utc.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
+/** Default offer start: always the 1st of next calendar month (Rome). */
+export function defaultOfferStartDate(now = new Date()) {
+  return addIsoMonths(monthStart(romeToday(now)), 1);
+}
+
 export function calendarMonthStarts(fromIso: string, count: number) {
   const start = monthStart(fromIso);
   return Array.from({ length: count }, (_, i) => addIsoMonths(start, i));

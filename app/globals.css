@@ -314,6 +314,55 @@ body {
   }
 }
 
+.own-offer-dialog {
+  position: fixed;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.own-offer-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.own-offer-dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+@media (min-width: 640px) {
+  .own-offer-dialog[open] {
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    width: min(48rem, 100vw);
+    min-width: 0;
+    height: 90vh;
+    min-height: 90vh;
+    max-width: 48rem;
+    max-height: none;
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid #e5e5e5;
+    border-radius: 0.75rem;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (min-width: 640px) and (prefers-color-scheme: dark) {
+  .own-offer-dialog[open] {
+    border-color: #262626;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .insight-skeleton,
   .insight-content-in {

@@ -19,7 +19,13 @@ export const DEFAULT_FASCIA_SHARES = { f1: 0.33, f2: 0.31, f3: 0.36 } as const;
 
 export type FasciaId = "f1" | "f2" | "f3";
 
+const EASTER_ISO = new Map<number, string>();
+const WEEKDAY_MONDAY0 = new Map<string, number>();
+const ITALIAN_HOLIDAY = new Map<string, boolean>();
+
 export function easterSundayIso(year: number) {
+  const cached = EASTER_ISO.get(year);
+  if (cached) return cached;
   const a = year % 19;
   const b = Math.floor(year / 100);
   const c = year % 100;
@@ -34,7 +40,9 @@ export function easterSundayIso(year: number) {
   const m = Math.floor((a + 11 * h + 22 * l) / 451);
   const month = Math.floor((h + l - 7 * m + 114) / 31);
   const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  EASTER_ISO.set(year, iso);
+  return iso;
 }
 
 export function addDaysIso(isoDate: string, days: number) {
@@ -44,22 +52,28 @@ export function addDaysIso(isoDate: string, days: number) {
 }
 
 export function isItalianHoliday(isoDate: string) {
+  const cached = ITALIAN_HOLIDAY.get(isoDate);
+  if (cached !== undefined) return cached;
   const md = isoDate.slice(5);
-  if (FIXED_HOLIDAYS.has(md)) return true;
-  const year = Number(isoDate.slice(0, 4));
-  const easter = easterSundayIso(year);
-  return isoDate === addDaysIso(easter, 1);
+  const hit =
+    FIXED_HOLIDAYS.has(md) ||
+    isoDate === addDaysIso(easterSundayIso(Number(isoDate.slice(0, 4))), 1);
+  ITALIAN_HOLIDAY.set(isoDate, hit);
+  return hit;
 }
 
 export function weekdayMonday0(isoDate: string) {
+  const cached = WEEKDAY_MONDAY0.get(isoDate);
+  if (cached !== undefined) return cached;
   const [y, m, d] = isoDate.split("-").map(Number);
-  return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+  const value = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+  WEEKDAY_MONDAY0.set(isoDate, value);
+  return value;
 }
 
 export function fasciaForHour(isoDate: string, hour: number): FasciaId {
   if (isItalianHoliday(isoDate) || weekdayMonday0(isoDate) === 6) return "f3";
-  const sat = weekdayMonday0(isoDate) === 5;
-  if (sat) {
+  if (weekdayMonday0(isoDate) === 5) {
     if (hour >= 7 && hour < 23) return "f2";
     return "f3";
   }

@@ -131,6 +131,23 @@ export const OFFERTE_SUGGEST_CATEGORY_LABELS: Record<OfferteSuggestCategory, str
   nome: "Nome offerta",
 };
 
+export type OfferteCatalogFilters = {
+  cliente?: OfferteCliente;
+  mercato?: OfferteMercato;
+  prezzo?: OffertePrezzo;
+  fascia?: OfferteFascia;
+  residente?: boolean;
+  pagamento?: string[];
+  attivazione?: string[];
+  contratto?: string[];
+};
+
+export type OfferteOfferTraits = {
+  tipoCliente: string | null;
+  tipoOfferta: string;
+  plan: "monoraria" | "bioraria" | "fasce" | "dinamica" | null;
+};
+
 export type OfferteSuggestItem = {
   id: string;
   category: OfferteSuggestCategory;
@@ -140,6 +157,9 @@ export type OfferteSuggestItem = {
   venditoreKey: string | null;
   venditore: string | null;
   source: "placet" | "ml" | null;
+  tipoCliente?: string | null;
+  tipoOfferta?: string | null;
+  plan?: OfferteOfferTraits["plan"];
 };
 
 export type OfferteSuggestResult = {
@@ -153,6 +173,9 @@ export type OfferteExploreHit = {
   nome: string;
   venditore: string;
   venditoreKey: string;
+  tipoCliente: string | null;
+  tipoOfferta: string;
+  plan: OfferteOfferTraits["plan"];
 };
 
 export type OfferteExploreResult = {
@@ -330,9 +353,11 @@ export type OffertePrezziStats = {
 
 export type OfferteClusterStats = OfferteHeadlineStats & {
   cliente: OfferteClusterBucket[];
+  residenza: OfferteClusterBucket[];
   prezzo: OfferteClusterBucket[];
   mercato: OfferteClusterBucket[];
   copertura: OfferteClusterBucket[];
+  durata: OfferteClusterBucket[];
   fascia: OfferteFasciaBucket[];
   sconti: OfferteScontoStats;
   pareto: OfferteParetoStats;

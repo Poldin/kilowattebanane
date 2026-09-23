@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import { FasciaPlanIcon } from "@/components/offerte/FasciaPlanIcon";
 import {
   CanoneIcon,
@@ -9,8 +8,9 @@ import {
   MercatoIcon,
   PlacePinIcon,
   PrezzoIcon,
+  ResidenzaIcon,
+  TuttiIcon,
   clienteLabel,
-  mercatoLabel,
   prezzoLabel,
 } from "@/components/offerte/OfferteTraitIcons";
 import {
@@ -20,58 +20,19 @@ import {
   parsePortalFilterIds,
 } from "@/lib/offerte/portal-labels";
 import {
-  PORTALE_OFFERTE_URL,
   type CapPlace,
+  type OfferteCatalogFilters,
   type OfferteCliente,
-  type OfferteConsumoProfilo,
   type OfferteFascia,
   type OfferteHeadlineStats,
   type OfferteMercato,
   type OffertePrezzo,
 } from "@/lib/offerte/public-types";
-import {
-  POTENZA_STANDARD_CASA_KW,
-  clampPotenzaKw,
-  formatPotenzaKw,
-  potenzeImpegnateKw,
-} from "@/lib/offerte/potenza";
 import { OfferteCompareSearch } from "@/components/offerte/OfferteCompareSearch";
-import { useRotatingCapPlaceholder } from "@/lib/use-rotating-cap-placeholder";
-
-type ExplorerTab = "cerca" | "compara";
 
 const PREF_KEY = "kilowattebanane.offerte.v1";
-const STATS_HREF = "/offer-stats";
-const CONSUMO_PRESETS = [1200, 1800, 2700, 3500, 4500] as const;
 const STRIP_ARROW =
   "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-lg leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900";
-
-type LockableId =
-  | "cliente"
-  | "residente"
-  | "prezzo"
-  | "fascia"
-  | "potenza"
-  | "consumo"
-  | "mercato";
-
-const LOCKABLE_IDS: LockableId[] = [
-  "cliente",
-  "residente",
-  "prezzo",
-  "fascia",
-  "potenza",
-  "consumo",
-  "mercato",
-];
-
-const DEFAULT_LOCKED: LockableId[] = [
-  "cliente",
-  "residente",
-  "prezzo",
-  "potenza",
-  "consumo",
-];
 
 type Prefs = {
   cap: string;
@@ -79,14 +40,10 @@ type Prefs = {
   mercato: OfferteMercato;
   prezzo: OffertePrezzo;
   fascia: OfferteFascia;
-  consumoKwh: number;
-  potenzaKw: number;
   residente: boolean;
-  profilo: OfferteConsumoProfilo;
   pagamento: string[];
   attivazione: string[];
   contratto: string[];
-  locked: LockableId[];
 };
 
 const DEFAULTS: Prefs = {
@@ -95,14 +52,10 @@ const DEFAULTS: Prefs = {
   mercato: "ml",
   prezzo: "prezzo variabile",
   fascia: "monoraria",
-  consumoKwh: 2700,
-  potenzaKw: POTENZA_STANDARD_CASA_KW,
   residente: true,
-  profilo: "standard",
   pagamento: [],
   attivazione: [],
   contratto: [],
-  locked: DEFAULT_LOCKED,
 };
 
 type MockOffer = {
@@ -149,39 +102,18 @@ const MOCK_OFFERS: MockOffer[] = [
   },
 ];
 
-function offerComparePath(cap: string, tab: ExplorerTab) {
-  const params = new URLSearchParams();
-  if (cap.length === 5) params.set("cap", cap);
-  if (tab === "compara") params.set("tab", "compara");
-  const qs = params.toString();
-  return qs ? `/offer-compare?${qs}` : "/offer-compare";
-}
-
 export function OfferteExplorer({
   stats,
-  initialCap = "",
-  initialTab = "cerca",
   className,
 }: {
   stats: OfferteHeadlineStats;
-  initialCap?: string;
-  initialTab?: ExplorerTab;
   className?: string;
 }) {
-  const router = useRouter();
-  const capInputRef = useRef<HTMLInputElement>(null);
-  const [prefs, setPrefs] = useState<Prefs>({
-    ...DEFAULTS,
-    cap: initialCap.replace(/\D/g, "").slice(0, 5),
-  });
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULTS);
   const [capError, setCapError] = useState<string | null>(null);
   const [places, setPlaces] = useState<CapPlace[]>([]);
   const [lookupLoading, setLookupLoading] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [tab, setTab] = useState<ExplorerTab>(initialTab === "compara" ? "compara" : "cerca");
-  const [capFocused, setCapFocused] = useState(false);
-  const { text: capGhost, isTyping: capGhostTyping } = useRotatingCapPlaceholder();
-  const showCapGhost = prefs.cap.length === 0 && !capFocused;
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
 
   useEffect(() => {
     try {
@@ -194,60 +126,49 @@ export function OfferteExplorer({
             ? parsed.cliente
             : prev.cliente;
         const prezzo =
-          parsed.prezzo === "prezzo fisso" || parsed.prezzo === "prezzo variabile"
+          parsed.prezzo === "prezzo fisso" ||
+          parsed.prezzo === "prezzo variabile" ||
+          parsed.prezzo === "tutti"
             ? parsed.prezzo
             : DEFAULTS.prezzo;
         const fascia =
           parsed.fascia === "monoraria" ||
           parsed.fascia === "bioraria" ||
           parsed.fascia === "fasce" ||
-          parsed.fascia === "dinamica"
+          parsed.fascia === "dinamica" ||
+          parsed.fascia === "tutti"
             ? parsed.fascia
             : DEFAULTS.fascia;
         const mercato =
           parsed.mercato === "placet" || parsed.mercato === "ml" || parsed.mercato === "tutti"
-            ? parsed.mercato === "tutti"
-              ? DEFAULTS.mercato
-              : parsed.mercato
+            ? parsed.mercato
             : DEFAULTS.mercato;
+        const fasciaResolved =
+          prezzo === "prezzo fisso" && fascia === "dinamica" ? "monoraria" : fascia;
         return {
           ...prev,
-          cap: (initialCap || String(parsed.cap ?? "")).replace(/\D/g, "").slice(0, 5),
+          cap: String(parsed.cap ?? "").replace(/\D/g, "").slice(0, 5),
           cliente,
           residente: parsed.residente !== false,
-          profilo: parsed.profilo === "oculato" ? "oculato" : "standard",
           prezzo,
-          fascia,
+          fascia: fasciaResolved,
           mercato,
           pagamento: parsePortalFilterIds(parsed.pagamento, PAGAMENTO_FILTERS),
           attivazione: parsePortalFilterIds(parsed.attivazione, ATTIVAZIONE_FILTERS),
           contratto: parsePortalFilterIds(parsed.contratto, CONTRATTO_FILTERS),
-          consumoKwh: Number.isFinite(Number(parsed.consumoKwh))
-            ? Math.min(8000, Math.max(800, Number(parsed.consumoKwh)))
-            : prev.consumoKwh,
-          potenzaKw: clampPotenzaKw(Number(parsed.potenzaKw ?? prev.potenzaKw), cliente),
-          locked: parseLocked(parsed.locked),
         };
       });
     } catch {
       /* ignore */
+    } finally {
+      setPrefsHydrated(true);
     }
-  }, [initialCap]);
+  }, []);
 
   useEffect(() => {
+    if (!prefsHydrated) return;
     localStorage.setItem(PREF_KEY, JSON.stringify(prefs));
-  }, [prefs]);
-
-  useEffect(() => {
-    setTab(initialTab === "compara" ? "compara" : "cerca");
-  }, [initialTab]);
-
-  useEffect(() => {
-    const activeTab: ExplorerTab = tab === "compara" ? "compara" : "cerca";
-    const fromUrl: ExplorerTab = initialTab === "compara" ? "compara" : "cerca";
-    if (offerComparePath(prefs.cap, activeTab) === offerComparePath(initialCap, fromUrl)) return;
-    router.replace(offerComparePath(prefs.cap, activeTab), { scroll: false });
-  }, [initialCap, initialTab, prefs.cap, router, tab]);
+  }, [prefs, prefsHydrated]);
 
   useEffect(() => {
     if (prefs.cap.length !== 5) {
@@ -288,11 +209,6 @@ export function OfferteExplorer({
     };
   }, [prefs.cap]);
 
-  useEffect(() => {
-    if (prefs.cap.length === 5) return;
-    capInputRef.current?.focus();
-  }, [prefs.cap.length]);
-
   const placeLabel = useMemo(() => {
     const names = [...new Set(places.map((place) => place.comuneNome))];
     if (names.length === 0) return null;
@@ -300,149 +216,51 @@ export function OfferteExplorer({
     return region ? `${names.join(", ")} · ${region}` : names.join(", ");
   }, [places]);
 
-  const capReady = prefs.cap.length === 5 && places.length > 0 && !capError;
-  const clusterCount = useMemo(() => mockClusterCount(stats.total, prefs), [prefs, stats.total]);
-  const kept = MOCK_OFFERS.length;
-  const energyName = prefs.prezzo === "prezzo fisso" ? "prezzo dell’energia" : "spread sul PUN";
+  const filterQuery = useMemo<OfferteCatalogFilters>(
+    () => ({
+      cliente: prefs.cliente,
+      mercato: prefs.mercato,
+      prezzo: prefs.prezzo,
+      fascia: prefs.fascia,
+      residente: prefs.cliente === "domestico" ? prefs.residente : undefined,
+      pagamento: prefs.pagamento,
+      attivazione: prefs.attivazione,
+      contratto: prefs.contratto,
+    }),
+    [
+      prefs.attivazione,
+      prefs.cliente,
+      prefs.contratto,
+      prefs.fascia,
+      prefs.mercato,
+      prefs.pagamento,
+      prefs.prezzo,
+      prefs.residente,
+    ],
+  );
 
   return (
-    <section className={className ?? undefined}>
-      <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">
-        Dati{" "}
-        <a
-          href={PORTALE_OFFERTE_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="underline decoration-neutral-300 underline-offset-2 transition-colors hover:text-foreground dark:decoration-neutral-600"
-        >
-          Portale Offerte
-        </a>
-        <span className="normal-case tracking-normal"> · open data CC-BY</span>
-      </p>
-      <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        <strong className="font-medium text-foreground">{formatIt(stats.total)} offerte</strong>
-        {" · "}
-        {formatIt(stats.venditori)} venditori
-        {" · "}
-        <a
-          href={STATS_HREF}
-          className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600"
-        >
-          statistiche
-        </a>
-      </p>
-
-      <div
-        role="tablist"
-        aria-label="Modalità confronto offerte"
-        className="mt-5 flex gap-1 border-b border-neutral-200 dark:border-neutral-800"
-      >
-        {(
-          [
-            ["cerca", "cerca"],
-            ["compara", "compara"],
-          ] as const
-        ).map(([id, label]) => {
-          const active = tab === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              aria-controls={`offerte-panel-${id}`}
-              id={`offerte-tab-${id}`}
-              onClick={() => setTab(id)}
-              className={
-                active
-                  ? "-mb-px border-b-2 border-foreground px-3 py-2 text-sm font-medium text-foreground"
-                  : "px-3 py-2 text-sm font-medium text-neutral-500 transition-colors hover:text-foreground dark:text-neutral-400 dark:hover:text-neutral-200"
-              }
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === "cerca" ? (
-        <div
-          id="offerte-panel-cerca"
-          role="tabpanel"
-          aria-labelledby="offerte-tab-cerca"
-          className="mt-8"
-        >
-          <label htmlFor="offerte-cap" className="sr-only">
-            CAP della fornitura
-          </label>
-          <div className="relative">
-            {showCapGhost ? (
-              <span
-                className="pointer-events-none absolute inset-0 text-3xl font-semibold tracking-[0.14em] text-neutral-400 sm:text-4xl"
-                aria-hidden
-              >
-                {capGhost}
-                {capGhostTyping ? (
-                  <span
-                    className="ml-px inline-block h-[0.9em] w-0.5 translate-y-[0.12em] bg-neutral-400 align-baseline opacity-70"
-                    aria-hidden
-                  />
-                ) : null}
-              </span>
-            ) : null}
-            <input
-              ref={capInputRef}
-              id="offerte-cap"
-              inputMode="numeric"
-              autoComplete="postal-code"
-              maxLength={5}
-              placeholder=""
-              value={prefs.cap}
-              onFocus={() => setCapFocused(true)}
-              onBlur={() => setCapFocused(false)}
-              onChange={(event) => {
-                const next = event.target.value.replace(/\D/g, "").slice(0, 5);
-                setPrefs((prev) => ({ ...prev, cap: next }));
-                setCapError(null);
-                setFiltersOpen(false);
-              }}
-              className="relative w-full border-0 bg-transparent p-0 text-3xl font-semibold tracking-[0.14em] text-foreground outline-none sm:text-4xl"
-            />
-          </div>
-          {placeLabel ? (
-            <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-400">
-              <PlacePinIcon className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{placeLabel}</span>
-            </p>
-          ) : capError ? (
-            <p className="mt-0.5 text-sm text-red-600 dark:text-red-400">{capError}</p>
-          ) : lookupLoading && prefs.cap.length === 5 ? (
-            <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">Cerco il comune…</p>
-          ) : (
-            <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
-              Inserisci il CAP qui sopra👆
-            </p>
-          )}
-
-          {prefs.cap.length === 5 ? (
-            <FilterBar
-              prefs={prefs}
-              setPrefs={setPrefs}
-              open={filtersOpen}
-              setOpen={setFiltersOpen}
-            />
-          ) : null}
-        </div>
-      ) : (
-        <div
-          id="offerte-panel-compara"
-          role="tabpanel"
-          aria-labelledby="offerte-tab-compara"
-          className="mt-8"
-        >
-          <OfferteCompareSearch />
-        </div>
-      )}
+    <section className={className ? `min-w-0 ${className}` : "min-w-0"}>
+      <OfferteCompareSearch
+        headlineTotal={stats.total}
+        filterQuery={filterQuery}
+        filtersReady={prefsHydrated}
+        filters={
+          <FilterBar
+            prefs={prefs}
+            setPrefs={setPrefs}
+            showCap
+            placeLabel={placeLabel}
+            capError={capError}
+            capLookupLoading={lookupLoading}
+            onCapChange={(cap) => {
+              setPrefs((prev) => ({ ...prev, cap }));
+              setCapError(null);
+            }}
+            className="mb-4"
+          />
+        }
+      />
     </section>
   );
 }
@@ -450,16 +268,27 @@ export function OfferteExplorer({
 function FilterBar({
   prefs,
   setPrefs,
-  open,
-  setOpen,
+  showCap = false,
+  placeLabel = null,
+  capError = null,
+  capLookupLoading = false,
+  onCapChange,
+  className,
 }: {
   prefs: Prefs;
   setPrefs: (update: Prefs | ((prev: Prefs) => Prefs)) => void;
-  open: boolean;
-  setOpen: (open: boolean) => void;
+  showCap?: boolean;
+  placeLabel?: string | null;
+  capError?: string | null;
+  capLookupLoading?: boolean;
+  onCapChange?: (cap: string) => void;
+  className?: string;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const capFieldRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [focusCap, setFocusCap] = useState(false);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
 
@@ -477,6 +306,12 @@ function FilterBar({
       document.removeEventListener("keydown", onKey);
     };
   }, [setOpen]);
+
+  useEffect(() => {
+    if (!open || !focusCap) return;
+    capFieldRef.current?.focus();
+    setFocusCap(false);
+  }, [open, focusCap]);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -497,132 +332,124 @@ function FilterBar({
       el.removeEventListener("scroll", sync);
       observer.disconnect();
     };
-  }, [prefs.cliente]);
+  }, [
+    open,
+    prefs.attivazione,
+    prefs.cap,
+    prefs.cliente,
+    prefs.contratto,
+    prefs.fascia,
+    prefs.mercato,
+    prefs.pagamento,
+    prefs.prezzo,
+    showCap,
+  ]);
 
   function scrollStrip(dir: -1 | 1) {
     scrollerRef.current?.scrollBy({ left: dir * 200, behavior: "smooth" });
   }
 
-  function isLocked(id: LockableId) {
-    return prefs.locked.includes(id);
-  }
-
-  function toggleLock(id: LockableId) {
-    setPrefs((prev) => ({
-      ...prev,
-      locked: prev.locked.includes(id)
-        ? prev.locked.filter((value) => value !== id)
-        : [...prev.locked, id],
-    }));
-  }
-
   return (
-    <div ref={rootRef} className="mt-5">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+    <div ref={rootRef} className={`min-w-0 max-w-full ${className ?? "mt-5"}`}>
+      {open ? null : (
+        <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
             disabled={!canLeft}
             aria-label="Scorri i filtri a sinistra"
             onClick={() => scrollStrip(-1)}
-            className={STRIP_ARROW}
+            className={`${STRIP_ARROW} hidden sm:inline-flex`}
           >
             ‹
           </button>
+          <div
+            ref={scrollerRef}
+            className="min-w-0 flex-1 overflow-x-auto scrollbar-none"
+          >
+            <div className="flex w-max items-center gap-1.5 pr-1">
+              {showCap ? (
+                <BarChip
+                  onClick={() => {
+                    setOpen(true);
+                    setFocusCap(true);
+                  }}
+                  ariaLabel={prefs.cap ? `CAP ${prefs.cap}` : "CAP della fornitura"}
+                  icon={<PlacePinIcon />}
+                >
+                  <span className={capError ? "text-red-600 dark:text-red-400" : undefined}>
+                    {prefs.cap || "CAP"}
+                  </span>
+                </BarChip>
+              ) : null}
+              <BarChip
+                onClick={() => setOpen(true)}
+                icon={<ClienteIcon kind={prefs.cliente} />}
+              >
+                {clienteLabel(prefs.cliente)}
+              </BarChip>
+              {prefs.cliente === "domestico" ? (
+                <BarChip
+                  onClick={() => setOpen(true)}
+                  icon={<ResidenzaIcon residente={prefs.residente} />}
+                >
+                  {prefs.residente ? "Residente" : "Non residente"}
+                </BarChip>
+              ) : null}
+              <BarChip
+                onClick={() => setOpen(true)}
+                icon={<PrezzoIcon kind={prefs.prezzo} />}
+              >
+                {prezzoBarLabel(prefs.prezzo)}
+              </BarChip>
+              <BarChip
+                onClick={() => setOpen(true)}
+                icon={
+                  prefs.fascia === "tutti" ? (
+                    <TuttiIcon />
+                  ) : (
+                    <FasciaPlanIcon plan={prefs.fascia} />
+                  )
+                }
+              >
+                {fasciaBarLabel(prefs.fascia)}
+              </BarChip>
+              <BarChip
+                onClick={() => setOpen(true)}
+                icon={<MercatoIcon kind={prefs.mercato} />}
+              >
+                {mercatoBarLabel(prefs.mercato)}
+              </BarChip>
+              <BarChip
+                onClick={() => setOpen(true)}
+                icon={prefs.pagamento.length === 0 ? <TuttiIcon /> : undefined}
+              >
+                {multiFilterBarLabel("Pagamento", prefs.pagamento, PAGAMENTO_FILTERS)}
+              </BarChip>
+              <BarChip
+                onClick={() => setOpen(true)}
+                icon={prefs.attivazione.length === 0 ? <TuttiIcon /> : undefined}
+              >
+                {multiFilterBarLabel("Attivazione", prefs.attivazione, ATTIVAZIONE_FILTERS)}
+              </BarChip>
+              <BarChip
+                onClick={() => setOpen(true)}
+                icon={prefs.contratto.length === 0 ? <TuttiIcon /> : undefined}
+              >
+                {multiFilterBarLabel("Quando si attiva", prefs.contratto, CONTRATTO_FILTERS)}
+              </BarChip>
+            </div>
+          </div>
           <button
             type="button"
             disabled={!canRight}
             aria-label="Scorri i filtri a destra"
             onClick={() => scrollStrip(1)}
-            className={STRIP_ARROW}
+            className={`${STRIP_ARROW} hidden sm:inline-flex`}
           >
             ›
           </button>
         </div>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls="offerte-filtri"
-          onClick={() => setOpen(!open)}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-neutral-900 px-3 text-sm font-medium text-white transition-opacity hover:opacity-90 dark:bg-neutral-100 dark:text-neutral-900"
-        >
-          {open ? "chiudi filtri" : "apri filtri"}
-          <svg
-            aria-hidden
-            viewBox="0 0 16 16"
-            className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out ${
-              open ? "rotate-180" : ""
-            }`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-          >
-            <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </div>
-      <div
-        ref={scrollerRef}
-        className="overflow-x-auto scrollbar-none"
-      >
-        <div className="flex w-max items-center gap-1.5 pr-1">
-            <BarChip
-              onClick={() => setOpen(true)}
-              locked={isLocked("cliente")}
-              onLock={() => toggleLock("cliente")}
-              icon={<ClienteIcon kind={prefs.cliente} />}
-            >
-              {clienteLabel(prefs.cliente)}
-            </BarChip>
-            {prefs.cliente === "domestico" ? (
-              <BarChip
-                onClick={() => setOpen(true)}
-                locked={isLocked("residente")}
-                onLock={() => toggleLock("residente")}
-              >
-                {prefs.residente ? "Residente" : "Non residente"}
-              </BarChip>
-            ) : null}
-            <BarChip
-              onClick={() => setOpen(true)}
-              locked={isLocked("prezzo")}
-              onLock={() => toggleLock("prezzo")}
-              icon={<PrezzoIcon kind={prefs.prezzo} />}
-            >
-              {prezzoLabel(prefs.prezzo)}
-            </BarChip>
-            <BarChip
-              onClick={() => setOpen(true)}
-              locked={isLocked("fascia")}
-              onLock={() => toggleLock("fascia")}
-              icon={prefs.fascia === "tutti" ? undefined : <FasciaPlanIcon plan={prefs.fascia} />}
-            >
-              {fasciaBarLabel(prefs.fascia)}
-            </BarChip>
-            <BarChip
-              onClick={() => setOpen(true)}
-              locked={isLocked("potenza")}
-              onLock={() => toggleLock("potenza")}
-            >
-              {formatPotenzaKw(prefs.potenzaKw)}
-            </BarChip>
-            <BarChip
-              onClick={() => setOpen(true)}
-              locked={isLocked("consumo")}
-              onLock={() => toggleLock("consumo")}
-            >
-              {formatIt(prefs.consumoKwh)} kWh
-            </BarChip>
-            <BarChip
-              onClick={() => setOpen(true)}
-              locked={isLocked("mercato")}
-              onLock={() => toggleLock("mercato")}
-              icon={<MercatoIcon kind={prefs.mercato} />}
-            >
-              {mercatoBarLabel(prefs.mercato)}
-            </BarChip>
-          </div>
-        </div>
+      )}
 
       <div
         className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
@@ -636,66 +463,96 @@ function FilterBar({
               open ? "opacity-100" : "opacity-0"
             }`}
           >
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Lucchetto chiuso: resta così nel confronto. Aperto: proviamo le combinazioni.
-            </p>
-            <MenuPanel
-              legend="Chi sei"
-              locked={isLocked("cliente")}
-              onLock={() => toggleLock("cliente")}
+            <button
+              type="button"
+              aria-label="Chiudi filtri"
+              onClick={() => setOpen(false)}
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 py-1 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
             >
+              <span aria-hidden className="text-base leading-none">
+                ×
+              </span>
+              Chiudi
+            </button>
+            {showCap ? (
+              <div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">CAP</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    ref={capFieldRef}
+                    id="offerte-compare-cap"
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                    maxLength={5}
+                    placeholder="CAP"
+                    aria-label="CAP della fornitura"
+                    value={prefs.cap}
+                    onChange={(event) => {
+                      const next = event.target.value.replace(/\D/g, "").slice(0, 5);
+                      if (onCapChange) onCapChange(next);
+                      else setPrefs((prev) => ({ ...prev, cap: next }));
+                    }}
+                    className="w-[5.5rem] rounded-md border border-neutral-200 bg-transparent px-2.5 py-1.5 text-sm tracking-[0.12em] text-foreground outline-none focus:border-neutral-400 dark:border-neutral-800 dark:focus:border-neutral-600"
+                  />
+                  {placeLabel ? (
+                    <p className="flex min-w-0 items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-400">
+                      <PlacePinIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{placeLabel}</span>
+                    </p>
+                  ) : capError ? (
+                    <p className="text-sm text-red-600 dark:text-red-400">{capError}</p>
+                  ) : capLookupLoading && prefs.cap.length === 5 ? (
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400">Cerco il comune…</p>
+                  ) : (
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                      Cinque cifre del comune di fornitura
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+            <MenuPanel legend="Chi sei">
               <Chip
                 active={prefs.cliente === "domestico"}
                 icon={<ClienteIcon kind="domestico" />}
-                onClick={() =>
-                  setPrefs((prev) => ({
-                    ...prev,
-                    cliente: "domestico",
-                    potenzaKw: clampPotenzaKw(prev.potenzaKw, "domestico"),
-                  }))
-                }
+                onClick={() => setPrefs((prev) => ({ ...prev, cliente: "domestico" }))}
               >
                 Casa
               </Chip>
               <Chip
                 active={prefs.cliente === "non domestico"}
                 icon={<ClienteIcon kind="non domestico" />}
-                onClick={() =>
-                  setPrefs((prev) => ({
-                    ...prev,
-                    cliente: "non domestico",
-                    potenzaKw: clampPotenzaKw(prev.potenzaKw, "non domestico"),
-                  }))
-                }
+                onClick={() => setPrefs((prev) => ({ ...prev, cliente: "non domestico" }))}
               >
                 Partita IVA
               </Chip>
             </MenuPanel>
             {prefs.cliente === "domestico" ? (
-              <MenuPanel
-                legend="Residenza"
-                locked={isLocked("residente")}
-                onLock={() => toggleLock("residente")}
-              >
+              <MenuPanel legend="Residenza">
                 <Chip
                   active={prefs.residente}
+                  icon={<ResidenzaIcon residente />}
                   onClick={() => setPrefs((prev) => ({ ...prev, residente: true }))}
                 >
                   Residente
                 </Chip>
                 <Chip
                   active={!prefs.residente}
+                  icon={<ResidenzaIcon residente={false} />}
                   onClick={() => setPrefs((prev) => ({ ...prev, residente: false }))}
                 >
                   Non residente
                 </Chip>
               </MenuPanel>
             ) : null}
-            <MenuPanel
-              legend="Prezzo"
-              locked={isLocked("prezzo")}
-              onLock={() => toggleLock("prezzo")}
-            >
+            <MenuPanel legend="Prezzo">
+              <Chip
+                active={prefs.prezzo === "tutti"}
+                icon={<PrezzoIcon kind="tutti" />}
+                onClick={() => setPrefs((prev) => ({ ...prev, prezzo: "tutti" }))}
+              >
+                Tutti
+              </Chip>
               <Chip
                 active={prefs.prezzo === "prezzo variabile"}
                 icon={<PrezzoIcon kind="prezzo variabile" />}
@@ -717,11 +574,14 @@ function FilterBar({
                 Fisso
               </Chip>
             </MenuPanel>
-            <MenuPanel
-              legend="Profilo orario"
-              locked={isLocked("fascia")}
-              onLock={() => toggleLock("fascia")}
-            >
+            <MenuPanel legend="Profilo orario">
+              <Chip
+                active={prefs.fascia === "tutti"}
+                icon={<TuttiIcon />}
+                onClick={() => setPrefs((prev) => ({ ...prev, fascia: "tutti" }))}
+              >
+                Tutti
+              </Chip>
               <Chip
                 active={prefs.fascia === "monoraria"}
                 icon={<FasciaPlanIcon plan="monoraria" />}
@@ -743,59 +603,30 @@ function FilterBar({
               >
                 Trioraria
               </Chip>
+              {prefs.prezzo !== "prezzo fisso" ? (
+                <Chip
+                  active={prefs.fascia === "dinamica"}
+                  icon={<FasciaPlanIcon plan="dinamica" />}
+                  onClick={() =>
+                    setPrefs((prev) => ({
+                      ...prev,
+                      fascia: "dinamica",
+                      mercato: prev.mercato === "placet" ? "ml" : prev.mercato,
+                    }))
+                  }
+                >
+                  Dinamica
+                </Chip>
+              ) : null}
+            </MenuPanel>
+            <MenuPanel legend="Mercato">
               <Chip
-                active={prefs.fascia === "dinamica"}
-                icon={<FasciaPlanIcon plan="dinamica" />}
-                onClick={() =>
-                  setPrefs((prev) => ({
-                    ...prev,
-                    fascia: "dinamica",
-                    prezzo: "prezzo variabile",
-                    mercato: prev.mercato === "placet" ? "ml" : prev.mercato,
-                  }))
-                }
+                active={prefs.mercato === "tutti"}
+                icon={<MercatoIcon kind="tutti" />}
+                onClick={() => setPrefs((prev) => ({ ...prev, mercato: "tutti" }))}
               >
-                Dinamica
+                Tutti
               </Chip>
-            </MenuPanel>
-            <MenuPanel
-              legend="Potenza impegnata"
-              locked={isLocked("potenza")}
-              onLock={() => toggleLock("potenza")}
-            >
-              {potenzeImpegnateKw(prefs.cliente).map((kw) => (
-                <Chip
-                  key={kw}
-                  active={prefs.potenzaKw === kw}
-                  onClick={() => setPrefs((prev) => ({ ...prev, potenzaKw: kw }))}
-                >
-                  {formatPotenzaKw(kw)}
-                </Chip>
-              ))}
-            </MenuPanel>
-            <MenuPanel
-              legend="Consumo annuo"
-              locked={isLocked("consumo")}
-              onLock={() => toggleLock("consumo")}
-            >
-              {CONSUMO_PRESETS.map((kwh) => (
-                <Chip
-                  key={kwh}
-                  active={prefs.consumoKwh === kwh}
-                  onClick={() => setPrefs((prev) => ({ ...prev, consumoKwh: kwh }))}
-                >
-                  {formatIt(kwh)} kWh
-                </Chip>
-              ))}
-              <p className="basis-full pt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                Media famiglia italiana ~2.700 kWh.
-              </p>
-            </MenuPanel>
-            <MenuPanel
-              legend="Mercato"
-              locked={isLocked("mercato")}
-              onLock={() => toggleLock("mercato")}
-            >
               <Chip
                 active={prefs.mercato === "ml"}
                 icon={<MercatoIcon kind="ml" />}
@@ -815,20 +646,6 @@ function FilterBar({
                 }
               >
                 PLACET
-              </Chip>
-            </MenuPanel>
-            <MenuPanel legend="Come consumi">
-              <Chip
-                active={prefs.profilo === "standard"}
-                onClick={() => setPrefs((prev) => ({ ...prev, profilo: "standard" }))}
-              >
-                Standard
-              </Chip>
-              <Chip
-                active={prefs.profilo === "oculato"}
-                onClick={() => setPrefs((prev) => ({ ...prev, profilo: "oculato" }))}
-              >
-                Oculato
               </Chip>
             </MenuPanel>
             <MenuPanel legend="Pagamento">
@@ -972,23 +789,14 @@ function FunnelArrow() {
 
 function MenuPanel({
   legend,
-  locked,
-  onLock,
   children,
 }: {
   legend: string;
-  locked?: boolean;
-  onLock?: () => void;
   children: ReactNode;
 }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5">
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">{legend}</p>
-        {onLock ? (
-          <LockButton locked={Boolean(locked)} onClick={onLock} compact />
-        ) : null}
-      </div>
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">{legend}</p>
       <div className="mt-2 flex flex-wrap gap-1.5">{children}</div>
     </div>
   );
@@ -996,103 +804,25 @@ function MenuPanel({
 
 function BarChip({
   onClick,
-  locked,
-  onLock,
   icon,
+  ariaLabel,
   children,
 }: {
   onClick: () => void;
-  locked?: boolean;
-  onLock?: () => void;
   icon?: ReactNode;
+  ariaLabel?: string;
   children: ReactNode;
-}) {
-  return (
-    <div
-      className={`inline-flex shrink-0 items-center overflow-hidden rounded-full border ${
-        locked
-          ? "border-neutral-400 dark:border-neutral-500"
-          : "border-neutral-200 dark:border-neutral-800"
-      }`}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
-      >
-        {icon}
-        {children}
-      </button>
-      {onLock ? (
-        <LockButton locked={Boolean(locked)} onClick={onLock} />
-      ) : null}
-    </div>
-  );
-}
-
-function LockButton({
-  locked,
-  onClick,
-  compact = false,
-}: {
-  locked: boolean;
-  onClick: () => void;
-  compact?: boolean;
 }) {
   return (
     <button
       type="button"
-      aria-pressed={locked}
-      title={locked ? "Fermo nel confronto" : "Sblocca: prova le combinazioni"}
-      aria-label={locked ? "Fermo nel confronto" : "Sblocca: prova le combinazioni"}
+      aria-label={ariaLabel}
       onClick={onClick}
-      className={
-        compact
-          ? `inline-flex items-center rounded p-0.5 transition-colors ${
-              locked
-                ? "text-foreground"
-                : "text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
-            }`
-          : `inline-flex items-center border-l px-1.5 py-1 transition-colors ${
-              locked
-                ? "border-neutral-400 text-foreground dark:border-neutral-500"
-                : "border-neutral-200 text-neutral-400 hover:text-neutral-600 dark:border-neutral-800 dark:text-neutral-500 dark:hover:text-neutral-300"
-            }`
-      }
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 py-1 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
     >
-      <LockIcon open={!locked} />
+      {icon}
+      {children}
     </button>
-  );
-}
-
-function LockIcon({ open }: { open: boolean }) {
-  return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" aria-hidden fill="none">
-      <rect
-        x="3.5"
-        y="7.25"
-        width="9"
-        height="6.35"
-        rx="1.15"
-        stroke="currentColor"
-        strokeWidth="1.35"
-      />
-      {open ? (
-        <path
-          d="M5.6 7.25V5.35a2.45 2.45 0 0 1 4.85-.35"
-          stroke="currentColor"
-          strokeWidth="1.35"
-          strokeLinecap="round"
-        />
-      ) : (
-        <path
-          d="M5.6 7.25V5.2a2.4 2.4 0 0 1 4.8 0v2.05"
-          stroke="currentColor"
-          strokeWidth="1.35"
-          strokeLinecap="round"
-        />
-      )}
-    </svg>
   );
 }
 
@@ -1134,7 +864,7 @@ function FilterChips({
 }) {
   return (
     <>
-      <Chip active={selected.length === 0} onClick={() => onChange([])}>
+      <Chip active={selected.length === 0} icon={<TuttiIcon />} onClick={() => onChange([])}>
         Tutti
       </Chip>
       {options.map((option) => (
@@ -1156,15 +886,16 @@ function FilterChips({
   );
 }
 
-function parseLocked(value: unknown): LockableId[] {
-  if (!Array.isArray(value)) return DEFAULT_LOCKED;
-  const next = value.filter((id): id is LockableId =>
-    LOCKABLE_IDS.includes(id as LockableId),
-  );
-  return next;
+function tuttiBarLabel(legend: string) {
+  return `${legend}: tutti`;
+}
+
+function prezzoBarLabel(prezzo: OffertePrezzo) {
+  return prezzo === "tutti" ? tuttiBarLabel("Prezzo") : prezzoLabel(prezzo);
 }
 
 function fasciaBarLabel(fascia: OfferteFascia) {
+  if (fascia === "tutti") return tuttiBarLabel("Profilo orario");
   if (fascia === "bioraria") return "Bioraria";
   if (fascia === "fasce") return "Trioraria";
   if (fascia === "dinamica") return "Dinamica";
@@ -1173,8 +904,20 @@ function fasciaBarLabel(fascia: OfferteFascia) {
 
 function mercatoBarLabel(mercato: OfferteMercato) {
   if (mercato === "placet") return "PLACET";
-  if (mercato === "tutti") return mercatoLabel("tutti");
+  if (mercato === "tutti") return tuttiBarLabel("Mercato");
   return "Libero";
+}
+
+function multiFilterBarLabel(
+  legend: string,
+  selected: string[],
+  options: readonly { id: string; label: string }[],
+) {
+  if (selected.length === 0) return tuttiBarLabel(legend);
+  return selected
+    .map((id) => options.find((option) => option.id === id)?.label)
+    .filter((label): label is string => Boolean(label))
+    .join(", ");
 }
 
 function mockClusterCount(total: number, prefs: Prefs) {
@@ -1184,9 +927,6 @@ function mockClusterCount(total: number, prefs: Prefs) {
     prefs.prezzo,
     prefs.fascia,
     prefs.mercato,
-    String(prefs.potenzaKw),
-    String(prefs.consumoKwh),
-    prefs.profilo,
     prefs.pagamento.join(","),
     prefs.attivazione.join(","),
     prefs.contratto.join(","),

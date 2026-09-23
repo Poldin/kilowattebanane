@@ -1,7 +1,7 @@
 export type ChartResolution = "h" | "15m";
 
 export const CHART_RESOLUTION_PREF_KEY = "kwb-chart-resolution";
-export const DEFAULT_CHART_RESOLUTION: ChartResolution = "h";
+export const DEFAULT_CHART_RESOLUTION: ChartResolution = "15m";
 
 const VALID = new Set<ChartResolution>(["h", "15m"]);
 
