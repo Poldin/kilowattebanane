@@ -637,7 +637,7 @@ export function OfferteCompareSearch({
           />
         </header>
       ) : null}
-      <section aria-label="Cerca offerte">
+      <section id="offerte-compare-search" aria-label="Cerca offerte" className="scroll-mt-20">
         {filters}
 
         <div ref={rootRef} className="relative">

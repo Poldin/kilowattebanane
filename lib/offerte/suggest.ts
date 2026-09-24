@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { resolveOffertePlan } from "@/lib/offerte/codice";
 import { offerteReadClient, paginateSelect } from "@/lib/offerte/db";
 import { romeToday } from "@/lib/offerte/dates";
@@ -14,7 +13,6 @@ import {
   parsePortalFilterIds,
   placetOfferDettaglio,
 } from "@/lib/offerte/portal-labels";
-import { OFFERTE_CACHE_REVALIDATE, OFFERTE_CACHE_TAG } from "@/lib/offerte/revalidate";
 import type {
   OfferteCatalogFilters,
   OfferteCliente,
@@ -90,37 +88,33 @@ const PLACET_SUGGEST_COLS =
 const ML_SUGGEST_COLS =
   "cod_offerta, nome_offerta, p_iva, url_sito_venditore, tipo_cliente, tipo_offerta, tipologia_fasce, tipologia_att_contr, modalita_attivazione, modalita_pagamento, domestico_residente";
 
-const loadSuggestIndex = unstable_cache(
-  async (): Promise<IndexOffer[]> => {
-    const today = romeToday();
-    const client = offerteReadClient();
-    const [placetRows, mlRows] = await Promise.all([
-      paginateSelect<PlacetSuggestRow>((from, to) =>
-        client
-          .from("po_placet_e_live")
-          .select(PLACET_SUGGEST_COLS)
-          .lte("valid_from", today)
-          .gte("valid_to", today)
-          .range(from, to),
-      ),
-      paginateSelect<MlSuggestRow>((from, to) =>
-        client
-          .from("po_ml_e_live")
-          .select(ML_SUGGEST_COLS)
-          .lte("valid_from", today)
-          .gte("valid_to", today)
-          .range(from, to),
-      ),
-    ]);
+async function loadSuggestIndex(): Promise<IndexOffer[]> {
+  const today = romeToday();
+  const client = offerteReadClient();
+  const [placetRows, mlRows] = await Promise.all([
+    paginateSelect<PlacetSuggestRow>((from, to) =>
+      client
+        .from("po_placet_e_live")
+        .select(PLACET_SUGGEST_COLS)
+        .lte("valid_from", today)
+        .gte("valid_to", today)
+        .range(from, to),
+    ),
+    paginateSelect<MlSuggestRow>((from, to) =>
+      client
+        .from("po_ml_e_live")
+        .select(ML_SUGGEST_COLS)
+        .lte("valid_from", today)
+        .gte("valid_to", today)
+        .range(from, to),
+    ),
+  ]);
 
-    return [
-      ...placetRows.map((row) => toPlacetIndexOffer(row)),
-      ...mlRows.map((row) => toMlIndexOffer(row)),
-    ];
-  },
-  ["offerte-suggest-index-v3"],
-  { revalidate: OFFERTE_CACHE_REVALIDATE, tags: [OFFERTE_CACHE_TAG] },
-);
+  return [
+    ...placetRows.map((row) => toPlacetIndexOffer(row)),
+    ...mlRows.map((row) => toMlIndexOffer(row)),
+  ];
+}
 
 function toPlacetIndexOffer(row: PlacetSuggestRow): IndexOffer {
   const venditoreKey = vendorKey(row.p_iva, row.url_sito_venditore);

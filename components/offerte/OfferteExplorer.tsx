@@ -28,6 +28,7 @@ import {
   type OfferteMercato,
   type OffertePrezzo,
 } from "@/lib/offerte/public-types";
+import { OfferCompareBoard, type OfferBoardPreset } from "@/components/offerte/OfferCompareBoard";
 import { OfferteCompareSearch } from "@/components/offerte/OfferteCompareSearch";
 
 const PREF_KEY = "kilowattebanane.offerte.v1";
@@ -239,8 +240,33 @@ export function OfferteExplorer({
     ],
   );
 
+  function confronta(preset: OfferBoardPreset) {
+    setPrefs((prev) => {
+      if (preset === "casa-residente") {
+        return { ...prev, cliente: "domestico", residente: true };
+      }
+      if (preset === "partita-iva") {
+        return { ...prev, cliente: "non domestico" };
+      }
+      return {
+        ...prev,
+        cliente: "domestico",
+        prezzo: "prezzo fisso",
+        fascia: prev.fascia === "dinamica" ? "monoraria" : prev.fascia,
+      };
+    });
+    window.setTimeout(() => {
+      document.getElementById("offerte-compare-search")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      document.getElementById("offerte-compare-q")?.focus();
+    }, 50);
+  }
+
   return (
     <section className={className ? `min-w-0 ${className}` : "min-w-0"}>
+      <OfferCompareBoard total={stats.total} onConfronta={confronta} />
       <OfferteCompareSearch
         headlineTotal={stats.total}
         filterQuery={filterQuery}
