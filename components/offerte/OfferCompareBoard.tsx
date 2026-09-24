@@ -17,6 +17,7 @@ export type OfferBoardPreset = "casa-residente" | "partita-iva" | "fisso-domesti
 
 type Slide = {
   id: string;
+  emoji: string;
   kicker: string;
   count: number | null;
   lead: string;
@@ -38,6 +39,7 @@ function slidesFor(total: number): Slide[] {
   return [
     {
       id: "casa",
+      emoji: "🧐",
       kicker: "Casa · residente",
       count: PLACEHOLDER.casaResidente,
       lead: "bollette tra cui scegliere. Le altre sono fuffa.",
@@ -52,6 +54,7 @@ function slidesFor(total: number): Slide[] {
     },
     {
       id: "piva",
+      emoji: "🤨",
       kicker: "Partita IVA",
       count: PLACEHOLDER.partitaIva,
       lead: "bollette tra cui scegliere. Le altre sono fuffa.",
@@ -66,6 +69,7 @@ function slidesFor(total: number): Slide[] {
     },
     {
       id: "fisso",
+      emoji: "😐",
       kicker: "Prezzo fisso · domestico",
       count: PLACEHOLDER.fissoDomestico,
       lead: "bollette a prezzo bloccato. Le altre sono fuffa.",
@@ -80,6 +84,7 @@ function slidesFor(total: number): Slide[] {
     },
     {
       id: "sapevi",
+      emoji: "🤯",
       kicker: "Lo sapevi?",
       count: null,
       lead: `Su ${formatIt(total)} offerte del Portale Offerte, solo ${formatIt(PLACEHOLDER.convenienti)} sono davvero convenienti.`,
@@ -182,9 +187,15 @@ export function OfferCompareBoard({
               key={item.id}
               aria-hidden={slideIndex !== index}
               aria-labelledby={`offer-board-kicker-${item.id}`}
-              className={`flex min-h-70 w-full min-w-full shrink-0 grow-0 basis-full flex-col pb-14 sm:min-h-74 ${item.surface}`}
+              className={`relative flex min-h-70 w-full min-w-full shrink-0 grow-0 basis-full flex-col pb-10 sm:min-h-74 sm:pb-11 lg:min-h-80 ${item.surface}`}
             >
-              <div className="px-5 pt-5 sm:px-6 sm:pt-6">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute right-1 top-1/2 z-0 -translate-y-1/2 select-none text-[5.5rem] leading-none sm:right-3 sm:text-[7rem] md:right-5 md:text-[9rem] lg:right-6 lg:text-[11rem] xl:text-[12rem]"
+              >
+                {item.emoji}
+              </span>
+              <div className="relative z-10 max-w-[68%] px-5 pt-5 sm:max-w-[60%] sm:px-6 sm:pt-6 md:max-w-[55%] lg:max-w-md">
                 <p
                   id={`offer-board-kicker-${item.id}`}
                   className={`text-[11px] uppercase tracking-[0.16em] ${item.muted}`}
@@ -205,18 +216,18 @@ export function OfferCompareBoard({
                     {item.lead}
                   </p>
                 )}
-                <p className={`mt-2 max-w-md text-sm leading-relaxed ${item.muted}`}>{item.body}</p>
+                <p className={`mt-2 hidden max-w-md text-sm leading-relaxed sm:block ${item.muted}`}>{item.body}</p>
                 {item.preset ? (
                   <button
                     type="button"
                     tabIndex={slideIndex === index ? 0 : -1}
                     onClick={() => onConfronta(item.preset!)}
-                    className={`mt-5 inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium transition-opacity hover:opacity-90 sm:w-auto ${item.button}`}
+                    className={`mt-4 inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium transition-opacity hover:opacity-90 sm:mt-5 sm:w-auto ${item.button}`}
                   >
                     Confronta offerte
                   </button>
                 ) : (
-                  <div className="mt-5 h-11" aria-hidden />
+                  <div className="mt-4 h-11 sm:mt-5" aria-hidden />
                 )}
               </div>
             </article>
