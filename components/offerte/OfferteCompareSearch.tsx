@@ -749,13 +749,13 @@ export function OfferteCompareSearch({
           nome fornitore, codice o nome offerta👆 oppure scegli tra le hot 🔥
         </p>
 
-        {hotOffers.length > 0 ? (
+        <SoftReveal open={hotOffers.length > 0}>
           <HotOfferList
             offers={hotOffers}
             selectedIds={new Set(selected.map((entry) => entry.id))}
             onPick={(offer) => pick(offerToSuggestItem(offer), { focusInput: false })}
           />
-        ) : null}
+        </SoftReveal>
       </section>
 
       <CompareReveal watch={compareOffers.length}>
@@ -809,7 +809,7 @@ function SoftReveal({ open, children }: { open: boolean; children: ReactNode }) 
     <div
       aria-hidden={!open}
       inert={!open}
-      className={`overflow-hidden transition-[height,opacity] duration-300 ease-out motion-reduce:transition-none ${
+      className={`overflow-hidden overflow-anchor-none transition-[height,opacity] duration-300 ease-out motion-reduce:transition-none ${
         open || height > 0 ? "" : "mt-0!"
       }`}
       style={{ height, opacity: open ? 1 : 0 }}
@@ -872,11 +872,15 @@ function HotOfferList({
 }) {
   return (
     <ul className="mt-3 flex flex-wrap gap-2">
-      {offers.map((offer) => {
+      {offers.map((offer, index) => {
         const id = `nome:${offer.source}:${offer.codOfferta}`;
         const picked = selectedIds.has(id);
         return (
-          <li key={id} className="max-w-full">
+          <li
+            key={id}
+            className="hot-offer-in max-w-full"
+            style={{ animationDelay: `${index * 45}ms` }}
+          >
             <button
               type="button"
               onMouseDown={(event) => event.preventDefault()}
@@ -998,6 +1002,22 @@ function groupOffersByCompareSlice(
   return groups;
 }
 
+function MonthPlayIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden fill="none">
+      <path d="M5.2 3.4v9.2L13 8Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function MonthStopIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden fill="none">
+      <rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 function MonthScrub({
   count,
   index,
@@ -1011,11 +1031,43 @@ function MonthScrub({
   disabled: boolean;
   onChange: (index: number) => void;
 }) {
+  const [playing, setPlaying] = useState(false);
+  const indexRef = useRef(index);
+  indexRef.current = index;
   const max = Math.max(count, 1);
   const at = Math.min(Math.max(index, 0), max - 1);
+  const canPlay = !disabled && count >= 2;
+
+  useEffect(() => {
+    if (!canPlay) setPlaying(false);
+  }, [canPlay]);
+
+  useEffect(() => {
+    if (!playing || !canPlay) return;
+    const id = window.setInterval(() => {
+      onChange((indexRef.current + 1) % count);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [playing, canPlay, count, onChange]);
+
   return (
-    <label className="flex min-w-0 w-full items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+    <div className="flex min-w-0 w-full items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
       <span className="shrink-0 tabular-nums text-foreground">{label ?? `Mese ${at + 1}`}</span>
+      <button
+        type="button"
+        disabled={!canPlay}
+        aria-pressed={playing}
+        aria-label={playing ? "Ferma il passaggio automatico dei mesi" : "Avvia il passaggio automatico dei mesi"}
+        title={playing ? "Stop" : "Play"}
+        onClick={() => setPlaying((value) => !value)}
+        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-default disabled:opacity-40 ${
+          playing
+            ? "bg-neutral-200 text-foreground dark:bg-neutral-800"
+            : "text-neutral-400 hover:bg-neutral-100 hover:text-foreground dark:hover:bg-neutral-800"
+        }`}
+      >
+        {playing ? <MonthStopIcon /> : <MonthPlayIcon />}
+      </button>
       <input
         type="range"
         min={0}
@@ -1031,7 +1083,7 @@ function MonthScrub({
       <span className="shrink-0 tabular-nums">
         {at + 1}/{max}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -3874,7 +3926,7 @@ function CompareTable({
   ];
 
   return (
-    <div className="mt-6 overflow-x-auto">
+    <div className="profile-month-scroll mt-6 overflow-x-auto">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
