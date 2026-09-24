@@ -16,7 +16,7 @@ export default function LearnAdminPage() {
     <SignupProvider>
       <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
         <Header />
-        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12">
+        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12 lg:max-w-6xl">
           <p className="text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">
             Admin
           </p>

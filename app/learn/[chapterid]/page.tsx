@@ -25,15 +25,23 @@ export async function generateMetadata({
 
 export default async function LearnChapterPage({
   params,
+  searchParams,
 }: PageProps<"/learn/[chapterid]">) {
   const { chapterid } = await params;
+  const query = await searchParams;
   const chapter = await getLearnChapterBySlug(chapterid);
   if (!chapter) notFound();
   const following = (await randomOtherChapter(chapter.slug)) ?? chapter;
+  const after = typeof query.da === "string" ? query.da : undefined;
+  const ok = typeof query.ok === "string" ? query.ok : undefined;
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-14">
-      <LearnQuiz chapter={chapter} following={following} />
+      <LearnQuiz
+        chapter={chapter}
+        following={following}
+        resume={after ? { after, ok } : undefined}
+      />
     </main>
   );
 }

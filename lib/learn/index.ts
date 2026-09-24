@@ -5,4 +5,9 @@ export type {
   LearnSlide,
   LearnSlideType,
 } from "@/lib/learn/types";
-export { getLearnChapterBySlug, listLearnChapters, randomOtherChapter } from "@/lib/learn/db";
+export {
+  getLearnChapterBySlug,
+  listLearnChapters,
+  pickRandomLearnHook,
+  randomOtherChapter,
+} from "@/lib/learn/db";

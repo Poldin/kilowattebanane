@@ -236,12 +236,104 @@ body {
   animation: insight-fade-in 280ms ease-out;
 }
 
+@keyframes learn-q-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes learn-q-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes learn-option-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.learn-q-in {
+  animation: learn-q-in 220ms ease-out;
+}
+
+.learn-q-out {
+  pointer-events: none;
+  animation: learn-q-out 160ms ease-in forwards;
+}
+
+.learn-option-in {
+  animation: learn-option-in 220ms ease-out both;
+}
+
+@keyframes learn-chapter-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.learn-chapter-in {
+  animation: learn-chapter-in 380ms ease-out both;
+}
+
+@keyframes learn-admin-delete-flash {
+  0%,
+  100% {
+    background-color: transparent;
+    border-color: #e5e5e5;
+  }
+  50% {
+    background-color: rgb(239 68 68 / 0.12);
+    border-color: rgb(239 68 68 / 0.55);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  @keyframes learn-admin-delete-flash {
+    0%,
+    100% {
+      background-color: transparent;
+      border-color: #262626;
+    }
+    50% {
+      background-color: rgb(239 68 68 / 0.18);
+      border-color: rgb(239 68 68 / 0.65);
+    }
+  }
+}
+
+.learn-admin-card-flash {
+  animation: learn-admin-delete-flash 0.75s ease-in-out infinite;
+}
+
 .hot-offer-in {
   animation: hot-offer-in 360ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hot-offer-in {
+  .hot-offer-in,
+  .learn-chapter-in {
     animation: none;
   }
 }
@@ -386,7 +478,16 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .insight-skeleton,
-  .insight-content-in {
+  .insight-content-in,
+  .learn-q-in,
+  .learn-q-out,
+  .learn-option-in,
+  .learn-admin-card-flash {
     animation: none;
+  }
+
+  .learn-admin-card-flash {
+    background-color: rgb(239 68 68 / 0.12);
+    border-color: rgb(239 68 68 / 0.55);
   }
 }

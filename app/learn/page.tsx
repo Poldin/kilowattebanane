@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { listLearnChapters } from "@/lib/learn/db";
+import { listLearnChapters, pickRandomLearnHook } from "@/lib/learn/db";
 import { publicSiteUrl } from "@/lib/app-url";
 import { LearnChapterCard } from "@/components/learn/LearnChapterCard";
+import { LearnLandingHook } from "@/components/learn/LearnLandingHook";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 
 export default async function LearnPage() {
   const chapters = await listLearnChapters(false);
+  const hook = chapters.length > 0 ? await pickRandomLearnHook() : null;
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-14">
@@ -29,13 +31,27 @@ export default async function LearnPage() {
           Non ci sono ancora lezioni disponibili! Torna più tardi :)
         </p>
       ) : (
-        <ul className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-          {chapters.map((chapter) => (
-            <li key={chapter.id}>
-              <LearnChapterCard chapter={chapter} />
-            </li>
-          ))}
-        </ul>
+        <>
+          {hook ? (
+            <>
+              <LearnLandingHook chapter={hook.chapter} slide={hook.slide} />
+              <p className="mt-12 text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                Oppure scegli un capitolo
+              </p>
+            </>
+          ) : null}
+          <ul className={`${hook ? "mt-4" : "mt-10"} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
+            {chapters.map((chapter, index) => (
+              <li
+                key={chapter.id}
+                className="learn-chapter-in"
+                style={{ animationDelay: `${index * 75}ms` }}
+              >
+                <LearnChapterCard chapter={chapter} />
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </main>
   );

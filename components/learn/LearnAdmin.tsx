@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { LearnAdminDialog } from "@/components/learn/LearnAdminDialog";
+import { LearnAiSlidesDialog } from "@/components/learn/LearnAiSlidesDialog";
 import { LearnImagePicker } from "@/components/learn/LearnImagePicker";
 import { adminJson } from "@/components/learn/admin-client";
 import { OFFERTE_ADMIN_TOKEN_KEY } from "@/lib/offerte/admin-constants";
@@ -40,6 +42,8 @@ export function LearnAdmin() {
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [tab, setTab] = useState<"slides" | "chapters">("slides");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const bootstrap = useCallback(async () => {
     setLoading(true);
@@ -138,7 +142,20 @@ export function LearnAdmin() {
           Esci
         </button>
       </div>
-      {tab === "slides" ? <SlidesPanel /> : <ChaptersPanel />}
+      {tab === "slides" ? (
+        <SlidesPanel reloadToken={reloadToken} onOpenAi={() => setAiOpen(true)} />
+      ) : (
+        <ChaptersPanel reloadToken={reloadToken} />
+      )}
+      <LearnAiSlidesDialog
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        onCreated={async (result) => {
+          setAiOpen(false);
+          if (result.chapter) setTab("chapters");
+          setReloadToken((value) => value + 1);
+        }}
+      />
     </div>
   );
 }
@@ -151,10 +168,18 @@ function tabClass(active: boolean) {
   }`;
 }
 
-function SlidesPanel() {
+function SlidesPanel({
+  reloadToken,
+  onOpenAi,
+}: {
+  reloadToken: number;
+  onOpenAi: () => void;
+}) {
   const [slides, setSlides] = useState<LearnSlide[]>([]);
   const [editing, setEditing] = useState<LearnSlide | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const payload = await adminJson<{ slides: LearnSlide[] }>("/api/admin/learn/slides");
@@ -165,7 +190,35 @@ function SlidesPanel() {
     void load().catch((err: unknown) => {
       setError(err instanceof Error ? err.message : "Caricamento fallito.");
     });
-  }, [load]);
+  }, [load, reloadToken]);
+
+  useEffect(() => {
+    if (!pendingDeleteId) return;
+    const timer = window.setTimeout(() => setPendingDeleteId(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [pendingDeleteId]);
+
+  async function handleTrashClick(slide: LearnSlide) {
+    if (deletingId) return;
+    if (pendingDeleteId === slide.id) {
+      setDeletingId(slide.id);
+      setError(null);
+      try {
+        await adminJson(`/api/admin/learn/slides/${slide.id}`, { method: "DELETE" });
+        setPendingDeleteId(null);
+        if (editing && editing !== "new" && editing.id === slide.id) {
+          setEditing(null);
+        }
+        await load();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Eliminazione fallita.");
+      } finally {
+        setDeletingId(null);
+      }
+      return;
+    }
+    setPendingDeleteId(slide.id);
+  }
 
   return (
     <div className="space-y-4">
@@ -173,9 +226,14 @@ function SlidesPanel() {
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
           Una lezione è una slide. Puoi riusarla in più capitoli.
         </p>
-        <button type="button" className={GHOST} onClick={() => setEditing("new")}>
-          Nuova lezione
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" className={GHOST} onClick={() => setEditing("new")}>
+            Nuova lezione
+          </button>
+          <button type="button" className={GHOST} onClick={onOpenAi}>
+            Nuova lezione con AI
+          </button>
+        </div>
       </div>
       {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       {editing ? (
@@ -189,27 +247,54 @@ function SlidesPanel() {
         />
       ) : null}
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {slides.map((slide) => (
-          <li key={slide.id}>
-            <button
-              type="button"
-              onClick={() => setEditing(slide)}
-              className="flex h-full w-full flex-col rounded-lg border border-neutral-200 p-4 text-left transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
-            >
-              <span className="flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                <LessonTypeIcon type={slide.type} />
-                {TYPE_LABEL[slide.type]}
-                {slide.active ? null : " · esclusa"}
-              </span>
-              <span className="mt-2 line-clamp-2 font-medium leading-snug">
-                {slide.payload.title || "Senza titolo"}
-              </span>
-              <span className="mt-auto pt-3 text-xs text-neutral-500 dark:text-neutral-400">
-                {formatCreated(slide.created_at)}
-              </span>
-            </button>
-          </li>
-        ))}
+        {slides.map((slide) => {
+          const pendingDelete = pendingDeleteId === slide.id;
+          return (
+            <li key={slide.id}>
+              <div
+                className={`relative flex h-full w-full flex-col rounded-lg border border-neutral-200 transition-colors dark:border-neutral-800 ${
+                  pendingDelete ? "learn-admin-card-flash" : ""
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setEditing(slide)}
+                  className="flex flex-1 flex-col p-4 pr-24 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                >
+                  <span className="flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                    <LessonTypeIcon type={slide.type} />
+                    {TYPE_LABEL[slide.type]}
+                    {slide.active ? null : " · esclusa"}
+                  </span>
+                  <span className="mt-2 line-clamp-2 font-medium leading-snug">
+                    {slide.payload.title || "Senza titolo"}
+                  </span>
+                  <span className="mt-auto pt-3 text-xs text-neutral-500 dark:text-neutral-400">
+                    {formatCreated(slide.created_at)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(deletingId)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleTrashClick(slide);
+                  }}
+                  className={`absolute right-2 top-2 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    pendingDelete
+                      ? "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                      : "text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-neutral-900 dark:hover:text-neutral-200"
+                  }`}
+                  aria-label={pendingDelete ? "Conferma eliminazione lezione" : "Elimina lezione"}
+                  title={pendingDelete ? "Clicca di nuovo per eliminare" : "Elimina lezione"}
+                >
+                  <TrashIcon />
+                  <span>Elimina</span>
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -219,10 +304,14 @@ function SlideEditor({
   slide,
   onClose,
   onSaved,
+  framed = true,
+  hideHeader = false,
 }: {
   slide: LearnSlide | null;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (result?: { deleted?: boolean }) => Promise<void>;
+  framed?: boolean;
+  hideHeader?: boolean;
 }) {
   const [type, setType] = useState<LearnSlideType>(slide?.type ?? "single");
   const [payload, setPayload] = useState<LearnSlidePayload>(slide?.payload ?? emptyPayload("single"));
@@ -269,7 +358,7 @@ function SlideEditor({
     setError(null);
     try {
       await adminJson(`/api/admin/learn/slides/${slide.id}`, { method: "DELETE" });
-      await onSaved();
+      await onSaved({ deleted: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eliminazione fallita.");
       setSaving(false);
@@ -277,13 +366,21 @@ function SlideEditor({
   }
 
   return (
-    <div className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium">{slide ? "Modifica lezione" : "Nuova lezione"}</h2>
-        <button type="button" className={GHOST} onClick={onClose}>
-          Chiudi
-        </button>
-      </div>
+    <div
+      className={
+        framed
+          ? "space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+          : "space-y-4"
+      }
+    >
+      {hideHeader ? null : (
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium">{slide ? "Modifica lezione" : "Nuova lezione"}</h2>
+          <button type="button" className={GHOST} onClick={onClose}>
+            Chiudi
+          </button>
+        </div>
+      )}
       <label className="block text-sm">
         Tipo
         <select
@@ -455,26 +552,32 @@ function OptionsEditor({
   );
 }
 
-function ChaptersPanel() {
+function ChaptersPanel({ reloadToken }: { reloadToken: number }) {
   const [chapters, setChapters] = useState<ChapterRow[]>([]);
   const [slides, setSlides] = useState<LearnSlide[]>([]);
   const [editing, setEditing] = useState<ChapterRow | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const loadSlides = useCallback(async () => {
+    const slidePayload = await adminJson<{ slides: LearnSlide[] }>("/api/admin/learn/slides");
+    const next = sortNewest(slidePayload.slides);
+    setSlides(next);
+    return next;
+  }, []);
+
   const load = useCallback(async () => {
-    const [chapterPayload, slidePayload] = await Promise.all([
+    const [chapterPayload] = await Promise.all([
       adminJson<{ chapters: ChapterRow[] }>("/api/admin/learn/chapters"),
-      adminJson<{ slides: LearnSlide[] }>("/api/admin/learn/slides"),
+      loadSlides(),
     ]);
     setChapters(chapterPayload.chapters);
-    setSlides(sortNewest(slidePayload.slides));
-  }, []);
+  }, [loadSlides]);
 
   useEffect(() => {
     void load().catch((err: unknown) => {
       setError(err instanceof Error ? err.message : "Caricamento fallito.");
     });
-  }, [load]);
+  }, [load, reloadToken]);
 
   async function openChapter(id: string) {
     const payload = await adminJson<{ chapter: LearnChapterWithSlides }>(
@@ -499,6 +602,7 @@ function ChaptersPanel() {
           chapter={editing === "new" ? null : editing}
           slides={slides}
           onClose={() => setEditing(null)}
+          onSlidesChanged={loadSlides}
           onSaved={async () => {
             setEditing(null);
             await load();
@@ -530,11 +634,13 @@ function ChapterEditor({
   slides,
   onClose,
   onSaved,
+  onSlidesChanged,
 }: {
   chapter: ChapterRow | null;
   slides: LearnSlide[];
   onClose: () => void;
   onSaved: () => Promise<void>;
+  onSlidesChanged: () => Promise<LearnSlide[]>;
 }) {
   const [title, setTitle] = useState(chapter?.title ?? "");
   const [slug, setSlug] = useState(chapter?.slug ?? "");
@@ -549,6 +655,7 @@ function ChapterEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(Boolean(chapter));
+  const [editingSlide, setEditingSlide] = useState<LearnSlide | null>(null);
 
   const unused = slides.filter((slide) => slide.active && !slideIds.includes(slide.id));
 
@@ -608,8 +715,48 @@ function ChapterEditor({
     setSlideIds(next);
   }
 
+  function addSlide(id: string) {
+    if (slideIds.includes(id)) return;
+    setSlideIds([...slideIds, id]);
+  }
+
   return (
-    <div className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <>
+    <div className="lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-4">
+      <aside className="hidden lg:block">
+        <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+          <p className="text-sm font-medium">Lezioni disponibili</p>
+          <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+            Non usate in questo capitolo. Clicca per aggiungere.
+          </p>
+          {unused.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {unused.map((slide) => (
+                <li key={slide.id}>
+                  <button
+                    type="button"
+                    onClick={() => addSlide(slide.id)}
+                    className="flex w-full items-start gap-2 rounded-md border border-neutral-200 px-3 py-2 text-left text-sm transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
+                  >
+                    <LessonTypeIcon type={slide.type} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        {slide.payload.title || "Senza titolo"}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-neutral-500 dark:text-neutral-400">
+                        {TYPE_LABEL[slide.type]}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-neutral-500">Nessuna lezione attiva da aggiungere.</p>
+          )}
+        </div>
+      </aside>
+      <div className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium">{chapter ? "Modifica capitolo" : "Nuovo capitolo"}</h2>
         <button type="button" className={GHOST} onClick={onClose}>
@@ -687,6 +834,16 @@ function ChapterEditor({
                   </span>
                 </span>
                 <span className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    className={GHOST}
+                    disabled={!slide}
+                    onClick={() => {
+                      if (slide) setEditingSlide(slide);
+                    }}
+                  >
+                    Modifica
+                  </button>
                   <button type="button" className={GHOST} onClick={() => move(id, -1)}>
                     ↑
                   </button>
@@ -706,13 +863,13 @@ function ChapterEditor({
           })}
         </ul>
         {unused.length > 0 ? (
-          <label className="mt-3 block text-sm">
+          <label className="mt-3 block text-sm lg:hidden">
             Aggiungi lezione
             <select
               className={FIELD}
               value=""
               onChange={(event) => {
-                if (event.target.value) setSlideIds([...slideIds, event.target.value]);
+                if (event.target.value) addSlide(event.target.value);
               }}
             >
               <option value="">Scegli…</option>
@@ -724,7 +881,7 @@ function ChapterEditor({
             </select>
           </label>
         ) : (
-          <p className="mt-2 text-sm text-neutral-500">Nessuna lezione attiva da aggiungere.</p>
+          <p className="mt-2 text-sm text-neutral-500 lg:hidden">Nessuna lezione attiva da aggiungere.</p>
         )}
       </div>
 
@@ -739,7 +896,33 @@ function ChapterEditor({
           </button>
         ) : null}
       </div>
+      </div>
     </div>
+      <LearnAdminDialog
+        open={Boolean(editingSlide)}
+        title={editingSlide ? "Modifica lezione" : "Lezione"}
+        onClose={() => setEditingSlide(null)}
+        wide
+      >
+        {editingSlide ? (
+          <SlideEditor
+            key={editingSlide.id}
+            slide={editingSlide}
+            framed={false}
+            hideHeader
+            onClose={() => setEditingSlide(null)}
+            onSaved={async (result) => {
+              const id = editingSlide.id;
+              setEditingSlide(null);
+              await onSlidesChanged();
+              if (result?.deleted) {
+                setSlideIds((ids) => ids.filter((item) => item !== id));
+              }
+            }}
+          />
+        ) : null}
+      </LearnAdminDialog>
+    </>
   );
 }
 
@@ -767,6 +950,20 @@ function formatCreated(iso: string) {
     minute: "2-digit",
     timeZone: "Europe/Rome",
   }).format(new Date(iso));
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden>
+      <path
+        d="M3.5 4.5h9M6 4.5V3.25A.75.75 0 0 1 6.75 2.5h2.5a.75.75 0 0 1 .75.75V4.5M6.25 7v4.25M9.75 7v4.25M4.25 4.5l.5 8.25A.75.75 0 0 0 5.5 13.5h5a.75.75 0 0 0 .75-.75l.5-8.25"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function LessonTypeIcon({ type }: { type: LearnSlideType }) {

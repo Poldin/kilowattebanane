@@ -360,6 +360,24 @@ export async function randomOtherChapter(slug: string) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+export async function pickRandomLearnHook() {
+  const chapters = await listLearnChapters(false);
+  const hooks: {
+    chapter: LearnChapter;
+    slide: Extract<LearnSlide, { type: "single" | "multiple" }>;
+  }[] = [];
+  for (const chapter of chapters) {
+    const loaded = await loadChapterSlides(chapter, true);
+    const slide = loaded.slides.find(
+      (item): item is Extract<LearnSlide, { type: "single" | "multiple" }> =>
+        item.type === "single" || item.type === "multiple",
+    );
+    if (slide) hooks.push({ chapter, slide });
+  }
+  if (hooks.length === 0) return null;
+  return hooks[Math.floor(Math.random() * hooks.length)] ?? null;
+}
+
 export function publicSlideSummary(slide: LearnSlide) {
   return {
     id: slide.id,

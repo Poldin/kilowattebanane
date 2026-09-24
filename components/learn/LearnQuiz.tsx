@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LearnArrows } from "@/components/learn/LearnArrows";
 import { LearnChapterCard } from "@/components/learn/LearnChapterCard";
@@ -20,20 +20,44 @@ function isQuestionSlide(slide: LearnSlide) {
   return slide.type !== "info";
 }
 
+function resumeFrom(
+  slides: LearnSlide[],
+  resume?: { after?: string; ok?: string },
+) {
+  if (!resume?.after) {
+    return { index: 0, done: false, results: {} as Record<string, boolean | "open"> };
+  }
+  const position = slides.findIndex((item) => item.id === resume.after);
+  if (position < 0) {
+    return { index: 0, done: false, results: {} as Record<string, boolean | "open"> };
+  }
+  const scored =
+    resume.ok === "1" ? true : resume.ok === "0" ? false : resume.ok === "open" ? "open" : undefined;
+  const results: Record<string, boolean | "open"> =
+    scored === undefined ? {} : { [resume.after]: scored };
+  if (position + 1 >= slides.length) {
+    return { index: 0, done: true, results };
+  }
+  return { index: position + 1, done: false, results };
+}
+
 export function LearnQuiz({
   chapter,
   following,
+  resume,
 }: {
   chapter: LearnChapterWithSlides;
   following?: LearnChapter;
+  resume?: { after?: string; ok?: string };
 }) {
   const slides = chapter.slides;
   const total = slides.length;
   const questionSlides = slides.filter(isQuestionSlide);
+  const started = resumeFrom(slides, resume);
 
-  const [index, setIndex] = useState(0);
-  const [done, setDone] = useState(false);
-  const [results, setResults] = useState<Record<string, boolean | "open">>({});
+  const [index, setIndex] = useState(started.index);
+  const [done, setDone] = useState(started.done);
+  const [results, setResults] = useState<Record<string, boolean | "open">>(started.results);
 
   const slide = slides[index];
   const scored = Object.values(results).filter(
@@ -136,8 +160,11 @@ function Play({
   onSkip: () => void;
 }) {
   const last = index + 1 === total;
+  const hasOptions = slide.type === "single" || slide.type === "multiple";
   const [revealed, setRevealed] = useState(slide.type === "info");
   const [eventId, setEventId] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const leaveTimer = useRef<number>(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,8 +177,22 @@ function Play({
     });
     return () => {
       cancelled = true;
+      window.clearTimeout(leaveTimer.current);
     };
   }, [chapter.id, slide.id, slide.type]);
+
+  function leaveThen(action: () => void) {
+    if (leaving) return;
+    if (
+      !hasOptions ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      action();
+      return;
+    }
+    setLeaving(true);
+    leaveTimer.current = window.setTimeout(action, 170);
+  }
 
   function log(interactions: Record<string, unknown>) {
     if (!eventId) return;
@@ -174,25 +215,8 @@ function Play({
     setRevealed(true);
   }
 
-  return (
-    <section aria-labelledby="learn-title" className="insight-content-in">
-      <LearnArrows
-        canPrev={index > 0}
-        canNext={!last}
-        onPrev={onPrev}
-        onNext={onSkip}
-      />
-
-      {questionSlides.length > 0 ? (
-        <div className="mt-4">
-          <Progress
-            slides={questionSlides}
-            currentId={slide.id}
-            results={results}
-          />
-        </div>
-      ) : null}
-
+  const body = (
+    <>
       <p className="mt-5 text-xs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
         {chapter.title}
         {isQuestionSlide(slide) && questionSlides.length > 0 ? (
@@ -205,9 +229,18 @@ function Play({
       </p>
       <h1
         id="learn-title"
-        className="mt-2 text-2xl font-bold tracking-tight leading-tight text-foreground sm:text-3xl"
+        className={`mt-2 font-bold tracking-tight leading-tight text-foreground ${
+          hasOptions ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl"
+        }`}
       >
-        <LearnRichText text={slide.payload.title} inline />
+        <LearnRichText
+          text={
+            hasOptions && "question" in slide.payload
+              ? slide.payload.question
+              : slide.payload.title
+          }
+          inline
+        />
       </h1>
 
       {slide.payload.image ? (
@@ -230,6 +263,7 @@ function Play({
           payload={slide.payload}
           revealed={revealed}
           onReveal={reveal}
+          hideQuestion
         />
       ) : null}
 
@@ -238,6 +272,7 @@ function Play({
           payload={slide.payload}
           revealed={revealed}
           onReveal={reveal}
+          hideQuestion
         />
       ) : null}
 
@@ -248,13 +283,43 @@ function Play({
       {revealed ? (
         <button
           type="button"
-          onClick={onNext}
+          onClick={() => leaveThen(onNext)}
           className="mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90 sm:w-auto"
         >
           {last ? "Vedi com'è andata" : "Avanti"}
           <ArrowIcon />
         </button>
       ) : null}
+    </>
+  );
+
+  return (
+    <section
+      aria-labelledby="learn-title"
+      className={hasOptions ? undefined : "insight-content-in"}
+    >
+      <LearnArrows
+        canPrev={index > 0}
+        canNext={!last}
+        onPrev={() => leaveThen(onPrev)}
+        onNext={() => leaveThen(onSkip)}
+      />
+
+      {questionSlides.length > 0 ? (
+        <div className="mt-4">
+          <Progress
+            slides={questionSlides}
+            currentId={slide.id}
+            results={results}
+          />
+        </div>
+      ) : null}
+
+      {hasOptions ? (
+        <div className={leaving ? "learn-q-out" : "learn-q-in"}>{body}</div>
+      ) : (
+        body
+      )}
     </section>
   );
 }
@@ -284,14 +349,16 @@ function useShuffledOptions<T>(items: T[]) {
   return { options, ready };
 }
 
-function SinglePlay({
+export function SinglePlay({
   payload,
   revealed,
   onReveal,
+  hideQuestion = false,
 }: {
   payload: LearnSinglePayload;
   revealed: boolean;
   onReveal: (correct: boolean, interactions: Record<string, unknown>) => void;
+  hideQuestion?: boolean;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [misses, setMisses] = useState<string[]>([]);
@@ -299,15 +366,17 @@ function SinglePlay({
 
   return (
     <>
-      <LearnRichText
-        text={payload.question}
-        className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
-      />
+      {hideQuestion ? null : (
+        <LearnRichText
+          text={payload.question}
+          className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
+        />
+      )}
       <div
         role="radiogroup"
         className={`mt-6 flex flex-col gap-2 ${ready ? "" : "invisible"}`}
       >
-        {options.map((option) => {
+        {options.map((option, optionIndex) => {
           const selected = picked === option.id;
           const isCorrect = option.id === payload.correctId;
           const missed = misses.includes(option.id);
@@ -318,6 +387,7 @@ function SinglePlay({
               role="radio"
               aria-checked={selected}
               disabled={revealed || missed}
+              style={ready ? { animationDelay: `${optionIndex * 32}ms` } : undefined}
               onClick={() => {
                 setPicked(option.id);
                 if (!isCorrect) {
@@ -331,12 +401,12 @@ function SinglePlay({
                   misses: isCorrect ? misses : [...misses, option.id],
                 });
               }}
-              className={optionClass({
+              className={`${optionClass({
                 revealed,
                 selected,
                 isCorrect,
                 missed,
-              })}
+              })}${ready ? " learn-option-in" : ""}`}
             >
               <LearnRichText text={option.label} inline />
             </button>
@@ -352,14 +422,16 @@ function SinglePlay({
   );
 }
 
-function MultiplePlay({
+export function MultiplePlay({
   payload,
   revealed,
   onReveal,
+  hideQuestion = false,
 }: {
   payload: LearnMultiplePayload;
   revealed: boolean;
   onReveal: (correct: boolean, interactions: Record<string, unknown>) => void;
+  hideQuestion?: boolean;
 }) {
   const [picked, setPicked] = useState<string[]>([]);
   const { options, ready } = useShuffledOptions(payload.options);
@@ -381,15 +453,17 @@ function MultiplePlay({
 
   return (
     <>
-      <LearnRichText
-        text={payload.question}
-        className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
-      />
+      {hideQuestion ? null : (
+        <LearnRichText
+          text={payload.question}
+          className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
+        />
+      )}
       <p className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">
         Puoi selezionare più risposte.
       </p>
       <div className={`mt-4 flex flex-col gap-2 ${ready ? "" : "invisible"}`}>
-        {options.map((option) => {
+        {options.map((option, optionIndex) => {
           const selected = picked.includes(option.id);
           const isCorrect = payload.correctIds.includes(option.id);
           return (
@@ -399,8 +473,11 @@ function MultiplePlay({
               role="checkbox"
               aria-checked={selected}
               disabled={revealed}
+              style={ready ? { animationDelay: `${optionIndex * 32}ms` } : undefined}
               onClick={() => toggle(option.id)}
-              className={optionClass({ revealed, selected, isCorrect, checkbox: true })}
+              className={`${optionClass({ revealed, selected, isCorrect, checkbox: true })}${
+                ready ? " learn-option-in" : ""
+              }`}
             >
               <CheckIcon checked={selected} />
               <LearnRichText text={option.label} inline />
@@ -670,7 +747,7 @@ function CheckIcon({ checked }: { checked: boolean }) {
   );
 }
 
-function ArrowIcon() {
+export function ArrowIcon() {
   return (
     <svg
       aria-hidden

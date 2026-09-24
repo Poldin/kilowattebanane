@@ -81,6 +81,15 @@ export function learnChapterPath(slug: string) {
   return `/learn/${slug}`;
 }
 
+export function learnChapterContinuePath(
+  slug: string,
+  afterSlideId: string,
+  ok: "1" | "0" | "open",
+) {
+  const params = new URLSearchParams({ da: afterSlideId, ok });
+  return `${learnChapterPath(slug)}?${params.toString()}`;
+}
+
 export function isLearnSlideType(value: string): value is LearnSlideType {
   return LEARN_SLIDE_TYPES.includes(value as LearnSlideType);
 }
