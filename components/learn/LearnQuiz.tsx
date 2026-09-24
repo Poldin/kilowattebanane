@@ -16,6 +16,10 @@ import type {
   LearnSlide,
 } from "@/lib/learn/types";
 
+function isQuestionSlide(slide: LearnSlide) {
+  return slide.type !== "info";
+}
+
 export function LearnQuiz({
   chapter,
   following,
@@ -25,14 +29,18 @@ export function LearnQuiz({
 }) {
   const slides = chapter.slides;
   const total = slides.length;
+  const questionSlides = slides.filter(isQuestionSlide);
 
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
-  const [results, setResults] = useState<boolean[]>([]);
+  const [results, setResults] = useState<Record<string, boolean | "open">>({});
 
   const slide = slides[index];
-  const correctCount = results.filter(Boolean).length;
-  const scoredTotal = results.length;
+  const scored = Object.values(results).filter(
+    (value): value is boolean => typeof value === "boolean",
+  );
+  const correctCount = scored.filter(Boolean).length;
+  const scoredTotal = scored.length;
 
   useEffect(() => {
     document
@@ -43,12 +51,14 @@ export function LearnQuiz({
   function restart() {
     setIndex(0);
     setDone(false);
-    setResults([]);
+    setResults({});
   }
 
-  function recordResult(correct: boolean | null) {
-    if (correct == null) return;
-    setResults((prev) => [...prev, correct]);
+  function recordResult(slideId: string, correct: boolean | null) {
+    setResults((prev) => {
+      if (slideId in prev) return prev;
+      return { ...prev, [slideId]: correct == null ? "open" : correct };
+    });
   }
 
   function goNext() {
@@ -86,6 +96,8 @@ export function LearnQuiz({
           slide={slide}
           index={index}
           total={total}
+          questionSlides={questionSlides}
+          results={results}
           onResult={recordResult}
           onNext={goNext}
           onPrev={skipPrev}
@@ -105,6 +117,8 @@ function Play({
   slide,
   index,
   total,
+  questionSlides,
+  results,
   onResult,
   onNext,
   onPrev,
@@ -114,7 +128,9 @@ function Play({
   slide: LearnSlide;
   index: number;
   total: number;
-  onResult: (correct: boolean | null) => void;
+  questionSlides: LearnSlide[];
+  results: Record<string, boolean | "open">;
+  onResult: (slideId: string, correct: boolean | null) => void;
   onNext: () => void;
   onPrev: () => void;
   onSkip: () => void;
@@ -148,12 +164,13 @@ function Play({
 
   function reveal(correct: boolean | null, interactions: Record<string, unknown>) {
     if (revealed && slide.type !== "info") return;
-    onResult(correct);
+    onResult(slide.id, correct);
     log(interactions);
     if (slide.type === "open") {
       onNext();
       return;
     }
+    if (slide.type === "single" && correct === false) return;
     setRevealed(true);
   }
 
@@ -166,14 +183,25 @@ function Play({
         onNext={onSkip}
       />
 
-      <div className="mt-4">
-        <Progress total={total} current={index} revealed={revealed} />
-      </div>
+      {questionSlides.length > 0 ? (
+        <div className="mt-4">
+          <Progress
+            slides={questionSlides}
+            currentId={slide.id}
+            results={results}
+          />
+        </div>
+      ) : null}
 
       <p className="mt-5 text-xs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
         {chapter.title}
-        <span className="mx-1.5 font-normal text-neutral-400">·</span>
-        {index + 1} di {total}
+        {isQuestionSlide(slide) && questionSlides.length > 0 ? (
+          <>
+            <span className="mx-1.5 font-normal text-neutral-400">·</span>
+            {questionSlides.findIndex((item) => item.id === slide.id) + 1} di{" "}
+            {questionSlides.length}
+          </>
+        ) : null}
       </p>
       <h1
         id="learn-title"
@@ -231,6 +259,31 @@ function Play({
   );
 }
 
+function shuffleOptions<T>(items: T[]) {
+  const next = [...items];
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const current = next[i];
+    const swap = next[j];
+    if (current === undefined || swap === undefined) continue;
+    next[i] = swap;
+    next[j] = current;
+  }
+  return next;
+}
+
+function useShuffledOptions<T>(items: T[]) {
+  const [options, setOptions] = useState(items);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setOptions(shuffleOptions(items));
+    setReady(true);
+  }, [items]);
+
+  return { options, ready };
+}
+
 function SinglePlay({
   payload,
   revealed,
@@ -241,6 +294,8 @@ function SinglePlay({
   onReveal: (correct: boolean, interactions: Record<string, unknown>) => void;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
+  const [misses, setMisses] = useState<string[]>([]);
+  const { options, ready } = useShuffledOptions(payload.options);
 
   return (
     <>
@@ -248,31 +303,51 @@ function SinglePlay({
         text={payload.question}
         className="mt-5 text-base leading-relaxed text-neutral-700 dark:text-neutral-300"
       />
-      <div role="radiogroup" className="mt-6 flex flex-col gap-2">
-        {payload.options.map((option) => {
+      <div
+        role="radiogroup"
+        className={`mt-6 flex flex-col gap-2 ${ready ? "" : "invisible"}`}
+      >
+        {options.map((option) => {
           const selected = picked === option.id;
           const isCorrect = option.id === payload.correctId;
+          const missed = misses.includes(option.id);
           return (
             <button
               key={option.id}
               type="button"
               role="radio"
               aria-checked={selected}
-              disabled={revealed}
+              disabled={revealed || missed}
               onClick={() => {
                 setPicked(option.id);
+                if (!isCorrect) {
+                  setMisses((prev) =>
+                    prev.includes(option.id) ? prev : [...prev, option.id],
+                  );
+                }
                 onReveal(isCorrect, {
                   picked: option.id,
                   correct: isCorrect,
+                  misses: isCorrect ? misses : [...misses, option.id],
                 });
               }}
-              className={optionClass({ revealed, selected, isCorrect })}
+              className={optionClass({
+                revealed,
+                selected,
+                isCorrect,
+                missed,
+              })}
             >
               <LearnRichText text={option.label} inline />
             </button>
           );
         })}
       </div>
+      {misses.length > 0 && !revealed ? (
+        <p className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">
+          Non è questa. Riprova.
+        </p>
+      ) : null}
     </>
   );
 }
@@ -287,6 +362,7 @@ function MultiplePlay({
   onReveal: (correct: boolean, interactions: Record<string, unknown>) => void;
 }) {
   const [picked, setPicked] = useState<string[]>([]);
+  const { options, ready } = useShuffledOptions(payload.options);
 
   function toggle(id: string) {
     if (revealed) return;
@@ -312,8 +388,8 @@ function MultiplePlay({
       <p className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">
         Puoi selezionare più risposte.
       </p>
-      <div className="mt-4 flex flex-col gap-2">
-        {payload.options.map((option) => {
+      <div className={`mt-4 flex flex-col gap-2 ${ready ? "" : "invisible"}`}>
+        {options.map((option) => {
           const selected = picked.includes(option.id);
           const isCorrect = payload.correctIds.includes(option.id);
           return (
@@ -403,14 +479,9 @@ function Done({
       <div className="mt-4 rounded-lg bg-[#F5D547] p-5 text-[#111111] sm:p-6">
         <p className="text-xs font-medium tracking-wide uppercase">{chapter.title}</p>
         {percent != null ? (
-          <>
-            <h1 className="mt-3 text-5xl font-bold tracking-tight leading-none sm:text-6xl">
-              {correctCount} su {scoredTotal} {percent}% {scoreEmoji(percent)}
-            </h1>
-            <p className="mt-4 max-w-md text-sm leading-relaxed text-neutral-800 sm:text-base">
-              {scoreLine(percent)}
-            </p>
-          </>
+          <h1 className="mt-3 text-5xl font-bold tracking-tight leading-none sm:text-6xl">
+            {correctCount} su {scoredTotal} {percent}% {scoreEmoji(percent)}
+          </h1>
         ) : (
           <h1 className="mt-2 text-3xl font-bold tracking-tight leading-tight sm:text-4xl">
             Fatto.
@@ -460,42 +531,81 @@ function scoreEmoji(percent: number) {
   return "🙈";
 }
 
-function scoreLine(percent: number) {
-  if (percent >= 100) return "Banana piena. Ora puoi spiegare il PUN anche in ascensore.";
-  if (percent >= 70) return "Quasi tutta banana. Un kWh di attenzione e sei a posto.";
-  if (percent >= 40) return "Mezza banana. Sai dov'è il bosco, non ancora il sentiero.";
-  if (percent >= 1) return "Più scimmia che banana. Il grafico non morde: riprova.";
-  return "Zero banane. Il mercato ha vinto 1-0, ma il ritorno si gioca dopo.";
-}
-
 function Progress({
-  total,
-  current,
-  revealed,
+  slides,
+  currentId,
+  results,
 }: {
-  total: number;
-  current: number;
-  revealed: boolean;
+  slides: LearnSlide[];
+  currentId: string;
+  results: Record<string, boolean | "open">;
 }) {
   return (
-    <ol className="flex gap-1.5" aria-hidden>
-      {Array.from({ length: total }, (_, i) => {
-        const done = i < current || (i === current && revealed);
-        const active = i === current && !revealed;
+    <ol className="flex items-center gap-1.5" aria-hidden>
+      {slides.map((item) => {
+        const result = results[item.id];
+        const active = item.id === currentId && result === undefined;
         return (
           <li
-            key={i}
-            className={`h-1 flex-1 rounded-full ${
-              done
-                ? "bg-[#F5D547]"
-                : active
-                  ? "bg-neutral-400 dark:bg-neutral-500"
-                  : "bg-neutral-200 dark:bg-neutral-800"
-            }`}
-          />
+            key={item.id}
+            className="flex h-3 w-4 shrink-0 items-center justify-center"
+          >
+            {result === true ? (
+              <ProgressTick />
+            ) : result === false ? (
+              <ProgressCross />
+            ) : (
+              <span
+                className={`h-1 w-full rounded-full ${
+                  result === "open"
+                    ? "bg-[#F5D547]"
+                    : active
+                      ? "bg-neutral-400 dark:bg-neutral-500"
+                      : "bg-neutral-200 dark:bg-neutral-800"
+                }`}
+              />
+            )}
+          </li>
         );
       })}
     </ol>
+  );
+}
+
+function ProgressTick() {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M2.4 6.2 5 8.6 9.6 3.4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ProgressCross() {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      className="h-3 w-3 text-red-600 dark:text-red-400"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M3.2 3.2 8.8 8.8M8.8 3.2 3.2 8.8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
@@ -504,15 +614,22 @@ function optionClass({
   selected,
   isCorrect,
   checkbox = false,
+  missed = false,
 }: {
   revealed: boolean;
   selected: boolean;
   isCorrect: boolean;
   checkbox?: boolean;
+  missed?: boolean;
 }) {
   const base = checkbox
     ? "flex w-full items-start gap-3 rounded-md border px-4 py-3 text-left text-sm leading-snug transition-colors disabled:cursor-default"
     : "w-full rounded-md border px-4 py-3 text-left text-sm leading-snug transition-colors disabled:cursor-default";
+  const wrong = "border-red-600 bg-red-600 text-white dark:border-red-600 dark:bg-red-600 dark:text-white";
+  const right = "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-600 dark:bg-emerald-600 dark:text-white";
+  if (missed && !revealed) {
+    return `${base} ${wrong}`;
+  }
   if (!revealed) {
     if (selected && checkbox) {
       return `${base} border-neutral-400 bg-neutral-50 text-foreground dark:border-neutral-500 dark:bg-neutral-900`;
@@ -520,10 +637,10 @@ function optionClass({
     return `${base} border-neutral-200 bg-background text-foreground hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:border-neutral-600 dark:hover:bg-neutral-900`;
   }
   if (isCorrect) {
-    return `${base} border-emerald-600 bg-emerald-50 text-emerald-950 dark:border-emerald-500 dark:bg-emerald-950 dark:text-emerald-50`;
+    return `${base} ${right}`;
   }
-  if (selected) {
-    return `${base} border-red-600 bg-red-50 text-red-950 dark:border-red-500 dark:bg-red-950 dark:text-red-50`;
+  if (selected || missed) {
+    return `${base} ${wrong}`;
   }
   return `${base} border-neutral-200 bg-background text-neutral-400 dark:border-neutral-800 dark:text-neutral-600`;
 }
