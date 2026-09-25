@@ -6,6 +6,7 @@ import { DailyInsight } from "@/components/DailyInsight";
 import { Faq, FAQ_TOMORROW_ID, FAQ_TOMORROW_Q } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
 import { loadZoneHome } from "@/lib/zone-home";
+import { loadItalyMix } from "@/lib/generation/load";
 import {
   DEFAULT_REGION,
   dateFromParam,
@@ -26,6 +27,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
     initialHome = await loadZoneHome(initialZone, initialDate);
   } catch {
     initialHome = undefined;
+  }
+  let initialMix;
+  try {
+    initialMix = await loadItalyMix(initialDate ?? initialHome?.date ?? undefined);
+  } catch {
+    initialMix = null;
   }
 
   return (
@@ -57,6 +64,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               initialZone={initialZone}
               initialDate={initialDate ?? initialHome?.date ?? undefined}
               initialHome={initialHome}
+              initialMix={initialMix}
             />
           </div>
 

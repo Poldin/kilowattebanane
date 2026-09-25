@@ -113,8 +113,9 @@ export function CompareSynthesis({
 
   return (
     <section
+      id="offerte-compare-quindi"
       aria-label="Sintesi comparativa"
-      className="mt-8 rounded-xl bg-neutral-900 p-5 text-neutral-100 sm:p-6 dark:bg-neutral-100 dark:text-neutral-900"
+      className="mt-8 scroll-mt-24 rounded-xl bg-neutral-900 p-5 text-neutral-100 sm:p-6 dark:bg-neutral-100 dark:text-neutral-900"
     >
       <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Quindi??!</h3>
       <ul className="mt-6 divide-y divide-neutral-700/60 dark:divide-neutral-300/60">

@@ -25,6 +25,8 @@ import {
 import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
 import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { MonthlyOutlookChart } from "@/components/MonthlyOutlookChart";
+import { GenerationMixChart } from "@/components/GenerationMixChart";
+import type { ItalyMixPayload } from "@/lib/generation/types";
 import { SignupSlot } from "@/components/SignupForm";
 import { MarketLearnBanner } from "@/components/MarketLearnBanner";
 import { CapBanner } from "@/components/CapBanner";
@@ -622,6 +624,7 @@ function DayStats({
   hourly,
   forward,
   today,
+  mix,
 }: {
   date: string;
   prices: number[];
@@ -630,6 +633,7 @@ function DayStats({
   hourly: ZoneHourlyPayload[];
   forward: ZoneForwardPayload;
   today: string;
+  mix?: ItalyMixPayload | null;
 }) {
   const showLineStats = tariff === "dinamica";
   const visibleFasciaIds = fasciaBadgesForPlan(tariff);
@@ -768,6 +772,7 @@ function DayStats({
         forward={forward}
         tariff={tariff}
       />
+      <GenerationMixChart date={date} initialMix={mix?.date === date ? mix : null} />
     </>
   );
 }
@@ -1722,11 +1727,13 @@ export function DailyInsight({
   initialZone = "IT-North",
   initialDate,
   initialHome,
+  initialMix,
 }: {
   initialRegion?: ItalianRegion;
   initialZone?: MarketZoneId;
   initialDate?: string;
   initialHome?: ZoneHomePayload;
+  initialMix?: ItalyMixPayload | null;
 } = {}) {
   const [region, setRegion] = useState(initialRegion);
   const [tariff, setTariff] = useState<TariffPlanId>(DEFAULT_TARIFF_PLAN);
@@ -2074,6 +2081,7 @@ export function DailyInsight({
               hourly={home?.hourly ?? []}
               forward={home?.forward ?? { asOf: null, source: null, months: [] }}
               today={today}
+              mix={initialMix}
             />
             <div className="mt-6 flex w-full flex-col gap-3">
               <MarketLearnBanner />

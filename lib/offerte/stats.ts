@@ -21,7 +21,13 @@ import type {
   OfferteVendorRank,
   OfferteVendorStats,
 } from "@/lib/offerte/public-types";
-import { buildParetoStats, type ParetoPointInput, type ParetoScontoRow } from "@/lib/offerte/pareto";
+import {
+  buildParetoStats,
+  paretoHotAxes,
+  type ParetoHotAxis,
+  type ParetoPointInput,
+  type ParetoScontoRow,
+} from "@/lib/offerte/pareto";
 import { buildPrezziStats } from "@/lib/offerte/prezzi";
 import type { MlComponentInput } from "@/lib/offerte/estimate";
 
@@ -262,9 +268,42 @@ export const loadOfferteClusterStats = unstable_cache(
       fornitori: vendorStats(rows),
     };
   },
-  ["offerte-cluster-stats-v19"],
+  ["offerte-cluster-stats-v22"],
   { revalidate: OFFERTE_CACHE_REVALIDATE, tags: [OFFERTE_CACHE_TAG] },
 );
+
+export async function loadLiveParetoHotAxes(): Promise<ParetoHotAxis[]> {
+  const today = romeToday();
+  const [placetRows, mlRows] = await Promise.all([
+    paginateSelect<PlacetClusterRow>((from, to) =>
+      offerteReadClient()
+        .from("po_placet_e_live")
+        .select(
+          "p_iva, tipo_offerta, tipo_cliente, coverage, denominazione, nome_offerta, url_sito_venditore, url_offerta, telefono, modalita_attivazione, modalita_pagamento, last_seen_on, valid_from, valid_to, cod_offerta, p_fix_f, p_fix_v, p_vol_f1, p_vol_f2, p_vol_f3, p_vol_bf1, p_vol_bf23, p_vol_mono, alpha",
+        )
+        .lte("valid_from", today)
+        .gte("valid_to", today)
+        .range(from, to),
+    ),
+    paginateSelect<MlClusterRow>((from, to) =>
+      offerteReadClient()
+        .from("po_ml_e_live")
+        .select(
+          "id, p_iva, tipo_offerta, tipo_cliente, coverage, nome_offerta, descrizione, url_sito_venditore, url_offerta, telefono, garanzie, tipologia_att_contr, modalita_attivazione, modalita_pagamento, domestico_residente, offerta_singola, offerta_onnicomprensiva, idx_prezzo_energia, coefficiente, durata, consumo_min, consumo_max, potenza_min, potenza_max, last_seen_on, valid_from, valid_to, cod_offerta, tipologia_fasce",
+        )
+        .lte("valid_from", today)
+        .gte("valid_to", today)
+        .range(from, to),
+    ),
+  ]);
+  const ids = mlRows.map((row) => row.id);
+  const [scontoRows, componenti, condizioneRows] = await Promise.all([
+    loadLiveSconti(ids),
+    loadLiveComponenti(ids),
+    loadLiveCondizioni(ids),
+  ]);
+  return paretoHotAxes(paretoInputs(placetRows, mlRows, componenti, scontoRows, condizioneRows));
+}
 
 async function loadLiveHeadlineRows() {
   const client = offerteReadClient();

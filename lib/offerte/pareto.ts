@@ -65,11 +65,31 @@ export type ParetoPointInput = {
 };
 
 type ScontoMode = "listino" | "primoAnno";
-type AxisPoint = {
-  input: ParetoPointInput;
+type HullPoint = {
+  nome: string;
   monthlyEur: number;
   energyEurKwh: number;
+};
+type AxisPoint = HullPoint & {
+  input: ParetoPointInput;
   scontoNota: string | null;
+};
+
+export type ParetoHotAxis = {
+  source: "placet" | "ml";
+  codOfferta: string;
+  nome: string;
+  venditore: string;
+  venditoreKey: string;
+  cliente: OfferteParetoCliente;
+  residenza: ParetoPointInput["residenza"];
+  prezzo: OfferteParetoPrezzo;
+  plan: NonNullable<ParetoPointInput["plan"]>;
+  monthlyEur: number;
+  energyEurKwh: number;
+  pagamento: string[];
+  attivazione: string[];
+  tipologiaContratto: string[];
 };
 
 export function buildParetoStats(inputs: ParetoPointInput[]): OfferteParetoStats {
@@ -148,9 +168,61 @@ function boardFor(
   };
 }
 
+export function paretoHotAxes(inputs: ParetoPointInput[]): ParetoHotAxis[] {
+  const axes: ParetoHotAxis[] = [];
+  for (const input of inputs) {
+    if (input.coverage !== "nazionale" || input.plan == null) continue;
+    if (!isCredibleParetoPoint(input, input.cliente, input.prezzo)) continue;
+    const potenzaKw = input.cliente === "domestico" ? POTENZA_STANDARD_CASA_KW : 6;
+    const shifted = withSconti(input, "primoAnno", potenzaKw);
+    axes.push({
+      source: input.source,
+      codOfferta: input.codOfferta,
+      nome: input.nome,
+      venditore: input.venditore,
+      venditoreKey: hostname(input.urlVenditore),
+      cliente: input.cliente,
+      residenza: input.residenza,
+      prezzo: input.prezzo,
+      plan: input.plan,
+      monthlyEur: shifted.monthlyEur,
+      energyEurKwh: shifted.energyEurKwh,
+      pagamento: input.dettaglio.pagamento,
+      attivazione: input.dettaglio.attivazione,
+      tipologiaContratto: input.dettaglio.tipologiaContratto,
+    });
+  }
+  return axes;
+}
+
+export function paretoFrontier<T extends HullPoint & { cliente: OfferteParetoCliente; prezzo: OfferteParetoPrezzo }>(
+  points: T[],
+): T[] {
+  const groups = new Map<string, T[]>();
+  for (const point of points) {
+    const key = `${point.cliente}:${point.prezzo}`;
+    const list = groups.get(key);
+    if (list) list.push(point);
+    else groups.set(key, [point]);
+  }
+  const hits: T[] = [];
+  for (const group of groups.values()) hits.push(...convexHull(group));
+  return hits;
+}
+
+function hostname(url: string | null) {
+  if (!url) return "sconosciuto";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "") || "sconosciuto";
+  } catch {
+    return "sconosciuto";
+  }
+}
+
 function withSconti(input: ParetoPointInput, mode: ScontoMode, potenzaKw: number): AxisPoint {
   if (mode === "listino" || !input.sconti?.length) {
     return {
+      nome: input.nome,
       input,
       monthlyEur: input.monthlyEur,
       energyEurKwh: input.energyEurKwh,
@@ -160,6 +232,7 @@ function withSconti(input: ParetoPointInput, mode: ScontoMode, potenzaKw: number
 
   const shift = scontoAxisShift(input.sconti, potenzaKw);
   return {
+    nome: input.nome,
     input,
     monthlyEur: Math.max(0, input.monthlyEur - shift.monthlyEur),
     energyEurKwh: Math.max(0, input.energyEurKwh - shift.energyEurKwh),
@@ -181,12 +254,12 @@ export function isCredibleParetoPoint(
   return point.energyEurKwh <= VARIABILE_ENERGY_MAX;
 }
 
-function convexHull(points: AxisPoint[]): AxisPoint[] {
+function convexHull<T extends HullPoint>(points: T[]): T[] {
   const sorted = [...points].sort(
     (a, b) =>
       a.monthlyEur - b.monthlyEur ||
       a.energyEurKwh - b.energyEurKwh ||
-      a.input.nome.localeCompare(b.input.nome, "it"),
+      a.nome.localeCompare(b.nome, "it"),
   );
 
   const pareto: AxisPoint[] = [];
@@ -208,7 +281,7 @@ function convexHull(points: AxisPoint[]): AxisPoint[] {
   return hull;
 }
 
-function isLowerCorner(a: AxisPoint, b: AxisPoint, c: AxisPoint) {
+function isLowerCorner(a: HullPoint, b: HullPoint, c: HullPoint) {
   const span = c.monthlyEur - a.monthlyEur;
   if (span <= 1e-12) return b.energyEurKwh <= a.energyEurKwh;
   const interp =

@@ -1,4 +1,5 @@
 import { resolveOffertePlan } from "@/lib/offerte/codice";
+import { paretoHotOffers } from "@/lib/offerte/pareto-store";
 import { offerteReadClient, paginateSelect } from "@/lib/offerte/db";
 import { romeToday } from "@/lib/offerte/dates";
 import { placetFacts } from "@/lib/offerte/metrics";
@@ -425,27 +426,12 @@ function toNomeItem(offer: IndexOffer, detail: string): OfferteSuggestItem {
   };
 }
 
-function toExploreHit(offer: IndexOffer): OfferteExploreHit {
-  return {
-    source: offer.source,
-    codOfferta: offer.codOfferta,
-    nome: offer.nome,
-    venditore: offer.venditore,
-    venditoreKey: offer.venditoreKey,
-    tipoCliente: offer.tipoCliente,
-    tipoOfferta: offer.tipoOfferta,
-    plan: offer.plan,
-  };
-}
-
-const EXPLORE_DEFAULT_LIMIT = 10;
+const EXPLORE_DEFAULT_LIMIT = 20;
 
 export async function exploreOffers(
   limit = EXPLORE_DEFAULT_LIMIT,
   filters?: OfferteCatalogFilters,
 ): Promise<OfferteExploreHit[]> {
-  const index = await loadSuggestIndex();
-  const matched = index.filter((offer) => matchesCatalogFilters(offer, filters));
   const capped = Math.max(1, Math.min(limit, 20));
-  return matched.slice(0, capped).map(toExploreHit);
+  return (await paretoHotOffers(filters)).slice(0, capped);
 }

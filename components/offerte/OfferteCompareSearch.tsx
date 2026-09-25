@@ -29,7 +29,10 @@ import {
   PrezzoIcon,
 } from "@/components/offerte/OfferteTraitIcons";
 import { FASCIA_COLOR } from "@/lib/fasce";
-import { buildCompareSynthesis } from "@/lib/offerte/compare-synthesis";
+import {
+  buildCompareSynthesis,
+  type CompareSynthesisPick,
+} from "@/lib/offerte/compare-synthesis";
 import { billHorizon } from "@/lib/offerte/bill";
 import {
   netRecurringEur,
@@ -407,6 +410,14 @@ export function OfferteCompareSearch({
     () => selected.filter((item) => item.category !== "fornitore"),
     [selected],
   );
+  const [spoiler, setSpoiler] = useState<(CompareSynthesisPick & { color: string }) | null>(null);
+  const onSpoiler = useCallback((next: (CompareSynthesisPick & { color: string }) | null) => {
+    setSpoiler((current) =>
+      current?.id === next?.id && current?.label === next?.label && current?.color === next?.color
+        ? current
+        : next,
+    );
+  }, []);
 
   const filterKey = catalogSearchParams(filterQuery).toString();
   const flatItems = useMemo(() => items, [items]);
@@ -472,7 +483,6 @@ export function OfferteCompareSearch({
     void (async () => {
       try {
         const params = catalogSearchParams(filterQuery);
-        params.set("limit", "5");
         const response = await fetch(`/api/offerte/explore?${params.toString()}`, {
           signal: controller.signal,
         });
@@ -480,7 +490,7 @@ export function OfferteCompareSearch({
           | { items: OfferteExploreHit[] }
           | { error: string };
         if (!response.ok || !("items" in payload)) return;
-        setHotOffers(payload.items.slice(0, 5));
+        setHotOffers(payload.items);
       } catch (caught) {
         if (controller.signal.aborted) return;
         setHotOffers([]);
@@ -799,9 +809,32 @@ export function OfferteCompareSearch({
             aria-label="Confronto e condizioni"
             className="mt-16 scroll-mt-20 rounded-xl border border-neutral-200 bg-neutral-50/70 p-5 pt-6 sm:p-6 dark:border-neutral-800 dark:bg-neutral-900/50"
           >
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              {compareOffers.length} selezionat{compareOffers.length === 1 ? "a" : "e"}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                {compareOffers.length} selezionat{compareOffers.length === 1 ? "a" : "e"}
+              </p>
+              {spoiler ? (
+                <button
+                  type="button"
+                  aria-controls="offerte-compare-quindi"
+                  onClick={() => {
+                    const target = document.getElementById("offerte-compare-quindi");
+                    if (!target) return;
+                    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                    target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+                  }}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-neutral-900 py-1 pl-3 pr-1 text-sm text-neutral-100 shadow-sm transition-opacity hover:opacity-90 dark:bg-neutral-100 dark:text-neutral-900"
+                >
+                  <span className="shrink-0">spoiler: ❤️</span>
+                  <span
+                    className="inline-flex max-w-[min(100%,16rem)] items-center rounded-full px-2.5 py-0.5 text-sm font-medium text-white"
+                    style={{ backgroundColor: spoiler.color }}
+                  >
+                    <span className="truncate">{spoiler.label}</span>
+                  </span>
+                </button>
+              ) : null}
+            </div>
             <CompareWorkspace
               offers={compareOffers}
               colors={COMPARE_OFFER_COLORS}
@@ -812,6 +845,7 @@ export function OfferteCompareSearch({
               initialResidente={filterQuery?.residente !== false}
               onFocus={setFocusedId}
               onRemove={remove}
+              onSpoiler={onSpoiler}
             />
           </section>
         ) : null}
@@ -821,36 +855,16 @@ export function OfferteCompareSearch({
 }
 
 function SoftReveal({ open, children }: { open: boolean; children: ReactNode }) {
-  const innerRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState(0);
-
-  useLayoutEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    if (!open) {
-      setHeight(0);
-      return;
-    }
-    const frame = requestAnimationFrame(() => setHeight(el.scrollHeight));
-    const observer = new ResizeObserver(() => setHeight(el.scrollHeight));
-    observer.observe(el);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [open]);
-
   return (
     <div
       aria-hidden={!open}
       inert={!open}
-      className={`overflow-hidden overflow-anchor-none transition-[height,opacity] duration-300 ease-out motion-reduce:transition-none ${
-        open || height > 0 ? "" : "mt-0!"
+      className={`grid overflow-anchor-none transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none ${
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
       }`}
-      style={{ height, opacity: open ? 1 : 0 }}
     >
-      <div ref={innerRef} className={open ? "" : "pointer-events-none"}>
-        {children}
+      <div className="overflow-hidden">
+        <div className={`pb-3 ${open ? "" : "pointer-events-none"}`}>{children}</div>
       </div>
     </div>
   );
@@ -913,7 +927,7 @@ function HotOfferList({
         return (
           <li
             key={id}
-            className="hot-offer-in max-w-full"
+            className="hot-offer-in min-w-0 max-w-full"
             style={{ animationDelay: `${index * 45}ms` }}
           >
             <button
@@ -921,7 +935,7 @@ function HotOfferList({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => onPick(offer)}
               disabled={picked}
-              className={`flex w-max max-w-full flex-col rounded-md border px-3 py-2.5 text-left transition-colors ${
+              className={`flex h-full w-max max-w-full flex-col rounded-md border px-3 py-2.5 text-left transition-colors ${
                 picked
                   ? "cursor-default border-neutral-200/70 opacity-45 dark:border-neutral-800/70"
                   : "border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:border-neutral-700 dark:hover:bg-neutral-900/60"
@@ -1880,6 +1894,7 @@ const CompareWorkspace = memo(function CompareWorkspace({
   initialResidente = true,
   onFocus,
   onRemove,
+  onSpoiler,
 }: {
   offers: OfferteSuggestItem[];
   colors: readonly string[];
@@ -1890,6 +1905,7 @@ const CompareWorkspace = memo(function CompareWorkspace({
   initialResidente?: boolean;
   onFocus: (id: string) => void;
   onRemove: (id: string) => void;
+  onSpoiler: (pick: (CompareSynthesisPick & { color: string }) | null) => void;
 }) {
   const [cliente, setCliente] = useState<CompareCliente>(initialCliente);
   const [prezzo, setPrezzo] = useState<ComparePrezzo>(initialPrezzo);
@@ -2113,6 +2129,19 @@ const CompareWorkspace = memo(function CompareWorkspace({
       ),
     [chartOffers, chartColors],
   );
+  const spoilerPick = useMemo(() => {
+    const pick = synthesis?.pick;
+    if (!pick) return null;
+    return { ...pick, color: synthesisColors[pick.id] ?? "#64748b" };
+  }, [synthesis, synthesisColors]);
+
+  useEffect(() => {
+    onSpoiler(spoilerPick);
+  }, [onSpoiler, spoilerPick]);
+
+  useEffect(() => {
+    return () => onSpoiler(null);
+  }, [onSpoiler]);
 
   useEffect(() => {
     setMonthIndex((index) => Math.min(index, Math.max(windowMonths.length - 1, 0)));

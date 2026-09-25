@@ -63,10 +63,13 @@ function line(id: string, tone: SynthesisLine["tone"], parts: SynthesisPart[]): 
   return { id, tone, parts };
 }
 
+export type CompareSynthesisPick = { id: string; label: string };
+
 export type CompareSynthesisResult = {
   sure: SynthesisLine[];
   conditional: SynthesisLine[];
   showConditional: boolean;
+  pick: CompareSynthesisPick | null;
 };
 
 const MIN_ANNUAL_KWH = 800;
@@ -452,7 +455,7 @@ export function buildCompareSynthesis(input: CompareSynthesisInput): CompareSynt
 
   if (offers.length < 2) {
     sure.push(line("need-two", "note", [t("Aggiungi almeno un'altra offerta per trarre conclusioni.")]));
-    return { sure, conditional, showConditional: false };
+    return { sure, conditional, showConditional: false, pick: null };
   }
 
   const standardSkeleton = buildSpendSkeleton(spans, hourShares("standard", shape?.hourlyRel));
@@ -506,6 +509,9 @@ export function buildCompareSynthesis(input: CompareSynthesisInput): CompareSynt
     );
   }
 
+  let pick: CompareSynthesisPick | null =
+    contenders.length === 1 ? { id: contenders[0]!.id, label: contenders[0]!.label } : null;
+
   const atKwh = standardSkeleton
     ? spendFromSkeleton(standardSkeleton, spans, annualKwh, "standard", punBySpan, shape, includeMarket)
     : null;
@@ -521,11 +527,14 @@ export function buildCompareSynthesis(input: CompareSynthesisInput): CompareSynt
     if (best && second && second.total > best.total + EPS && second.total > EPS) {
       const gap = second.total - best.total;
       const pct = (gap / second.total) * 100;
+      pick = { id: best.offer.id, label: best.offer.label };
       sure.push(
         line(`pick-${best.offer.id}`, "final", [
-          t(`A ⚡${formatIt(annualKwh)} kWh/anno e profilo standard ti conviene `),
+          t(
+            `A ⚡${formatIt(annualKwh)} kWh/anno e profilo standard, sui ${formatIt(spans.length)} mesi, ti conviene `,
+          ),
           o(best.offer),
-          t(` per ${formatEuro(gap)} in meno di `),
+          t(` per ${formatEuro(gap)} all'anno in meno di `),
           o(second.offer),
           t(` (${formatPct(pct)}).`),
         ]),
@@ -533,11 +542,11 @@ export function buildCompareSynthesis(input: CompareSynthesisInput): CompareSynt
     }
   }
 
-  const pick = sure.findIndex((item) => item.tone === "final");
-  if (pick > 0) {
-    const [headline] = sure.splice(pick, 1);
+  const headlineIndex = sure.findIndex((item) => item.tone === "final");
+  if (headlineIndex > 0) {
+    const [headline] = sure.splice(headlineIndex, 1);
     if (headline) sure.unshift(headline);
   }
 
-  return { sure, conditional, showConditional: false };
+  return { sure, conditional, showConditional: false, pick };
 }
