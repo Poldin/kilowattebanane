@@ -26,6 +26,7 @@ export function buildPrezziStats(inputs: ParetoPointInput[]): OffertePrezziStats
     for (const prezzo of ["fisso", "variabile"] as const) {
       const subset = inputs.filter(
         (row) =>
+          row.coverage === "nazionale" &&
           row.cliente === cliente &&
           row.prezzo === prezzo &&
           isCredibleParetoPoint(row, cliente, prezzo),

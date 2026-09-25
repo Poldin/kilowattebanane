@@ -262,7 +262,7 @@ export const loadOfferteClusterStats = unstable_cache(
       fornitori: vendorStats(rows),
     };
   },
-  ["offerte-cluster-stats-v18"],
+  ["offerte-cluster-stats-v19"],
   { revalidate: OFFERTE_CACHE_REVALIDATE, tags: [OFFERTE_CACHE_TAG] },
 );
 
@@ -538,6 +538,7 @@ function paretoInputs(
       urlVenditore: absoluteVendorUrl(row.url_sito_venditore),
       urlOfferta: absoluteVendorUrl(row.url_offerta),
       cliente,
+      residenza: cliente === "domestico" ? "entrambe" : "altro",
       prezzo,
       coverage: coverageKey(row.coverage),
       plan: planKey === "altro" ? null : (planKey as NonNullable<ParetoPointInput["plan"]>),
@@ -578,6 +579,7 @@ function paretoInputs(
       urlVenditore: absoluteVendorUrl(row.url_sito_venditore),
       urlOfferta: absoluteVendorUrl(row.url_offerta),
       cliente,
+      residenza: cliente === "domestico" ? residenzaKey(row.domestico_residente) : "altro",
       prezzo,
       coverage: coverageKey(row.coverage),
       plan: planKey === "altro" ? null : (planKey as NonNullable<ParetoPointInput["plan"]>),

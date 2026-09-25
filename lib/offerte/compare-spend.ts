@@ -168,11 +168,12 @@ export type PricedMonthOptions = {
   consumoKwh: number;
   monthShare: number;
   carico: CompareCaricoRates | null;
+  scontoEurKwh?: number;
 };
 
 export function monthSpendBreakdown(options: PricedMonthOptions): MonthSpendBreakdown | null {
   if (options.quotaMonthEur == null) return null;
-  const commodity = effectiveCommodityEurKwh(options);
+  const commodity = netCommodityEurKwh(options);
   if (commodity == null || !(options.monthShare >= 0)) return null;
   const kwh = options.consumoKwh * options.monthShare;
   const canoneEur = options.quotaMonthEur;
@@ -201,6 +202,14 @@ export function monthSpendBreakdown(options: PricedMonthOptions): MonthSpendBrea
   };
 }
 
+function netCommodityEurKwh(options: PricedMonthOptions) {
+  const commodity = effectiveCommodityEurKwh(options);
+  if (commodity == null) return null;
+  const cut = options.scontoEurKwh ?? 0;
+  if (!(cut > 0)) return commodity;
+  return Math.max(0, commodity - cut);
+}
+
 export function pricedMonth(options: PricedMonthOptions) {
   const breakdown = monthSpendBreakdown(options);
   if (!breakdown) return null;
@@ -208,7 +217,7 @@ export function pricedMonth(options: PricedMonthOptions) {
   if (!(kwh > 0)) {
     return { eurKwh: 0, spendEur: breakdown.totalEur };
   }
-  const commodity = effectiveCommodityEurKwh(options);
+  const commodity = netCommodityEurKwh(options);
   if (commodity == null) return null;
   const eurKwh = allInCommodityEurKwh(commodity, options.carico);
   return {

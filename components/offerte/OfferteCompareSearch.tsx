@@ -31,6 +31,12 @@ import {
 import { FASCIA_COLOR } from "@/lib/fasce";
 import { buildCompareSynthesis } from "@/lib/offerte/compare-synthesis";
 import { billHorizon } from "@/lib/offerte/bill";
+import {
+  netRecurringEur,
+  offerPotenzaKw,
+  scontoAxisShift,
+  scontoEnergyCut,
+} from "@/lib/offerte/sconto-axis";
 import type { CompareScheda } from "@/lib/offerte/compare-scheda";
 import type { OfferteCompareProfile } from "@/lib/offerte/compare-profile";
 import {
@@ -321,6 +327,7 @@ type OfferteCompareSearchProps = {
   filterQuery?: OfferteCatalogFilters;
   filtersReady?: boolean;
   headlineTotal?: number;
+  seedCompare?: { token: number; offers: OfferteSuggestItem[] } | null;
 };
 
 function catalogSearchParams(filters?: OfferteCatalogFilters) {
@@ -362,6 +369,7 @@ export function OfferteCompareSearch({
   filterQuery,
   filtersReady = true,
   headlineTotal,
+  seedCompare = null,
 }: OfferteCompareSearchProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -515,8 +523,21 @@ export function OfferteCompareSearch({
   }
 
   useEffect(() => {
-    if (compareOffers.length === 0) setFocusedId(null);
-  }, [compareOffers.length]);
+    if (!seedCompare || seedCompare.offers.length === 0) return;
+    setSelected(seedCompare.offers);
+    setQuery("");
+    setVendorKey(null);
+    setOpen(false);
+    setItems([]);
+  }, [seedCompare]);
+
+  useEffect(() => {
+    setFocusedId((current) => {
+      if (compareOffers.length === 0) return null;
+      if (current && compareOffers.some((offer) => offer.id === current)) return current;
+      return compareOffers[0]?.id ?? null;
+    });
+  }, [compareOffers]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -761,8 +782,9 @@ export function OfferteCompareSearch({
       <CompareReveal watch={compareOffers.length}>
         {compareOffers.length > 0 ? (
           <section
+            id="offerte-compare-board"
             aria-label="Confronto e condizioni"
-            className="mt-16 rounded-xl border border-neutral-200 bg-neutral-50/70 p-5 pt-6 sm:p-6 dark:border-neutral-800 dark:bg-neutral-900/50"
+            className="mt-16 scroll-mt-20 rounded-xl border border-neutral-200 bg-neutral-50/70 p-5 pt-6 sm:p-6 dark:border-neutral-800 dark:bg-neutral-900/50"
           >
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
               {compareOffers.length} selezionat{compareOffers.length === 1 ? "a" : "e"}
@@ -950,6 +972,14 @@ function offerCompareSlice(profile: OfferteCompareProfile | undefined): CompareS
   return {
     cliente: profile.tipoCliente === "non domestico" ? "non domestico" : "domestico",
     prezzo: profile.tipoOfferta.includes("variabile") ? "variabile" : "fisso",
+  };
+}
+
+function offerCompareSliceFromItem(item: OfferteSuggestItem | undefined): CompareSlice | null {
+  if (!item?.tipoCliente || !item.tipoOfferta) return null;
+  return {
+    cliente: item.tipoCliente.includes("non domestico") ? "non domestico" : "domestico",
+    prezzo: item.tipoOfferta.includes("variabile") ? "variabile" : "fisso",
   };
 }
 
@@ -1890,13 +1920,15 @@ const CompareWorkspace = memo(function CompareWorkspace({
       syncedFocusRef.current = null;
       return;
     }
-    const slice = offerCompareSlice(profiles[focusedId]);
+    const slice =
+      offerCompareSlice(profiles[focusedId]) ??
+      offerCompareSliceFromItem(offers.find((offer) => offer.id === focusedId));
     if (!slice) return;
     if (syncedFocusRef.current === focusedId) return;
     syncedFocusRef.current = focusedId;
     setCliente(slice.cliente);
     setPrezzo(slice.prezzo);
-  }, [focusedId, profiles]);
+  }, [focusedId, offers, profiles]);
   const focusedProfile = chartFocus ? profiles[chartFocus.id] : undefined;
   const compareHorizon = useMemo(() => {
     if (chartOffers.length === 0) return 12;
@@ -3297,14 +3329,17 @@ function offerEnergyPoint(
 
 function comparePlotPoint(profile: OfferteCompareProfile | undefined) {
   if (!profile) return null;
-  const x = profile.scheda.quotaFissaEurAnno;
-  if (x == null) return null;
+  const listino = profile.scheda.quotaFissaEurAnno;
+  if (listino == null) return null;
+  const shift = profileShift(profile);
+  const x = Math.max(0, listino - shift.monthlyEur * 12);
   const bands = profile.scheda.energia;
   const varied =
     bands.length > 1 && bands.some((band) => Math.abs(band.eurKwh - bands[0]!.eurKwh) > 1e-6);
   const fromBands =
     bands.length > 0 ? bands.reduce((sum, band) => sum + band.eurKwh, 0) / bands.length : null;
-  const y = fromBands ?? profile.spreadEurKwh;
+  const rawY = fromBands ?? profile.spreadEurKwh;
+  const y = rawY == null ? null : Math.max(0, rawY - shift.energyEurKwh);
   if (y == null) return null;
   return {
     x,
@@ -3378,6 +3413,10 @@ function formatEuroAmount(value: number) {
   }).format(value);
 }
 
+function profileShift(profile: OfferteCompareProfile) {
+  return scontoAxisShift(profile.scheda.scontiRighe, offerPotenzaKw(profile.tipoCliente));
+}
+
 function monthCanoneEur(
   profile: OfferteCompareProfile | undefined,
   monthIndex: number,
@@ -3386,7 +3425,8 @@ function monthCanoneEur(
   if (!profile || monthIndex >= billHorizon(profile.durataMesi)) return null;
   const monthly = recurringQuotaEur(profile);
   if (monthly == null) return null;
-  return monthly * dayFraction + (monthIndex === 0 ? (profile.scheda.unaTantumEur ?? 0) : 0);
+  const net = netRecurringEur(monthly, profileShift(profile), monthIndex);
+  return net * dayFraction + (monthIndex === 0 ? (profile.scheda.unaTantumEur ?? 0) : 0);
 }
 
 function recurringQuotaEur(profile: OfferteCompareProfile | undefined) {
@@ -3416,6 +3456,7 @@ function offerPricedOptions(
   const shares = spend.sharesByMonth[monthIndex];
   const recurring = recurringQuotaEur(profile);
   if (monthKwh == null || !hours || !shares || recurring == null) return null;
+  const shift = profileShift(profile);
   return {
     bands: offerBands(profile),
     variabile: profile.scheda.variabile,
@@ -3425,10 +3466,11 @@ function offerPricedOptions(
     hours,
     shares,
     shape: spend.shape,
-    quotaMonthEur: recurring * (spend.dayFractions[monthIndex] ?? 1),
+    quotaMonthEur: netRecurringEur(recurring, shift, monthIndex) * (spend.dayFractions[monthIndex] ?? 1),
     consumoKwh: monthKwh,
     monthShare: 1,
     carico: spend.includeMarket ? carico : null,
+    scontoEurKwh: scontoEnergyCut(shift, monthIndex),
   };
 }
 

@@ -26,7 +26,9 @@ import {
   type OfferteFascia,
   type OfferteHeadlineStats,
   type OfferteMercato,
+  type OfferteParetoCarousel,
   type OffertePrezzo,
+  type OfferteSuggestItem,
 } from "@/lib/offerte/public-types";
 import { OfferCompareBoard, type OfferBoardPreset } from "@/components/offerte/OfferCompareBoard";
 import { OfferteCompareSearch } from "@/components/offerte/OfferteCompareSearch";
@@ -105,9 +107,11 @@ const MOCK_OFFERS: MockOffer[] = [
 
 export function OfferteExplorer({
   stats,
+  carousel,
   className,
 }: {
   stats: OfferteHeadlineStats;
+  carousel: OfferteParetoCarousel;
   className?: string;
 }) {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULTS);
@@ -115,6 +119,10 @@ export function OfferteExplorer({
   const [places, setPlaces] = useState<CapPlace[]>([]);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [prefsHydrated, setPrefsHydrated] = useState(false);
+  const [seedCompare, setSeedCompare] = useState<{
+    token: number;
+    offers: OfferteSuggestItem[];
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -241,36 +249,34 @@ export function OfferteExplorer({
   );
 
   function confronta(preset: OfferBoardPreset) {
-    setPrefs((prev) => {
-      if (preset === "casa-residente") {
-        return { ...prev, cliente: "domestico", residente: true };
-      }
-      if (preset === "partita-iva") {
-        return { ...prev, cliente: "non domestico" };
-      }
-      return {
-        ...prev,
-        cliente: "domestico",
-        prezzo: "prezzo fisso",
-        fascia: prev.fascia === "dinamica" ? "monoraria" : prev.fascia,
-      };
-    });
+    setPrefs((prev) => ({
+      ...prev,
+      cliente: preset.cliente,
+      residente: preset.cliente === "domestico" ? preset.residente : prev.residente,
+      prezzo: preset.prezzo,
+      fascia: preset.prezzo === "prezzo fisso" && preset.fascia === "dinamica" ? "monoraria" : preset.fascia,
+      mercato: "tutti",
+    }));
+    setSeedCompare({ token: Date.now(), offers: preset.offers });
     window.setTimeout(() => {
-      document.getElementById("offerte-compare-search")?.scrollIntoView({
+      const target =
+        document.getElementById("offerte-compare-board") ??
+        document.getElementById("offerte-compare-search");
+      target?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
-      document.getElementById("offerte-compare-q")?.focus();
-    }, 50);
+    }, 80);
   }
 
   return (
     <section className={className ? `min-w-0 ${className}` : "min-w-0"}>
-      <OfferCompareBoard total={stats.total} onConfronta={confronta} />
+      <OfferCompareBoard total={stats.total} carousel={carousel} onConfronta={confronta} />
       <OfferteCompareSearch
         headlineTotal={stats.total}
         filterQuery={filterQuery}
         filtersReady={prefsHydrated}
+        seedCompare={seedCompare}
         filters={
           <FilterBar
             prefs={prefs}

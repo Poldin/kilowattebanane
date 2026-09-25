@@ -1,4 +1,5 @@
 import { indicePrezzoLabel, formatScontoValore } from "@/lib/offerte/portal-labels";
+import type { ScontoInput } from "@/lib/offerte/sconto";
 import { formatPotenzaKw } from "@/lib/offerte/potenza";
 import type { OfferteHitDettaglio } from "@/lib/offerte/public-types";
 
@@ -26,6 +27,7 @@ export type CompareScheda = {
   verde: string | null;
   dispacciamento: string;
   sconti: CompareScontoView[];
+  scontiRighe?: ScontoInput[];
   cliente: string | null;
   residente: string | null;
   consumo: string | null;
@@ -155,6 +157,7 @@ export function buildMlScheda(input: {
     verde: verdeLabel(greens, promoted),
     dispacciamento: dispacciamentoLabel(input.dispacciamento),
     sconti: scontoViews(input.sconti),
+    scontiRighe: input.sconti,
     pluriennale: clean(input.pluriennale),
   };
 }

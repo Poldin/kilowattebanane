@@ -1,4 +1,5 @@
 import { billHorizon } from "@/lib/offerte/bill";
+import { netRecurringEur, offerPotenzaKw, scontoAxisShift, scontoEnergyCut } from "@/lib/offerte/sconto-axis";
 import type { OfferteCompareProfile } from "@/lib/offerte/compare-profile";
 import {
   pricedMonth,
@@ -221,6 +222,10 @@ function recurringQuotaEur(profile: OfferteCompareProfile) {
   );
 }
 
+function profileShift(profile: OfferteCompareProfile) {
+  return scontoAxisShift(profile.scheda.scontiRighe, offerPotenzaKw(profile.tipoCliente));
+}
+
 function monthCanoneEur(
   profile: OfferteCompareProfile,
   monthIndex: number,
@@ -229,7 +234,8 @@ function monthCanoneEur(
   if (monthIndex >= billHorizon(profile.durataMesi)) return null;
   const monthly = recurringQuotaEur(profile);
   if (monthly == null) return null;
-  return monthly * dayFraction + (monthIndex === 0 ? (profile.scheda.unaTantumEur ?? 0) : 0);
+  const net = netRecurringEur(monthly, profileShift(profile), monthIndex);
+  return net * dayFraction + (monthIndex === 0 ? (profile.scheda.unaTantumEur ?? 0) : 0);
 }
 
 function offerBands(profile: OfferteCompareProfile) {
@@ -251,6 +257,7 @@ function commodityEurKwh(
   const shares = spend.sharesByMonth[monthIndex];
   const recurring = recurringQuotaEur(profile);
   if (monthKwh == null || !hours || !shares || recurring == null) return null;
+  const shift = profileShift(profile);
   const priced = pricedMonth({
     bands: offerBands(profile),
     variabile: profile.scheda.variabile,
@@ -260,10 +267,11 @@ function commodityEurKwh(
     hours,
     shares,
     shape: spend.shape,
-    quotaMonthEur: recurring * (spend.dayFractions[monthIndex] ?? 1),
+    quotaMonthEur: netRecurringEur(recurring, shift, monthIndex) * (spend.dayFractions[monthIndex] ?? 1),
     consumoKwh: monthKwh,
     monthShare: 1,
     carico: spend.includeMarket ? carico : null,
+    scontoEurKwh: scontoEnergyCut(shift, monthIndex),
   });
   return priced?.eurKwh ?? null;
 }
@@ -281,6 +289,7 @@ function offerSpendEur(
   const shares = spend.sharesByMonth[monthIndex];
   const recurring = recurringQuotaEur(profile);
   if (monthKwh == null || !hours || !shares || recurring == null) return null;
+  const shift = profileShift(profile);
   return (
     pricedMonth({
       bands: offerBands(profile),
@@ -291,10 +300,11 @@ function offerSpendEur(
       hours,
       shares,
       shape: spend.shape,
-      quotaMonthEur: recurring * (spend.dayFractions[monthIndex] ?? 1),
+      quotaMonthEur: netRecurringEur(recurring, shift, monthIndex) * (spend.dayFractions[monthIndex] ?? 1),
       consumoKwh: monthKwh,
       monthShare: 1,
       carico: spend.includeMarket ? carico : null,
+      scontoEurKwh: scontoEnergyCut(shift, monthIndex),
     })?.spendEur ?? null
   );
 }

@@ -1,14 +1,27 @@
+﻿import { PARETO_PLANS, PARETO_PLANS_FISSO } from "@/lib/offerte/pareto-cluster";
 import { POTENZA_STANDARD_CASA_KW } from "@/lib/offerte/potenza";
+import { scontoAxisShift } from "@/lib/offerte/sconto-axis";
 import type { OfferteFasciaPlan } from "@/lib/offerte/metrics";
 import type {
   OfferteHitDettaglio,
   OfferteParetoBoard,
+  OfferteParetoCliente,
   OfferteParetoHit,
+  OfferteParetoPlan,
+  OfferteParetoPrezzo,
+  OfferteParetoResidenza,
   OfferteParetoSpot,
   OfferteParetoStats,
 } from "@/lib/offerte/public-types";
 
 export const PARETO_SPOTS_KWH = [1200, 2700, 4000] as const;
+export {
+  PARETO_PLANS,
+  PARETO_PLANS_FISSO,
+  findParetoBoard,
+  paretoCarouselFromStats,
+} from "@/lib/offerte/pareto-cluster";
+
 const BIN_X = 32;
 const BIN_Y = 18;
 const MONTHLY_MIN = 3;
@@ -37,6 +50,7 @@ export type ParetoPointInput = {
   urlVenditore: string | null;
   urlOfferta: string | null;
   cliente: "domestico" | "non domestico";
+  residenza: "residente" | "non residente" | "entrambe" | "altro";
   prezzo: "fisso" | "variabile";
   coverage: string;
   plan: OfferteFasciaPlan | null;
@@ -63,15 +77,29 @@ export function buildParetoStats(inputs: ParetoPointInput[]): OfferteParetoStats
     (row) =>
       row.coverage === "nazionale" &&
       (row.cliente === "domestico" || row.cliente === "non domestico") &&
-      (row.prezzo === "fisso" || row.prezzo === "variabile"),
+      (row.prezzo === "fisso" || row.prezzo === "variabile") &&
+      row.plan != null,
   );
 
   const boards: OfferteParetoBoard[] = [];
   for (const cliente of ["domestico", "non domestico"] as const) {
-    for (const prezzo of ["fisso", "variabile"] as const) {
-      const subset = nazionali.filter((row) => row.cliente === cliente && row.prezzo === prezzo);
-      for (const sconti of ["listino", "primoAnno"] as const) {
-        boards.push(boardFor(subset, cliente, prezzo, sconti));
+    const residences: Array<OfferteParetoResidenza | null> =
+      cliente === "domestico" ? ["residente", "non residente"] : [null];
+    for (const residenza of residences) {
+      for (const prezzo of ["fisso", "variabile"] as const) {
+        const plans = prezzo === "variabile" ? PARETO_PLANS : PARETO_PLANS_FISSO;
+        for (const plan of plans) {
+          const subset = nazionali.filter(
+            (row) =>
+              row.cliente === cliente &&
+              row.prezzo === prezzo &&
+              row.plan === plan &&
+              matchesParetoResidenza(row, residenza),
+          );
+          for (const sconti of ["listino", "primoAnno"] as const) {
+            boards.push(boardFor(subset, { cliente, residenza, prezzo, plan, sconti }));
+          }
+        }
       }
     }
   }
@@ -79,30 +107,44 @@ export function buildParetoStats(inputs: ParetoPointInput[]): OfferteParetoStats
   return { spotsKwh: [...PARETO_SPOTS_KWH], boards };
 }
 
+function matchesParetoResidenza(
+  row: Pick<ParetoPointInput, "residenza">,
+  residenza: OfferteParetoResidenza | null,
+) {
+  if (residenza == null) return true;
+  return row.residenza === residenza || row.residenza === "entrambe";
+}
+
 function boardFor(
   inputs: ParetoPointInput[],
-  cliente: OfferteParetoBoard["cliente"],
-  prezzo: OfferteParetoBoard["prezzo"],
-  sconti: ScontoMode,
+  cluster: {
+    cliente: OfferteParetoCliente;
+    residenza: OfferteParetoResidenza | null;
+    prezzo: OfferteParetoPrezzo;
+    plan: OfferteParetoPlan;
+    sconti: ScontoMode;
+  },
 ): OfferteParetoBoard {
-  const potenzaKw = cliente === "domestico" ? POTENZA_STANDARD_CASA_KW : 6;
+  const potenzaKw = cluster.cliente === "domestico" ? POTENZA_STANDARD_CASA_KW : 6;
   const axes = inputs
-    .filter((input) => isCredibleParetoPoint(input, cliente, prezzo))
-    .map((input) => withSconti(input, sconti, potenzaKw));
+    .filter((input) => isCredibleParetoPoint(input, cluster.cliente, cluster.prezzo))
+    .map((input) => withSconti(input, cluster.sconti, potenzaKw));
 
   const hull = convexHull(axes);
   const ranges = consumptionRanges(hull);
 
   return {
-    cliente,
-    prezzo,
-    sconti,
+    cliente: cluster.cliente,
+    residenza: cluster.residenza,
+    prezzo: cluster.prezzo,
+    plan: cluster.plan,
+    sconti: cluster.sconti,
     compared: axes.length,
     hull: hull.length,
     dominated: Math.max(0, axes.length - hull.length),
     hits: hull.map((point, index) => toHit(point, ranges[index])),
     spots: spotsFor(hull, ranges),
-    cloud: cloudFor(axes, prezzo),
+    cloud: cloudFor(axes, cluster.prezzo),
   };
 }
 
@@ -116,23 +158,12 @@ function withSconti(input: ParetoPointInput, mode: ScontoMode, potenzaKw: number
     };
   }
 
-  let monthlyEur = input.monthlyEur;
-  let energyEurKwh = input.energyEurKwh;
-  const notes: string[] = [];
-
-  for (const row of input.sconti) {
-    const delta = scontoDelta(row, potenzaKw);
-    if (!delta) continue;
-    monthlyEur -= delta.monthlyEur;
-    energyEurKwh -= delta.energyEurKwh;
-    if (delta.nota) notes.push(delta.nota);
-  }
-
+  const shift = scontoAxisShift(input.sconti, potenzaKw);
   return {
     input,
-    monthlyEur: Math.max(0, monthlyEur),
-    energyEurKwh: Math.max(0, energyEurKwh),
-    scontoNota: notes.length > 0 ? notes.join(" · ") : "sconti del primo anno",
+    monthlyEur: Math.max(0, input.monthlyEur - shift.monthlyEur),
+    energyEurKwh: Math.max(0, input.energyEurKwh - shift.energyEurKwh),
+    scontoNota: shift.notes.length > 0 ? shift.notes.join(" Â· ") : "sconti del primo anno",
   };
 }
 
@@ -279,177 +310,4 @@ function cloudFor(points: AxisPoint[], prezzo: OfferteParetoBoard["prezzo"]): Of
   }
 
   return { xMin, xMax, yMin, yMax, cols: BIN_X, rows: BIN_Y, counts };
-}
-
-function scontoDelta(row: ParetoScontoRow, potenzaKw: number) {
-  const validita = padCode(row.validita);
-  if (validita === "03") return null;
-  const condizione = padCode(row.condizione_applicazione);
-  if (condizione && condizione !== "00" && condizione !== "01" && condizione !== "02" && condizione !== "03") {
-    return null;
-  }
-
-  const text = `${row.nome ?? ""} ${row.descrizione ?? ""} ${row.descrizione_condizione ?? ""}`;
-  if (isReferralSconto(text) || isHighPowerOnlySconto(text)) return null;
-
-  const amount = asPositive(row.valore);
-  if (amount == null) return null;
-  const unit = padCode(row.unita_misura);
-  const tipologia = padCode(row.tipologia_prezzo);
-  const nota = row.nome?.replace(/\s+/g, " ").trim() || "sconto";
-
-  if (unit === "01" || unit === "05") {
-    const yearly = unit === "05" ? amount : amount;
-    return { monthlyEur: yearly / 12, energyEurKwh: 0, nota };
-  }
-  if (unit === "02") {
-    return { monthlyEur: (amount * potenzaKw) / 12, energyEurKwh: 0, nota };
-  }
-  if (unit === "03" || tipologia === "03" || tipologia === "04") {
-    const yearlyMislabel = amount > 2 ? parseEuroAnno(text) : null;
-    if (yearlyMislabel != null) {
-      return { monthlyEur: yearlyMislabel / 12, energyEurKwh: 0, nota };
-    }
-    const eurKwh = amount > 2 ? amount / 1000 : amount;
-    if (!(eurKwh > 0) || eurKwh > 0.2) return null;
-    const cap = parseKwhCap(text);
-    const span = parseMonthSpan(text);
-    const hours = parseHourShare(text);
-    const fascia = parseFasciaShare(text);
-    const monthShare = span ? span.months / 12 : 1;
-    const hourShare = hours ? hours.share : 1;
-    const fasciaShare = fascia ? fascia.share : 1;
-    if (cap != null) {
-      return {
-        monthlyEur: (eurKwh * cap.kwh * monthShare * hourShare * fasciaShare) / 12,
-        energyEurKwh: 0,
-        nota,
-      };
-    }
-    return {
-      monthlyEur: 0,
-      energyEurKwh: eurKwh * monthShare * hourShare * fasciaShare,
-      nota,
-    };
-  }
-  return null;
-}
-
-const MONTH_WORD: Record<string, number> = {
-  primo: 1,
-  prima: 1,
-  secondo: 2,
-  seconda: 2,
-  terzo: 3,
-  terza: 3,
-  quarto: 4,
-  quarta: 4,
-  quinto: 5,
-  quinta: 5,
-  sesto: 6,
-  sesta: 6,
-  settimo: 7,
-  settima: 7,
-  ottavo: 8,
-  ottava: 8,
-  nono: 9,
-  nona: 9,
-  decimo: 10,
-  decima: 10,
-  undicesimo: 11,
-  undicesima: 11,
-  dodicesimo: 12,
-  dodicesima: 12,
-};
-
-function parseMonthSpan(text: string) {
-  const t = text.toLowerCase();
-  const range = t.match(/dal\s+([a-zà]+)\s+al\s+([a-zà]+)\s+mese/);
-  if (range) {
-    const from = MONTH_WORD[range[1] ?? ""];
-    const to = MONTH_WORD[range[2] ?? ""];
-    if (from && to && to >= from) return { months: to - from + 1 };
-  }
-  const nthMark = t.match(/(\d+)\s*[°º]\s*mese/);
-  if (nthMark) return { months: 1 };
-  const nthBare = t.match(/\b(\d+)\s+mese\b(?!i)/);
-  if (nthBare) return { months: 1 };
-  const nthWord = t.match(
-    /\b(prim[oa]|second[oa]|terz[oa]|quart[oa]|quint[oa]|sest[oa]|settim[oa]|ottav[oa]|non[oa]|decim[oa]|undicesim[oa]|dodicesim[oa])\s+mese/,
-  );
-  if (nthWord?.[1]) {
-    const n = MONTH_WORD[nthWord[1]];
-    if (n) return { months: 1 };
-  }
-  return null;
-}
-
-function parseKwhCap(text: string) {
-  const t = text.toLowerCase().replace(",", ".");
-  const annual = t.match(/primi\s+(\d+(?:\.\d+)?)\s*kwh\s*\/\s*a/);
-  if (annual) return { kwh: Number(annual[1]) };
-  const monthly = t.match(/primi\s+(\d+(?:\.\d+)?)\s*kwh\s*mensil/);
-  if (monthly) return { kwh: Number(monthly[1]) * 12 };
-  const sogliaMese = t.match(/soglia di\s+(\d+(?:\.\d+)?)\s*kwh di consumo me/);
-  if (sogliaMese) return { kwh: Number(sogliaMese[1]) * 12 };
-  const first = t.match(/primi\s+(\d+(?:\.\d+)?)\s*kwh/);
-  if (first) return { kwh: Number(first[1]) };
-  return null;
-}
-
-function parseFasciaShare(text: string) {
-  const t = text.toLowerCase();
-  if (t.includes("f23") || t.includes("fuori punta") || /\bf2\s+e\s+f3\b/.test(t)) {
-    return { share: 0.67 };
-  }
-  const f1 = /\bf1\b|fascia\s*1/.test(t);
-  const f2 = /\bf2\b|fascia\s*2/.test(t);
-  const f3 = /\bf3\b|fascia\s*3/.test(t);
-  if (f1 && !f2 && !f3) return { share: 0.33 };
-  if (f2 && !f1 && !f3) return { share: 0.31 };
-  if (f3 && !f1 && !f2) return { share: 0.36 };
-  return null;
-}
-
-function parseHourShare(text: string) {
-  const match = text.match(
-    /(\d{1,2})[:.](\d{2})\s*(?:a|alle|e|-|–|—)\s*(?:le\s*)?(\d{1,2})[:.](\d{2})/i,
-  );
-  if (!match) return null;
-  const start = Number(match[1]) + Number(match[2]) / 60;
-  let end = Number(match[3]) + Number(match[4]) / 60;
-  if (end <= start) end += 24;
-  const hours = end - start;
-  if (!(hours > 0 && hours < 24)) return null;
-  return { share: hours / 24 };
-}
-
-function parseEuroAnno(text: string) {
-  const match = text.match(/(\d+(?:[.,]\d+)?)\s*€\s*\/\s*anno/i);
-  if (!match?.[1]) return null;
-  const n = Number(match[1].replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-function isReferralSconto(text: string) {
-  return /segnalator|green club|porta un amico|sconto amico/i.test(text);
-}
-
-function isHighPowerOnlySconto(text: string) {
-  const match = text.match(/potenza superiore a\s*([\d.,]+)\s*kw/i);
-  if (!match?.[1]) return /utenze con potenza/i.test(text);
-  const kw = Number(match[1].replace(",", "."));
-  return Number.isFinite(kw) && kw > POTENZA_STANDARD_CASA_KW;
-}
-
-function padCode(value: string | null) {
-  const raw = value?.trim();
-  if (!raw) return null;
-  return /^\d+$/.test(raw) ? raw.padStart(2, "0") : raw;
-}
-
-function asPositive(value: number | string | null) {
-  if (value == null || value === "") return null;
-  const n = typeof value === "number" ? value : Number(String(value).replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : null;
 }

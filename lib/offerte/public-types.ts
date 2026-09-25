@@ -264,7 +264,9 @@ export type OfferteScontoStats = {
 };
 
 export type OfferteParetoCliente = "domestico" | "non domestico";
+export type OfferteParetoResidenza = "residente" | "non residente";
 export type OfferteParetoPrezzo = "fisso" | "variabile";
+export type OfferteParetoPlan = "monoraria" | "bioraria" | "fasce" | "dinamica";
 export type OfferteParetoSconti = "listino" | "primoAnno";
 
 export type OfferteParetoHit = {
@@ -305,7 +307,9 @@ export type OfferteParetoCloud = {
 
 export type OfferteParetoBoard = {
   cliente: OfferteParetoCliente;
+  residenza: OfferteParetoResidenza | null;
   prezzo: OfferteParetoPrezzo;
+  plan: OfferteParetoPlan;
   sconti: OfferteParetoSconti;
   compared: number;
   hull: number;
@@ -318,6 +322,21 @@ export type OfferteParetoBoard = {
 export type OfferteParetoStats = {
   spotsKwh: number[];
   boards: OfferteParetoBoard[];
+};
+
+export type OfferteParetoCarouselCluster = {
+  cliente: OfferteParetoCliente;
+  residenza: OfferteParetoResidenza | null;
+  prezzo: OfferteParetoPrezzo;
+  plan: OfferteParetoPlan;
+  hull: number;
+  compared: number;
+  offers: OfferteSuggestItem[];
+};
+
+export type OfferteParetoCarousel = {
+  convenienti: number;
+  featured: OfferteParetoCarouselCluster[];
 };
 
 export type OffertePrezziQuartiles = {

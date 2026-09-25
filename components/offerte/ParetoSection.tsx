@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { FasciaPlanIcon } from "@/components/offerte/FasciaPlanIcon";
 import {
@@ -11,12 +12,20 @@ import {
   ClienteIcon,
   MercatoIcon,
   PrezzoIcon,
+  ResidenzaIcon,
 } from "@/components/offerte/OfferteTraitIcons";
+import {
+  findParetoBoard,
+  PARETO_PLANS,
+  PARETO_PLANS_FISSO,
+} from "@/lib/offerte/pareto-cluster";
 import type {
   OfferteParetoBoard,
   OfferteParetoCliente,
   OfferteParetoHit,
+  OfferteParetoPlan,
   OfferteParetoPrezzo,
+  OfferteParetoResidenza,
   OfferteParetoSconti,
   OfferteParetoStats,
 } from "@/lib/offerte/public-types";
@@ -28,15 +37,17 @@ export function ParetoSection({ stats }: { stats: OfferteParetoStats }) {
 
 function ParetoBody({ stats }: { stats: OfferteParetoStats }) {
   const [cliente, setCliente] = useState<OfferteParetoCliente>("domestico");
+  const [residenza, setResidenza] = useState<OfferteParetoResidenza>("residente");
   const [prezzo, setPrezzo] = useState<OfferteParetoPrezzo>("variabile");
+  const [plan, setPlan] = useState<OfferteParetoPlan>("monoraria");
   const [sconti, setSconti] = useState<OfferteParetoSconti>("primoAnno");
 
+  const plans = prezzo === "variabile" ? PARETO_PLANS : PARETO_PLANS_FISSO;
   const board = useMemo(
     () =>
-      stats.boards.find(
-        (item) => item.cliente === cliente && item.prezzo === prezzo && item.sconti === sconti,
-      ) ?? emptyBoard(cliente, prezzo, sconti),
-    [stats.boards, cliente, prezzo, sconti],
+      findParetoBoard(stats, { cliente, residenza, prezzo, plan, sconti }) ??
+      emptyBoard(cliente, residenza, prezzo, plan, sconti),
+    [stats, cliente, residenza, prezzo, plan, sconti],
   );
 
   const dominatedPct = board.compared > 0 ? (board.dominated / board.compared) * 100 : 0;
@@ -47,10 +58,15 @@ function ParetoBody({ stats }: { stats: OfferteParetoStats }) {
         Il fronte di Pareto
       </h2>
       <p className="mt-5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        Due numeri rendono le offerte confrontabili: il canone e il prezzo dell’energia
-        {prezzo === "variabile" ? " (lo spread sul PUN)" : ""}. Se un’altra è più bassa su tutti e
-        due, questa costa solo di più. Restano quelle sul fronte: per ogni consumo ce n’è una sola
-        che vince.
+        Due numeri rendono le offerte confrontabili: il canone e{" "}
+        {prezzo === "variabile" ? "lo spread sul PUN" : "il prezzo dell’energia"}. Le mettiamo
+        sullo stesso fronte solo a parità di chi sei, residenza, fisso o variabile, e profilo
+        orario. Se un’altra è più bassa su tutti e due, questa costa solo di più. Per ogni consumo
+        ne resta una. Stesso taglio del carosello su{" "}
+        <Link href="/offer-compare" className="underline decoration-neutral-300 underline-offset-2 hover:text-foreground dark:decoration-neutral-600">
+          confronta offerte
+        </Link>
+        .
       </p>
 
       <fieldset className="mt-6">
@@ -72,12 +88,36 @@ function ParetoBody({ stats }: { stats: OfferteParetoStats }) {
           </ModeChip>
         </div>
       </fieldset>
+      {cliente === "domestico" ? (
+        <fieldset className="mt-3">
+          <legend className="sr-only">Residenza</legend>
+          <div className="flex flex-wrap gap-2">
+            <ModeChip
+              active={residenza === "residente"}
+              onClick={() => setResidenza("residente")}
+              icon={<ResidenzaIcon residente />}
+            >
+              Residente
+            </ModeChip>
+            <ModeChip
+              active={residenza === "non residente"}
+              onClick={() => setResidenza("non residente")}
+              icon={<ResidenzaIcon residente={false} />}
+            >
+              Non residente
+            </ModeChip>
+          </div>
+        </fieldset>
+      ) : null}
       <fieldset className="mt-3">
         <legend className="sr-only">Tipo di prezzo</legend>
         <div className="flex flex-wrap gap-2">
           <ModeChip
             active={prezzo === "fisso"}
-            onClick={() => setPrezzo("fisso")}
+            onClick={() => {
+              setPrezzo("fisso");
+              if (plan === "dinamica") setPlan("monoraria");
+            }}
             icon={<PrezzoIcon kind="prezzo fisso" />}
           >
             Fisso
@@ -89,6 +129,21 @@ function ParetoBody({ stats }: { stats: OfferteParetoStats }) {
           >
             Variabile
           </ModeChip>
+        </div>
+      </fieldset>
+      <fieldset className="mt-3">
+        <legend className="sr-only">Profilo orario</legend>
+        <div className="flex flex-wrap gap-2">
+          {plans.map((item) => (
+            <ModeChip
+              key={item}
+              active={plan === item}
+              onClick={() => setPlan(item)}
+              icon={<FasciaPlanIcon plan={item} />}
+            >
+              {planChipLabel(item)}
+            </ModeChip>
+          ))}
         </div>
       </fieldset>
       <fieldset className="mt-3">
@@ -344,14 +399,25 @@ function planLabel(plan: NonNullable<OfferteParetoHit["plan"]>) {
   return "dinamica";
 }
 
+function planChipLabel(plan: OfferteParetoPlan) {
+  if (plan === "monoraria") return "Monoraria";
+  if (plan === "bioraria") return "Bioraria";
+  if (plan === "fasce") return "Trioraria";
+  return "Dinamica";
+}
+
 function emptyBoard(
   cliente: OfferteParetoCliente,
+  residenza: OfferteParetoResidenza,
   prezzo: OfferteParetoPrezzo,
+  plan: OfferteParetoPlan,
   sconti: OfferteParetoSconti,
 ): OfferteParetoBoard {
   return {
     cliente,
+    residenza: cliente === "domestico" ? residenza : null,
     prezzo,
+    plan,
     sconti,
     compared: 0,
     hull: 0,

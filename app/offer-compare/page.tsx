@@ -7,9 +7,10 @@ import { OpposizioniBanner } from "@/components/OpposizioniBanner";
 import { OfferteExplorer } from "@/components/offerte/OfferteExplorer";
 import { SignupProvider, SignupSlot } from "@/components/SignupForm";
 import { publicSiteUrl } from "@/lib/app-url";
-import { loadOfferteHeadlineStats } from "@/lib/offerte/stats";
+import { paretoCarouselFromStats } from "@/lib/offerte/pareto-cluster";
+import { loadOfferteClusterStats } from "@/lib/offerte/stats";
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: "Confronta offerte luce",
@@ -25,14 +26,14 @@ export default async function OfferComparePage({
 }) {
   const params = await searchParams;
   if (params.cap || params.tab) redirect("/offer-compare");
-  const stats = await loadOfferteHeadlineStats();
+  const stats = await loadOfferteClusterStats();
 
   return (
     <SignupProvider>
       <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
         <Header />
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-8 sm:px-6 sm:pt-5">
-          <OfferteExplorer stats={stats} />
+          <OfferteExplorer stats={stats} carousel={paretoCarouselFromStats(stats.pareto)} />
           <div className="mt-16 flex w-full flex-col gap-3 sm:mt-20">
             <OpposizioniBanner />
             <MarketLearnBanner />
