@@ -1,7 +1,16 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  loadStoredMixSlots,
+  mixDaysFromSlots,
+  upsertMixDayStats,
+} from "@/lib/generation/day-stats";
 import { fetchItalyGeneration } from "@/lib/generation/fetch";
 import { addCalendarDays, romeToday } from "@/lib/generation/time";
-import type { GenerationPullSummary, GenerationSlot } from "@/lib/generation/types";
+import type {
+  GenerationLookbackSummary,
+  GenerationPullSummary,
+  GenerationSlot,
+} from "@/lib/generation/types";
 
 const UPSERT_CHUNK = 500;
 
@@ -57,6 +66,7 @@ export async function pullItalyGeneration(daysBack = 1): Promise<GenerationPullS
   const previousLatest = await latestStoredSlot();
   const slots = await fetchItalyGeneration(from, to);
   const upserted = await upsertSlots(slots);
+  await upsertMixDayStats(mixDaysFromSlots(slots));
   const latestSlot =
     slots.reduce<Date | null>((latest, slot) => {
       if (!latest || slot.slotStart > latest) return slot.slotStart;
@@ -72,4 +82,25 @@ export async function pullItalyGeneration(daysBack = 1): Promise<GenerationPullS
     updated: Boolean(latestSlot && latestSlot !== previousLatest),
     source: "energy-charts",
   };
+}
+
+export async function rebuildItalyMixDayStatsFromStored(): Promise<GenerationLookbackSummary> {
+  const days = mixDaysFromSlots(await loadStoredMixSlots());
+  const upserted = await upsertMixDayStats(days);
+  return {
+    from: days[0]?.date ?? null,
+    to: days.at(-1)?.date ?? null,
+    days: upserted,
+    source: "stored",
+  };
+}
+
+export async function pullItalyMixLookback(
+  from: string,
+  to: string,
+): Promise<GenerationLookbackSummary> {
+  const slots = await fetchItalyGeneration(from, to, 40_000);
+  const days = mixDaysFromSlots(slots);
+  const upserted = await upsertMixDayStats(days);
+  return { from, to, days: upserted, source: "energy-charts" };
 }

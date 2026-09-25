@@ -1,5 +1,5 @@
 import { MIX_STACK_ORDER } from "@/lib/generation/sources";
-import type { MixHourPoint, MixSourceId } from "@/lib/generation/types";
+import type { MixDayPoint, MixHourPoint, MixSourceId } from "@/lib/generation/types";
 
 export type MixStackPad = { t: number; r: number; b: number; l: number };
 
@@ -71,6 +71,68 @@ export function stackMixLayers(
 
   return {
     layers: visible.map((id) => ({ id, d: (parts.get(id) ?? []).filter(Boolean).join(" ") })),
+    maxMw,
+    plotW,
+    plotH,
+    xAt,
+    yAt,
+  };
+}
+
+function dayAvgMw(day: MixDayPoint) {
+  const hours = Math.max(day.hourCount, 1);
+  const mw: Partial<Record<MixSourceId, number>> = {};
+  let totalMw = 0;
+  for (const id of Object.keys(day.mwh) as MixSourceId[]) {
+    const value = (day.mwh[id] ?? 0) / hours;
+    if (value > 0) {
+      mw[id] = value;
+      totalMw += value;
+    }
+  }
+  return { mw, totalMw };
+}
+
+export function stackMixDayMw(
+  days: MixDayPoint[],
+  width: number,
+  height: number,
+  pad: MixStackPad,
+): MixStackLayout {
+  const plotW = width - pad.l - pad.r;
+  const plotH = height - pad.t - pad.b;
+  const n = Math.max(days.length, 1);
+  const avgs = days.map(dayAvgMw);
+  const maxMw = Math.max(...avgs.map((day) => day.totalMw), 1);
+  const xAt = (index: number) => pad.l + (index / n) * plotW;
+  const yAt = (mw: number) => pad.t + plotH - (mw / maxMw) * plotH;
+  const visible = MIX_STACK_ORDER.filter((id) =>
+    avgs.some((day) => (day.mw[id] ?? 0) > 0),
+  );
+
+  const parts = new Map<MixSourceId, string[]>(visible.map((id) => [id, []]));
+  if (avgs.length > 0) {
+    const samples = avgs.flatMap((day, index) => [
+      { index, mw: day.mw },
+      { index: index + 1, mw: day.mw },
+    ]);
+    const xs = samples.map((sample) => xAt(sample.index));
+    const bottoms = samples.map(() => pad.t + plotH);
+    for (const id of visible) {
+      const tops = samples.map((sample, sampleIndex) => {
+        const mw = sample.mw[id] ?? 0;
+        return bottoms[sampleIndex] - (mw / maxMw) * plotH;
+      });
+      parts.get(id)?.push(stackedPath(xs, tops, bottoms));
+      bottoms.splice(0, bottoms.length, ...tops);
+    }
+  }
+
+  return {
+    layers: visible.map((id) => ({
+      id,
+      d: (parts.get(id) ?? []).filter(Boolean).join(" "),
+    })),
     maxMw,
     plotW,
     plotH,

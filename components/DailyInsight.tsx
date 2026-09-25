@@ -26,7 +26,7 @@ import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
 import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { MonthlyOutlookChart } from "@/components/MonthlyOutlookChart";
 import { GenerationMixChart } from "@/components/GenerationMixChart";
-import type { ItalyMixPayload } from "@/lib/generation/types";
+import type { ItalyMixPayload, MixDayPoint } from "@/lib/generation/types";
 import { SignupSlot } from "@/components/SignupForm";
 import { MarketLearnBanner } from "@/components/MarketLearnBanner";
 import { CapBanner } from "@/components/CapBanner";
@@ -1728,12 +1728,14 @@ export function DailyInsight({
   initialDate,
   initialHome,
   initialMix,
+  initialMixDays = [],
 }: {
   initialRegion?: ItalianRegion;
   initialZone?: MarketZoneId;
   initialDate?: string;
   initialHome?: ZoneHomePayload;
   initialMix?: ItalyMixPayload | null;
+  initialMixDays?: MixDayPoint[];
 } = {}) {
   const [region, setRegion] = useState(initialRegion);
   const [tariff, setTariff] = useState<TariffPlanId>(DEFAULT_TARIFF_PLAN);
@@ -2099,6 +2101,7 @@ export function DailyInsight({
                 region={region}
                 onRegionChange={handleRegionChange}
                 tariff={tariff}
+                mixDays={initialMixDays}
               />
               <LoadShiftSim
                 hourly={home.hourly}

@@ -12,17 +12,32 @@ type EnergyChartsPowerResponse = {
   }>;
 };
 
-export async function fetchItalyGeneration(from: string, to: string): Promise<GenerationSlot[]> {
+async function requestItalyGeneration(from: string, to: string, timeoutMs: number) {
   const url = new URL(ENERGY_CHARTS_POWER_URL);
   url.searchParams.set("country", "it");
   url.searchParams.set("start", from);
   url.searchParams.set("end", to);
 
-  const res = await fetch(url, {
+  return fetch(url, {
     headers: { Accept: "application/json", "User-Agent": "kilowattebanane/1.0" },
     cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
+}
+
+export async function fetchItalyGeneration(
+  from: string,
+  to: string,
+  timeoutMs = 20_000,
+): Promise<GenerationSlot[]> {
+  let res = await requestItalyGeneration(from, to, timeoutMs);
+  if (res.status === 429) {
+    const wait = Number(res.headers.get("retry-after") ?? "35");
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(60, Math.max(1, wait)) * 1000),
+    );
+    res = await requestItalyGeneration(from, to, timeoutMs);
+  }
   if (!res.ok) {
     throw new Error(`energy-charts HTTP ${res.status}`);
   }

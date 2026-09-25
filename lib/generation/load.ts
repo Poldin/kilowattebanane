@@ -1,9 +1,13 @@
 import { unstable_cache } from "next/cache";
-import { fetchItalyMixForDate, fetchLatestItalyMix } from "@/lib/generation/query";
+import {
+  fetchItalyMixDays,
+  fetchItalyMixForDate,
+  fetchLatestItalyMix,
+} from "@/lib/generation/query";
 import { addCalendarDays, romeToday } from "@/lib/generation/time";
-import type { ItalyMixPayload } from "@/lib/generation/types";
+import type { ItalyMixPayload, MixDayPoint } from "@/lib/generation/types";
 
-export type { ItalyMixPayload } from "@/lib/generation/types";
+export type { ItalyMixPayload, MixDayPoint } from "@/lib/generation/types";
 
 const CACHE: { revalidate: number; tags: string[] } = {
   revalidate: 3600,
@@ -24,4 +28,8 @@ export async function loadMailItalyMix(): Promise<ItalyMixPayload | null> {
   const mix = await loadItalyMix(yesterday);
   if (mix?.hours.length) return mix;
   return loadItalyMix();
+}
+
+export async function loadItalyMixDays(): Promise<MixDayPoint[]> {
+  return unstable_cache(fetchItalyMixDays, ["italy-mix-days"], CACHE)();
 }

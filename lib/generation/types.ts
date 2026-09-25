@@ -43,6 +43,19 @@ export type GenerationSlot = {
   mw: number;
 };
 
+export type MixDayPoint = {
+  date: string;
+  mwh: Partial<Record<MixSourceId, number>>;
+  totalMwh: number;
+  renewableShare: number;
+  fossilShare: number;
+  peakMw: number;
+  peakHour: number;
+  cleanestHour: number;
+  cleanestShare: number;
+  hourCount: number;
+};
+
 export type GenerationPullSummary = {
   from: string;
   to: string;
@@ -51,4 +64,11 @@ export type GenerationPullSummary = {
   previousLatest: string | null;
   updated: boolean;
   source: "energy-charts";
+};
+
+export type GenerationLookbackSummary = {
+  from: string | null;
+  to: string | null;
+  days: number;
+  source: "energy-charts" | "stored";
 };

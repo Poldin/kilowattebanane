@@ -4,6 +4,7 @@ import { romeHour } from "@/lib/generation/time";
 import {
   MIX_SOURCE_IDS,
   type ItalyMixPayload,
+  type MixDayPoint,
   type MixHourPoint,
   type MixSourceId,
 } from "@/lib/generation/types";
@@ -145,4 +146,69 @@ export async function fetchLatestItalyMix(): Promise<ItalyMixPayload | null> {
   if (latestError) throw new Error(latestError.message);
   if (!latest?.delivery_date) return null;
   return fetchItalyMixForDate(String(latest.delivery_date));
+}
+
+function mapDayStat(row: {
+  delivery_date: unknown;
+  mwh: unknown;
+  total_mwh: unknown;
+  renewable_share: unknown;
+  fossil_share: unknown;
+  peak_mw: unknown;
+  peak_hour: unknown;
+  cleanest_hour: unknown;
+  cleanest_share: unknown;
+  hour_count: unknown;
+}): MixDayPoint | null {
+  const date = String(row.delivery_date ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const raw = row.mwh && typeof row.mwh === "object" ? row.mwh : {};
+  const mwh: Partial<Record<MixSourceId, number>> = {};
+  for (const id of MIX_SOURCE_IDS) {
+    const value = Number((raw as Record<string, unknown>)[id]);
+    if (Number.isFinite(value) && value > 0) mwh[id] = value;
+  }
+  const totalMwh = Number(row.total_mwh);
+  if (!(totalMwh > 0)) return null;
+  return {
+    date,
+    mwh,
+    totalMwh,
+    renewableShare: Number(row.renewable_share) || 0,
+    fossilShare: Number(row.fossil_share) || 0,
+    peakMw: Number(row.peak_mw) || 0,
+    peakHour: Number(row.peak_hour) || 0,
+    cleanestHour: Number(row.cleanest_hour) || 0,
+    cleanestShare: Number(row.cleanest_share) || 0,
+    hourCount: Number(row.hour_count) || 0,
+  };
+}
+
+export async function fetchItalyMixDays(): Promise<MixDayPoint[]> {
+  const supabase = createAdminClient();
+  const days: MixDayPoint[] = [];
+  let from = 0;
+  const page = 1000;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("generation_mix_day_stats")
+      .select(
+        "delivery_date, mwh, total_mwh, renewable_share, fossil_share, peak_mw, peak_hour, cleanest_hour, cleanest_share, hour_count",
+      )
+      .order("delivery_date", { ascending: true })
+      .range(from, from + page - 1);
+
+    if (error) throw new Error(error.message);
+    if (!data?.length) break;
+
+    for (const row of data) {
+      const mapped = mapDayStat(row);
+      if (mapped) days.push(mapped);
+    }
+    if (data.length < page) break;
+    from += page;
+  }
+
+  return days;
 }

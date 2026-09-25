@@ -51,7 +51,9 @@ import {
   type LookbackDayPoint,
   type LookbackRangeId,
 } from "@/lib/lookback";
+import { LookbackMixChart } from "@/components/LookbackMixChart";
 import { RegionZoneBar } from "@/components/RegionZoneBar";
+import type { MixDayPoint } from "@/lib/generation/types";
 import type { ItalianRegion } from "@/lib/market-zones";
 import type { ZoneHourlyPayload } from "@/lib/zone-home-types";
 
@@ -716,12 +718,14 @@ export function LookbackInsight({
   region,
   onRegionChange,
   tariff,
+  mixDays = [],
 }: {
   points: LookbackDayPoint[];
   hourly: ZoneHourlyPayload[];
   region: ItalianRegion;
   onRegionChange: (value: string) => void;
   tariff: TariffPlanId;
+  mixDays?: MixDayPoint[];
 }) {
   const [rangeId, setRangeId] = useState<LookbackRangeId>(DEFAULT_LOOKBACK_RANGE);
   const [layers, setLayers] = useState<ChartLayers>(() =>
@@ -745,6 +749,13 @@ export function LookbackInsight({
     const allowed = new Set(windowDates);
     return hourly.filter((day) => allowed.has(day.date));
   }, [hourly, windowDates]);
+  const windowMixDays = useMemo(() => {
+    const allowed = new Set(windowDates);
+    const hit = mixDays.filter((day) => allowed.has(day.date));
+    if (hit.length > 0 || !endDate) return hit;
+    const latest = [...mixDays].reverse().find((day) => day.date <= endDate);
+    return latest ? [latest] : [];
+  }, [mixDays, windowDates, endDate]);
   const stats = lookbackWindowStatsFromHourly(windowHourly);
   const fasciaAvgs = useMemo(
     () => fasciaAveragesFromDays(windowHourly),
@@ -897,6 +908,10 @@ export function LookbackInsight({
           </p>
         ) : null}
       </div>
+
+      {windowMixDays.length > 0 ? (
+        <LookbackMixChart key={rangeId} days={windowMixDays} />
+      ) : null}
     </section>
   );
 }
