@@ -43,6 +43,7 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
 
   if (!stack || !summary || days.length === 0) return null;
 
+  const chartStack = stack;
   const picked = pickedIndex == null ? null : days[pickedIndex] ?? null;
   const shares = picked ? sharesFromMw(picked.mwh) : summary.shares;
   const spanYears = days[0].date.slice(0, 4) !== days[days.length - 1].date.slice(0, 4);
@@ -56,7 +57,7 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
   function onMove(event: PointerEvent<SVGSVGElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = ((event.clientX - bounds.left) / bounds.width) * CHART_W;
-    const raw = ((x - PAD.l) / stack.plotW) * days.length;
+    const raw = ((x - PAD.l) / chartStack.plotW) * days.length;
     const index = Math.min(days.length - 1, Math.max(0, Math.floor(raw)));
     setPickedIndex(index);
   }
@@ -87,7 +88,7 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
         >
           <rect width={CHART_W} height={CHART_H} fill="#111111" />
 
-          {stack.layers.map((layer) => (
+          {chartStack.layers.map((layer) => (
             <path
               key={layer.id}
               d={layer.d}
@@ -97,9 +98,9 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
 
           {picked && pickedAvgMw != null ? (
             <line
-              x1={stack.xAt(pickedIndex! + 0.5)}
-              x2={stack.xAt(pickedIndex! + 0.5)}
-              y1={stack.yAt(pickedAvgMw)}
+              x1={chartStack.xAt(pickedIndex! + 0.5)}
+              x2={chartStack.xAt(pickedIndex! + 0.5)}
+              y1={chartStack.yAt(pickedAvgMw)}
               y2={CHART_H - PAD.b}
               stroke="#F5F5F5"
               strokeOpacity="0.7"
@@ -115,7 +116,7 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
             fontSize={9}
             fontFamily={FONT}
           >
-            {formatGw(stack.maxMw)}
+            {formatGw(chartStack.maxMw)}
           </text>
           <text
             x={PAD.l - 6}
@@ -130,7 +131,7 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
 
           {ticks.map((index) => {
             const day = days[index];
-            const x = stack.xAt(index + 0.5);
+            const x = chartStack.xAt(index + 0.5);
             return (
               <g key={day?.date ?? index}>
                 <line

@@ -7,6 +7,7 @@ import { Faq, FAQ_TOMORROW_ID, FAQ_TOMORROW_Q } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
 import { loadZoneHome } from "@/lib/zone-home";
 import { loadItalyMix, loadItalyMixDays } from "@/lib/generation/load";
+import type { MixDayPoint } from "@/lib/generation/types";
 import {
   DEFAULT_REGION,
   dateFromParam,
@@ -34,7 +35,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   } catch {
     initialMix = null;
   }
-  let initialMixDays;
+  let initialMixDays: MixDayPoint[] = [];
   try {
     initialMixDays = await loadItalyMixDays();
   } catch {
