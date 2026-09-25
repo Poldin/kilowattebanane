@@ -11,18 +11,22 @@ function OfferBadge({
   label,
   color,
   onFocus,
+  bold,
 }: {
   id: string;
   label: string;
   color: string;
   onFocus?: (id: string) => void;
+  bold?: boolean;
 }) {
   return (
     <button
       type="button"
       title={label}
       onClick={() => onFocus?.(id)}
-      className="mx-0.5 inline-flex max-w-[min(100%,16rem)] translate-y-[-0.05em] items-center rounded-full px-2.5 py-0.5 text-sm font-medium text-white align-baseline transition-opacity hover:opacity-90"
+      className={`mx-0.5 inline-flex max-w-[min(100%,16rem)] translate-y-[-0.05em] items-center rounded-full px-2.5 py-0.5 text-sm text-white align-baseline transition-opacity hover:opacity-90 ${
+        bold ? "font-bold" : "font-medium"
+      }`}
       style={{ backgroundColor: color }}
     >
       <span className="truncate">{label}</span>
@@ -34,10 +38,12 @@ function SynthesisContent({
   parts,
   colors,
   onFocus,
+  bold,
 }: {
   parts: SynthesisPart[];
   colors: Record<string, string>;
   onFocus?: (id: string) => void;
+  bold?: boolean;
 }) {
   return (
     <>
@@ -51,6 +57,7 @@ function SynthesisContent({
             label={part.label}
             color={colors[part.id] ?? "#64748b"}
             onFocus={onFocus}
+            bold={bold}
           />
         ),
       )}
@@ -71,12 +78,17 @@ function SynthesisItem({
     <li className="py-2.5 first:pt-0 last:pb-0">
       <p
         className={`text-sm leading-relaxed ${
-          line.tone === "strong"
-            ? "text-neutral-100 dark:text-neutral-900"
-            : "text-neutral-300 dark:text-neutral-600"
-        }`}
+          line.tone === "note"
+            ? "text-neutral-300 dark:text-neutral-600"
+            : "text-neutral-100 dark:text-neutral-900"
+        } ${line.tone === "final" ? "font-bold" : ""}`}
       >
-        <SynthesisContent parts={line.parts} colors={colors} onFocus={onFocus} />
+        <SynthesisContent
+          parts={line.parts}
+          colors={colors}
+          onFocus={onFocus}
+          bold={line.tone === "final"}
+        />
       </p>
     </li>
   );

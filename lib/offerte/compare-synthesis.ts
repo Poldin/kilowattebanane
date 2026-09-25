@@ -47,7 +47,7 @@ export type SynthesisPart =
 
 export type SynthesisLine = {
   id: string;
-  tone: "strong" | "note";
+  tone: "strong" | "note" | "final";
   parts: SynthesisPart[];
 };
 
@@ -97,7 +97,7 @@ function spanSeasonWeight(start: string, end: string) {
   return weight;
 }
 
-function defaultSpanKwhFromWeights(weights: number[], annual: number) {
+function allocateYear(weights: number[], annual: number) {
   const sum = weights.reduce((total, value) => total + value, 0);
   const out = weights.map((weight) => Math.round(annual * (sum > 0 ? weight / sum : 0)));
   const drift = annual - out.reduce((total, value) => total + value, 0);
@@ -105,12 +105,29 @@ function defaultSpanKwhFromWeights(weights: number[], annual: number) {
   return out;
 }
 
+function defaultSpanKwhFromWeights(weights: number[], annual: number) {
+  const out: number[] = [];
+  for (let start = 0; start < weights.length; start += 12) {
+    out.push(...allocateYear(weights.slice(start, start + 12), annual));
+  }
+  return out;
+}
+
 function oculatoSpanKwh(spans: CompareSpan[], annual: number, punBySpan: Array<number | null>) {
-  const starts = spans.map((span) => span.start);
-  const shares = monthKwhShares({ profilo: "oculato", starts, punEurKwh: punBySpan });
-  const out = shares.map((share) => Math.round(annual * share));
-  const drift = annual - out.reduce((total, value) => total + value, 0);
-  if (out.length > 0) out[out.length - 1] = Math.max(0, (out[out.length - 1] ?? 0) + drift);
+  const out: number[] = [];
+  for (let start = 0; start < spans.length; start += 12) {
+    const yearSpans = spans.slice(start, start + 12);
+    const starts = yearSpans.map((span) => span.start);
+    const shares = monthKwhShares({
+      profilo: "oculato",
+      starts,
+      punEurKwh: punBySpan.slice(start, start + 12),
+    });
+    const year = shares.map((share) => Math.round(annual * share));
+    const drift = annual - year.reduce((total, value) => total + value, 0);
+    if (year.length > 0) year[year.length - 1] = Math.max(0, (year[year.length - 1] ?? 0) + drift);
+    out.push(...year);
+  }
   return out;
 }
 
@@ -194,26 +211,6 @@ function spendFromSkeleton(
   };
 }
 
-function buildSpendForProfile(
-  spans: CompareSpan[],
-  annualKwh: number,
-  profile: OfferteConsumoProfilo,
-  punBySpan: Array<number | null>,
-  shape: ComparePunShape | null,
-  includeMarket: boolean,
-): CompareSpendInput | null {
-  const skeleton = buildSpendSkeleton(spans, hourShares(profile, shape?.hourlyRel));
-  if (!skeleton) return null;
-  return spendFromSkeleton(
-    skeleton,
-    spans,
-    annualKwh,
-    profile,
-    punBySpan,
-    shape,
-    includeMarket,
-  );
-}
 
 function recurringQuotaEur(profile: OfferteCompareProfile) {
   return (
@@ -325,11 +322,6 @@ function formatEuro(value: number) {
   }).format(value);
 }
 
-function profileLabel(mode: CompareSynthesisInput["profileMode"]) {
-  if (mode === "oculato") return "profilo oculato";
-  if (mode === "custom") return "profilo personalizzato";
-  return "profilo standard";
-}
 
 function pairDominates(
   winner: CompareOfferRef,
@@ -356,83 +348,6 @@ function pairDominates(
   return strict;
 }
 
-function axisWinnerEveryMonth(
-  offers: CompareOfferRef[],
-  spans: CompareSpan[],
-  punBySpan: Array<number | null>,
-  spend: CompareSpendInput | null,
-  axis: "canone" | "spread",
-) {
-  if (!spend || offers.length < 2) return null;
-  const horizon = spans.length;
-  let winnerId: string | null = null;
-  for (let monthIndex = 0; monthIndex < horizon; monthIndex++) {
-    let bestId: string | null = null;
-    let bestValue = Infinity;
-    for (const offer of offers) {
-      if (monthIndex >= activeMonths(offer.profile, horizon)) continue;
-      const value =
-        axis === "canone"
-          ? monthCanoneEur(offer.profile, monthIndex, spend.dayFractions[monthIndex] ?? 1)
-          : commodityEurKwh(offer.profile, monthIndex, punBySpan[monthIndex] ?? null, null, spend);
-      if (value == null) continue;
-      if (value < bestValue - EPS) {
-        bestValue = value;
-        bestId = offer.id;
-      }
-    }
-    if (!bestId) continue;
-    if (winnerId == null) winnerId = bestId;
-    else if (winnerId !== bestId) return null;
-  }
-  return winnerId;
-}
-
-function staticKwhThreshold(
-  a: CompareOfferRef,
-  b: CompareOfferRef,
-  spans: CompareSpan[],
-  punBySpan: Array<number | null>,
-  spend: CompareSpendInput | null,
-): { kwh: number; belowId: string; aboveId: string } | null {
-  if (!spend || spans.length === 0) return null;
-  const horizon = spans.length;
-  let canoneA = 0;
-  let canoneB = 0;
-  let spreadA = 0;
-  let spreadB = 0;
-  let months = 0;
-  for (let monthIndex = 0; monthIndex < horizon; monthIndex++) {
-    if (
-      monthIndex >= activeMonths(a.profile, horizon) ||
-      monthIndex >= activeMonths(b.profile, horizon)
-    ) {
-      continue;
-    }
-    const ca = monthCanoneEur(a.profile, monthIndex, spend.dayFractions[monthIndex] ?? 1);
-    const cb = monthCanoneEur(b.profile, monthIndex, spend.dayFractions[monthIndex] ?? 1);
-    const sa = commodityEurKwh(a.profile, monthIndex, punBySpan[monthIndex] ?? null, null, spend);
-    const sb = commodityEurKwh(b.profile, monthIndex, punBySpan[monthIndex] ?? null, null, spend);
-    if (ca == null || cb == null || sa == null || sb == null) return null;
-    canoneA += ca;
-    canoneB += cb;
-    spreadA += sa;
-    spreadB += sb;
-    months++;
-  }
-  if (months === 0) return null;
-  canoneA /= months;
-  canoneB /= months;
-  spreadA /= months;
-  spreadB /= months;
-  const dSpread = spreadA - spreadB;
-  if (Math.abs(dSpread) <= EPS) return null;
-  const kwh = (12 * (canoneB - canoneA)) / dSpread;
-  if (!Number.isFinite(kwh) || kwh <= MIN_ANNUAL_KWH || kwh >= MAX_ANNUAL_KWH) return null;
-  const belowId = dSpread > 0 ? a.id : b.id;
-  const aboveId = dSpread > 0 ? b.id : a.id;
-  return { kwh, belowId, aboveId };
-}
 
 function totalSpend(
   offer: CompareOfferRef,
@@ -442,11 +357,16 @@ function totalSpend(
   spend: CompareSpendInput,
 ) {
   let total = 0;
-  for (let monthIndex = 0; monthIndex < spans.length; monthIndex++) {
+  let months = 0;
+  const limit = Math.min(spans.length, billHorizon(offer.profile.durataMesi));
+  for (let monthIndex = 0; monthIndex < limit; monthIndex++) {
     const part = offerSpendEur(offer.profile, monthIndex, punBySpan[monthIndex] ?? null, carico, spend);
-    if (part != null) total += part;
+    if (part == null) continue;
+    total += part;
+    months++;
   }
-  return total;
+  if (months === 0) return Infinity;
+  return total / (months / 12);
 }
 
 function winnerAtSpend(
@@ -468,7 +388,23 @@ function winnerAtSpend(
   return best;
 }
 
-function kwhSweepBreakpoints(
+
+function offerList(offers: CompareOfferRef[]): SynthesisPart[] {
+  const parts: SynthesisPart[] = [];
+  offers.forEach((offer, index) => {
+    if (index > 0) parts.push(t(index === offers.length - 1 ? " e " : ", "));
+    parts.push(o(offer));
+  });
+  return parts;
+}
+
+function formatPct(value: number) {
+  return `${new Intl.NumberFormat("it-IT", {
+    maximumFractionDigits: value >= 10 ? 0 : 1,
+  }).format(value)}%`;
+}
+
+function convenienceBands(
   offers: CompareOfferRef[],
   spans: CompareSpan[],
   punBySpan: Array<number | null>,
@@ -477,53 +413,27 @@ function kwhSweepBreakpoints(
   includeMarket: boolean,
   skeleton: SpendSkeleton | null,
 ) {
-  if (offers.length !== 2 || !skeleton) return [];
-  const lines: SynthesisLine[] = [];
-  let prevWinner: string | null = null;
+  if (!skeleton || offers.length === 0) return [];
+  const bands: Array<{ id: string; fromKwh: number; toKwh: number }> = [];
+  let currentId: string | null = null;
+  let fromKwh = MIN_ANNUAL_KWH;
   for (let kwh = MIN_ANNUAL_KWH; kwh <= MAX_ANNUAL_KWH; kwh += KWH_SWEEP_STEP) {
-    const spend = spendFromSkeleton(
-      skeleton,
-      spans,
-      kwh,
-      "standard",
-      punBySpan,
-      shape,
-      includeMarket,
-    );
+    const spend = spendFromSkeleton(skeleton, spans, kwh, "standard", punBySpan, shape, includeMarket);
     const winner = winnerAtSpend(offers, spans, punBySpan, carico, spend);
     if (!winner) continue;
-    if (prevWinner == null) {
-      prevWinner = winner.id;
+    if (currentId == null) {
+      currentId = winner.id;
+      fromKwh = kwh;
       continue;
     }
-    if (winner.id !== prevWinner) {
-      const below = offers.find((offer) => offer.id === prevWinner)!;
-      const above = offers.find((offer) => offer.id === winner.id)!;
-      lines.push(
-        line(`kwh-${kwh}-${prevWinner}-${winner.id}`, "strong", [
-          t(`Con profilo standard, sotto ${formatIt(kwh)} kWh/anno conviene `),
-          o(below),
-          t("; da lì in su conviene "),
-          o(above),
-          t("."),
-        ]),
-      );
-      prevWinner = winner.id;
+    if (winner.id !== currentId) {
+      bands.push({ id: currentId, fromKwh, toKwh: kwh });
+      currentId = winner.id;
+      fromKwh = kwh;
     }
   }
-  if (lines.length === 0 && prevWinner) {
-    const only = offers.find((offer) => offer.id === prevWinner)!;
-    lines.push(
-      line(`kwh-flat-${only.id}`, "note", [
-        t("Con profilo standard, "),
-        o(only),
-        t(
-          ` resta la più conveniente tra ${formatIt(MIN_ANNUAL_KWH)} e ${formatIt(MAX_ANNUAL_KWH)} kWh/anno.`,
-        ),
-      ]),
-    );
-  }
-  return lines;
+  if (currentId != null) bands.push({ id: currentId, fromKwh, toKwh: MAX_ANNUAL_KWH });
+  return bands;
 }
 
 export function buildCompareSynthesis(input: CompareSynthesisInput): CompareSynthesisResult {
@@ -534,20 +444,15 @@ export function buildCompareSynthesis(input: CompareSynthesisInput): CompareSynt
     carico,
     shape,
     includeMarket,
-    prezzo,
-    includeEnergy,
     annualKwh,
-    profileMode,
-    spend,
   } = input;
 
   const sure: SynthesisLine[] = [];
   const conditional: SynthesisLine[] = [];
-  const showConditional = includeMarket && (prezzo === "fisso" || includeEnergy);
 
   if (offers.length < 2) {
     sure.push(line("need-two", "note", [t("Aggiungi almeno un'altra offerta per trarre conclusioni.")]));
-    return { sure, conditional, showConditional };
+    return { sure, conditional, showConditional: false };
   }
 
   const standardSkeleton = buildSpendSkeleton(spans, hourShares("standard", shape?.hourlyRel));
@@ -566,237 +471,73 @@ export function buildCompareSynthesis(input: CompareSynthesisInput): CompareSynt
     }
   }
 
-  const universalWinner = offers.find((candidate) =>
-    offers.every(
-      (other) =>
-        other.id === candidate.id ||
-        dominancePairs.some(
-          (pair) => pair.winner.id === candidate.id && pair.loser.id === other.id,
-        ),
-    ),
-  );
-  const twoOfferDecisive =
-    offers.length === 2 && dominancePairs.length === 1 ? dominancePairs[0]!.winner : null;
-  const decisiveWinner = universalWinner ?? twoOfferDecisive ?? null;
+  const dominatedIds = new Set(dominancePairs.map((pair) => pair.loser.id));
+  const discarded = offers.filter((offer) => dominatedIds.has(offer.id));
+  const contenders = offers.filter((offer) => !dominatedIds.has(offer.id));
 
-  if (decisiveWinner) {
-    if (offers.length === 2) {
-      const loser = offers.find((offer) => offer.id !== decisiveWinner.id)!;
-      sure.push(
-        line(`dom-${decisiveWinner.id}-${loser.id}`, "strong", [
-          o(decisiveWinner),
-          t(" batte "),
-          o(loser),
-          t(" su canone e spread in ogni mese attivo — non c'è partita."),
-        ]),
-      );
-    } else {
-      sure.push(
-        line(`dom-all-${decisiveWinner.id}`, "strong", [
-          o(decisiveWinner),
-          t(" batte tutte le altre su canone e spread in ogni mese attivo — non c'è partita."),
-        ]),
-      );
-    }
-  } else {
-    for (const { winner, loser } of dominancePairs) {
-      sure.push(
-        line(`dom-${winner.id}-${loser.id}`, "strong", [
-          o(winner),
-          t(" batte "),
-          o(loser),
-          t(" su canone e spread in ogni mese attivo — non c'è partita."),
-        ]),
-      );
-    }
-
-    const spreadLabel = prezzo === "fisso" ? "prezzo energia" : "spread";
-    const canoneWinnerId = axisWinnerEveryMonth(offers, spans, punBySpan, staticSpend, "canone");
-    const spreadWinnerId = axisWinnerEveryMonth(offers, spans, punBySpan, staticSpend, "spread");
-
-    if (canoneWinnerId && spreadWinnerId && canoneWinnerId === spreadWinnerId) {
-      const winner = offers.find((offer) => offer.id === canoneWinnerId)!;
-      sure.push(
-        line(`both-${canoneWinnerId}`, "strong", [
-          o(winner),
-          t(` vince su canone e ${spreadLabel} mese per mese.`),
-        ]),
-      );
-    } else {
-      if (canoneWinnerId) {
-        const winner = offers.find((offer) => offer.id === canoneWinnerId)!;
-        sure.push(
-          line(`canone-${canoneWinnerId}`, "strong", [
-            o(winner),
-            t(" ha il canone mensile più basso in ogni mese del confronto."),
-          ]),
-        );
-      }
-      if (spreadWinnerId) {
-        const winner = offers.find((offer) => offer.id === spreadWinnerId)!;
-        sure.push(
-          line(`spread-${spreadWinnerId}`, "strong", [
-            o(winner),
-            t(` ha lo ${spreadLabel} più basso in ogni mese del confronto.`),
-          ]),
-        );
-      }
-    }
-
-    if (offers.length === 2 && dominancePairs.length === 0) {
-      const threshold = staticKwhThreshold(offers[0]!, offers[1]!, spans, punBySpan, staticSpend);
-      if (threshold) {
-        const below = offers.find((offer) => offer.id === threshold.belowId)!;
-        const above = offers.find((offer) => offer.id === threshold.aboveId)!;
-        sure.push(
-          line(`static-kwh-${threshold.kwh}`, "strong", [
-            t(`Ignorando il PUN attuale, sotto circa ${formatIt(threshold.kwh)} kWh/anno conviene `),
-            o(below),
-            t("; sopra conviene "),
-            o(above),
-            t("."),
-          ]),
-        );
-      }
-    }
-
-    if (sure.length === 0) {
-      sure.push(
-        line("no-sure", "note", [
-          t(
-            "Nessuna offerta domina l'altra su canone e spread mese per mese: il vincitore dipende da altri fattori.",
-          ),
-        ]),
-      );
-    }
-  }
-
-  const conditionalEnabled = showConditional && decisiveWinner == null;
-
-  if (!conditionalEnabled) {
-    if (prezzo === "variabile" && !includeEnergy && decisiveWinner == null) {
-      conditional.push(
-        line("toggle-energy", "note", [
-          t(
-            "Attiva «Includi prezzo energia» per vedere quando conviene davvero in bolletta, in base a consumo e PUN atteso.",
-          ),
-        ]),
-      );
-    }
-    return { sure, conditional, showConditional: conditionalEnabled };
-  }
-
-  if (!spend) {
-    return { sure, conditional, showConditional: conditionalEnabled };
-  }
-
-  const totals = offers.map((offer) => ({
-    offer,
-    total: totalSpend(offer, spans, punBySpan, carico, spend),
-  }));
-  totals.sort((a, b) => a.total - b.total);
-  const best = totals[0];
-  const second = totals[1];
-  if (best && second && best.total < second.total - EPS) {
-    conditional.push(
-      line(`total-${best.offer.id}`, "strong", [
-        t(`Con ${formatIt(annualKwh)} kWh/anno e ${profileLabel(profileMode)}, `),
-        o(best.offer),
-        t(` costa ${formatEuro(second.total - best.total)} in meno sul periodo considerato.`),
+  if (discarded.length > 0) {
+    sure.push(
+      line("never", "strong", [
+        ...offerList(discarded),
+        t(discarded.length === 1 ? " non è mai conveniente." : " non sono mai convenienti."),
       ]),
     );
   }
 
-  const monthWinners = new Set<string>();
-  for (let monthIndex = 0; monthIndex < spans.length; monthIndex++) {
-    let bestOffer: CompareOfferRef | null = null;
-    let bestSpend = Infinity;
-    for (const offer of offers) {
-      const part = offerSpendEur(
-        offer.profile,
-        monthIndex,
-        punBySpan[monthIndex] ?? null,
-        carico,
-        spend,
-      );
-      if (part == null) continue;
-      if (part < bestSpend - EPS) {
-        bestSpend = part;
-        bestOffer = offer;
-      }
-    }
-    if (bestOffer) monthWinners.add(bestOffer.id);
-  }
-  if (monthWinners.size > 1) {
-    conditional.push(
-      line("month-volatile", "note", [
-        t(
-          "Il vincitore in bolletta cambia mese per mese: dipende anche dal PUN atteso e dal calendario contrattuale.",
-        ),
-      ]),
-    );
-  }
-
-  conditional.push(
-    ...kwhSweepBreakpoints(
-      offers,
-      spans,
-      punBySpan,
-      carico,
-      shape,
-      includeMarket,
-      standardSkeleton,
-    ),
-  );
-
-  const standardSpend = standardSkeleton
-    ? spendFromSkeleton(
-        standardSkeleton,
-        spans,
-        annualKwh,
-        "standard",
-        punBySpan,
-        shape,
-        includeMarket,
-      )
-    : null;
-  const oculatoSpend = buildSpendForProfile(
+  const bands = convenienceBands(
+    contenders,
     spans,
-    annualKwh,
-    "oculato",
     punBySpan,
+    carico,
     shape,
     includeMarket,
+    standardSkeleton,
   );
-  if (standardSpend && oculatoSpend) {
-    const standardWinner = winnerAtSpend(offers, spans, punBySpan, carico, standardSpend);
-    const oculatoWinner = winnerAtSpend(offers, spans, punBySpan, carico, oculatoSpend);
-    if (
-      standardWinner &&
-      oculatoWinner &&
-      standardWinner.id !== oculatoWinner.id
-    ) {
-      conditional.push(
-        line(`profile-${standardWinner.id}-${oculatoWinner.id}`, "strong", [
-          t(`Con ${formatIt(annualKwh)} kWh/anno, profilo standard → `),
-          o(standardWinner),
-          t("; profilo oculato → "),
-          o(oculatoWinner),
-          t("."),
-        ]),
-      );
-    }
-  }
-
-  if (conditional.length === 0) {
-    conditional.push(
-      line("conditional-open", "note", [
+  for (const band of bands) {
+    const offer = contenders.find((item) => item.id === band.id);
+    if (!offer) continue;
+    sure.push(
+      line(`band-${band.id}-${band.fromKwh}`, "strong", [
+        o(offer),
         t(
-          "Con i consumi e il PUN attuali non emerge una regola semplice: prova a cambiare kWh o profilo orario.",
+          ` è conveniente da ⚡${formatIt(band.fromKwh)} a ⚡${formatIt(band.toKwh)} kWh/anno con profilo standard.`,
         ),
       ]),
     );
   }
 
-  return { sure, conditional, showConditional: conditionalEnabled };
+  const atKwh = standardSkeleton
+    ? spendFromSkeleton(standardSkeleton, spans, annualKwh, "standard", punBySpan, shape, includeMarket)
+    : null;
+  if (atKwh && contenders.length >= 2) {
+    const ranked = contenders
+      .map((offer) => ({
+        offer,
+        total: totalSpend(offer, spans, punBySpan, carico, atKwh),
+      }))
+      .sort((a, b) => a.total - b.total);
+    const best = ranked[0];
+    const second = ranked[1];
+    if (best && second && second.total > best.total + EPS && second.total > EPS) {
+      const gap = second.total - best.total;
+      const pct = (gap / second.total) * 100;
+      sure.push(
+        line(`pick-${best.offer.id}`, "final", [
+          t(`A ⚡${formatIt(annualKwh)} kWh/anno e profilo standard ti conviene `),
+          o(best.offer),
+          t(` per ${formatEuro(gap)} in meno di `),
+          o(second.offer),
+          t(` (${formatPct(pct)}).`),
+        ]),
+      );
+    }
+  }
+
+  const pick = sure.findIndex((item) => item.tone === "final");
+  if (pick > 0) {
+    const [headline] = sure.splice(pick, 1);
+    if (headline) sure.unshift(headline);
+  }
+
+  return { sure, conditional, showConditional: false };
 }

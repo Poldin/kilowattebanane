@@ -177,11 +177,16 @@ function spanSeasonWeight(start: string, end: string) {
 }
 
 function defaultSpanKwh(spans: Array<{ start: string; end: string }>, annual = DEFAULT_ANNUAL_KWH) {
-  const weights = spans.map((span) => spanSeasonWeight(span.start, span.end));
-  const sum = weights.reduce((total, value) => total + value, 0);
-  const out = weights.map((weight) => Math.round(annual * (sum > 0 ? weight / sum : 0)));
-  const drift = annual - out.reduce((total, value) => total + value, 0);
-  if (out.length > 0) out[out.length - 1] = Math.max(0, (out[out.length - 1] ?? 0) + drift);
+  const out: number[] = [];
+  for (let start = 0; start < spans.length; start += 12) {
+    const year = spans.slice(start, start + 12);
+    const weights = year.map((span) => spanSeasonWeight(span.start, span.end));
+    const sum = weights.reduce((total, value) => total + value, 0);
+    const chunk = weights.map((weight) => Math.round(annual * (sum > 0 ? weight / sum : 0)));
+    const drift = annual - chunk.reduce((total, value) => total + value, 0);
+    if (chunk.length > 0) chunk[chunk.length - 1] = Math.max(0, (chunk[chunk.length - 1] ?? 0) + drift);
+    out.push(...chunk);
+  }
   return out;
 }
 
@@ -190,11 +195,19 @@ function oculatoSpanKwh(
   annual: number,
   punBySpan: Array<number | null | undefined>,
 ) {
-  const starts = spans.map((span) => span.start);
-  const shares = monthKwhShares({ profilo: "oculato", starts, punEurKwh: punBySpan });
-  const out = shares.map((share) => Math.round(annual * share));
-  const drift = annual - out.reduce((total, value) => total + value, 0);
-  if (out.length > 0) out[out.length - 1] = Math.max(0, (out[out.length - 1] ?? 0) + drift);
+  const out: number[] = [];
+  for (let start = 0; start < spans.length; start += 12) {
+    const year = spans.slice(start, start + 12);
+    const shares = monthKwhShares({
+      profilo: "oculato",
+      starts: year.map((span) => span.start),
+      punEurKwh: punBySpan.slice(start, start + 12),
+    });
+    const chunk = shares.map((share) => Math.round(annual * share));
+    const drift = annual - chunk.reduce((total, value) => total + value, 0);
+    if (chunk.length > 0) chunk[chunk.length - 1] = Math.max(0, (chunk[chunk.length - 1] ?? 0) + drift);
+    out.push(...chunk);
+  }
   return out;
 }
 
@@ -1932,11 +1945,14 @@ const CompareWorkspace = memo(function CompareWorkspace({
   const focusedProfile = chartFocus ? profiles[chartFocus.id] : undefined;
   const compareHorizon = useMemo(() => {
     if (chartOffers.length === 0) return 12;
-    return Math.max(
+    const byContract = Math.max(
       ...chartOffers.map((offer) => billHorizon(profiles[offer.id]?.durataMesi)),
       1,
     );
-  }, [chartOffers, profiles]);
+    const forwardMonths = months?.length ?? 0;
+    if (forwardMonths <= 0) return byContract;
+    return Math.min(byContract, forwardMonths);
+  }, [chartOffers, profiles, months]);
   const windowSpans = useMemo(
     () => contractSpans(offerStart, compareHorizon),
     [offerStart, compareHorizon],
@@ -3895,6 +3911,7 @@ function CompareTable({
     (max, offer) => Math.max(max, contractDurataMesi(profiles[offer.id])),
     12,
   );
+  const pricedMonths = Math.min(maxContractDurata, spend?.monthKwh.length ?? 12);
   const rows = [
     {
       label: "Canone mensile",
@@ -3925,15 +3942,15 @@ function CompareTable({
               return total != null ? <ValueBadge>{formatEuro(total)}</ValueBadge> : "—";
             },
           },
-          ...(maxContractDurata > 12
+          ...(pricedMonths > 12
             ? [
                 {
-                  label: `Tot ${formatMonthsCount(maxContractDurata)} mesi`,
+                  label: `Tot ${formatMonthsCount(pricedMonths)} mesi`,
                   value: (profile: OfferteCompareProfile | undefined) => {
                     if (!profile || !spend) return "—";
                     const durata = contractDurataMesi(profile);
                     if (durata <= 12) return "—";
-                    const total = offerPeriodTotalSpend(profile, durata, punBySpan, carico, spend);
+                    const total = offerPeriodTotalSpend(profile, pricedMonths, punBySpan, carico, spend);
                     return total != null ? <ValueBadge>{formatEuro(total)}</ValueBadge> : "—";
                   },
                 },
