@@ -72,8 +72,8 @@ export function LearnLandingHook({
       className="mt-10 max-w-xl"
     >
       <div className={leaving ? "learn-q-out" : "learn-q-in"}>
-        <p className="text-xs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
-          Domanda a bruciapelo 🤬
+        <p className="inline-flex items-center rounded-full bg-[#F5D547] px-3 py-1 text-sm font-semibold text-[#111111]">
+          domanda a bruciapelo 🤬
         </p>
         <h2
           id="learn-hook-title"
