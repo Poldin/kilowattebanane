@@ -262,7 +262,7 @@ function convexHull<T extends HullPoint>(points: T[]): T[] {
       a.nome.localeCompare(b.nome, "it"),
   );
 
-  const pareto: AxisPoint[] = [];
+  const pareto: T[] = [];
   let bestEnergy = Infinity;
   for (const point of sorted) {
     if (point.energyEurKwh < bestEnergy - 1e-12) {
@@ -271,7 +271,7 @@ function convexHull<T extends HullPoint>(points: T[]): T[] {
     }
   }
 
-  const hull: AxisPoint[] = [];
+  const hull: T[] = [];
   for (const point of pareto) {
     while (hull.length >= 2 && !isLowerCorner(hull[hull.length - 2], hull[hull.length - 1], point)) {
       hull.pop();
