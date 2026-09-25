@@ -1,3 +1,4 @@
+import { formatGw, formatGwh, formatShare } from "@/lib/generation/format";
 import { MIX_FOSSIL_IDS, MIX_RENEWABLE_IDS } from "@/lib/generation/sources";
 import { formatHourLabel, romeHour } from "@/lib/generation/time";
 import { MIX_SOURCE_IDS, type ItalyMixPayload, type MixHourPoint, type MixSourceId } from "@/lib/generation/types";
@@ -77,4 +78,39 @@ export function mixSummaryLead(dateLabel: string, summary: MixDaySummary) {
   if (summary.complete) return `Nell'arco di ${dateLabel}`;
   if (dateLabel === "oggi") return "Finora oggi";
   return `Nell'arco di ${dateLabel}, dalle ${formatHourLabel(summary.fromHour)}:00 alle ${formatHourLabel(summary.toHour + 1)}:00`;
+}
+
+export function mixSummaryKpis(summary: MixDaySummary) {
+  return [
+    {
+      key: "renewable",
+      label: "rinnovabili",
+      value: formatShare(summary.renewableShare),
+      hint: "solare, eolico, idro, geo, bio",
+    },
+    {
+      key: "fossil",
+      label: "fossili",
+      value: formatShare(summary.fossilShare),
+      hint: "gas, carbone, olio",
+    },
+    {
+      key: "cleanest",
+      label: "ora più pulita",
+      value: `${formatHourLabel(summary.cleanestHour)}:00`,
+      hint: `${formatShare(summary.cleanestShare)} FER`,
+    },
+    {
+      key: "peak",
+      label: "picco",
+      value: formatGw(summary.peakMw),
+      hint: `${formatHourLabel(summary.peakHour)}:00`,
+    },
+    {
+      key: "total",
+      label: "totale",
+      value: formatGwh(summary.energyMwh),
+      hint: "energia prodotta",
+    },
+  ];
 }

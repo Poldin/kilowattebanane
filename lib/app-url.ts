@@ -39,6 +39,12 @@ export function mailOutlookChartUrl(zone: string, date: string, tariff?: string)
   return url.toString();
 }
 
+export function mailMixChartUrl(date: string) {
+  const url = new URL("/api/mail/mix-chart", publicSiteUrl());
+  url.searchParams.set("giorno", date);
+  return url.toString();
+}
+
 export function mailLearnUrl() {
   return `${publicSiteUrl()}/learn`;
 }

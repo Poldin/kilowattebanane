@@ -4,4 +4,5 @@ export function revalidateGeneration() {
   revalidateTag("generation", "max");
   revalidatePath("/");
   revalidatePath("/api/generation");
+  revalidatePath("/api/mail/mix-chart");
 }

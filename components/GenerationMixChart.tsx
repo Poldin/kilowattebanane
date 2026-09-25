@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState, type PointerEvent, type ReactNode } from "react";
 import { fetchItalyMix } from "@/lib/generation/client";
-import { MIX_SOURCE_META, MIX_STACK_ORDER, sharesFromMw } from "@/lib/generation/sources";
-import { mixSummaryLead, summarizeMixDay } from "@/lib/generation/summary";
+import { formatGw, formatGwh, formatShare } from "@/lib/generation/format";
+import { MIX_SOURCE_META, sharesFromMw } from "@/lib/generation/sources";
+import { stackMixLayers } from "@/lib/generation/stack";
+import { mixSummaryKpis, mixSummaryLead, summarizeMixDay } from "@/lib/generation/summary";
 import { formatHourLabel, formatMixClock, formatMixDate } from "@/lib/generation/time";
-import type { ItalyMixPayload, MixHourPoint, MixShare, MixSourceId } from "@/lib/generation/types";
+import type { ItalyMixPayload, MixHourPoint, MixShare } from "@/lib/generation/types";
 
 const CHART_W = 400;
 const CHART_H = 192;
@@ -14,21 +16,7 @@ const AXIS = "#A3A3A3";
 const FONT = "var(--font-geist-sans), system-ui, sans-serif";
 const HOUR_TICKS = [0, 6, 12, 18, 24];
 const AXIS_FONT = 12;
-
-function formatGw(mw: number) {
-  const gw = mw / 1000;
-  return gw >= 10 ? `${gw.toFixed(0)} GW` : `${gw.toFixed(1)} GW`;
-}
-
-function formatGwh(mwh: number) {
-  const gwh = mwh / 1000;
-  return gwh >= 100 ? `${gwh.toFixed(0)} GWh` : `${gwh.toFixed(1)} GWh`;
-}
-
-function formatShare(share: number) {
-  const pct = share * 100;
-  return pct >= 10 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
-}
+const MIX_REFRESH_MS = 30 * 60 * 1000;
 
 function badgeInk(hex: string) {
   const raw = hex.replace("#", "");
@@ -41,66 +29,6 @@ function badgeInk(hex: string) {
 
 function hourShares(point: MixHourPoint): MixShare[] {
   return sharesFromMw(point.mw);
-}
-
-function stackedPath(xs: number[], tops: number[], bottoms: number[]) {
-  if (xs.length < 2) return "";
-  let d = `M ${xs[0]} ${tops[0]}`;
-  for (let i = 1; i < xs.length; i++) d += ` L ${xs[i]} ${tops[i]}`;
-  for (let i = xs.length - 1; i >= 0; i--) d += ` L ${xs[i]} ${bottoms[i]}`;
-  return `${d} Z`;
-}
-
-function consecutiveRuns(hours: MixHourPoint[]) {
-  const runs: MixHourPoint[][] = [];
-  let run: MixHourPoint[] = [];
-  for (const hour of hours) {
-    if (run.length && hour.hour !== run[run.length - 1].hour + 1) {
-      runs.push(run);
-      run = [];
-    }
-    run.push(hour);
-  }
-  if (run.length) runs.push(run);
-  return runs;
-}
-
-function stackLayers(hours: MixHourPoint[]) {
-  const plotW = CHART_W - PAD.l - PAD.r;
-  const plotH = CHART_H - PAD.t - PAD.b;
-  const maxMw = Math.max(...hours.map((hour) => hour.totalMw), 1);
-  const xAt = (hour: number) => PAD.l + (hour / 24) * plotW;
-  const yAt = (mw: number) => PAD.t + plotH - (mw / maxMw) * plotH;
-  const visible = MIX_STACK_ORDER.filter((id) =>
-    hours.some((hour) => (hour.mw[id] ?? 0) > 0),
-  );
-
-  const parts = new Map<MixSourceId, string[]>(visible.map((id) => [id, []]));
-  for (const run of consecutiveRuns(hours)) {
-    const samples = run.flatMap((hour) => [
-      { hour: hour.hour, mw: hour.mw },
-      { hour: hour.hour + 1, mw: hour.mw },
-    ]);
-    const xs = samples.map((sample) => xAt(sample.hour));
-    const bottoms = samples.map(() => PAD.t + plotH);
-    for (const id of visible) {
-      const tops = samples.map((sample, index) => {
-        const mw = sample.mw[id] ?? 0;
-        return bottoms[index] - (mw / maxMw) * plotH;
-      });
-      parts.get(id)?.push(stackedPath(xs, tops, bottoms));
-      bottoms.splice(0, bottoms.length, ...tops);
-    }
-  }
-
-  return {
-    layers: visible.map((id) => ({ id, d: (parts.get(id) ?? []).filter(Boolean).join(" ") })),
-    maxMw,
-    plotW,
-    plotH,
-    xAt,
-    yAt,
-  };
 }
 
 export function GenerationMixChart({
@@ -117,32 +45,48 @@ export function GenerationMixChart({
 
   useEffect(() => {
     setHoverHour(null);
+    let cancelled = false;
+
     if (initialMix?.date === date) {
       setMix(initialMix);
       setMissing(false);
-      return;
+    } else {
+      setMix(null);
+      setMissing(false);
+      fetchItalyMix(date)
+        .then((payload) => {
+          if (cancelled) return;
+          setMix(payload.date === date ? payload : null);
+          setMissing(payload.date !== date);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setMix(null);
+          setMissing(true);
+        });
     }
-    let cancelled = false;
-    setMix(null);
-    setMissing(false);
-    fetchItalyMix(date)
-      .then((payload) => {
-        if (cancelled) return;
-        setMix(payload.date === date ? payload : null);
-        setMissing(payload.date !== date);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMix(null);
-        setMissing(true);
-      });
+
+    const intervalId = window.setInterval(() => {
+      fetchItalyMix(date)
+        .then((payload) => {
+          if (cancelled || payload.date !== date) return;
+          setMix(payload);
+          setMissing(false);
+        })
+        .catch(() => {});
+    }, MIX_REFRESH_MS);
+
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, [date, initialMix]);
 
   const hours = mix?.hours ?? [];
-  const stack = useMemo(() => (hours.length >= 2 ? stackLayers(hours) : null), [hours]);
+  const stack = useMemo(
+    () => (hours.length >= 2 ? stackMixLayers(hours, CHART_W, CHART_H, PAD) : null),
+    [hours],
+  );
   const hovered = hoverHour == null ? null : (hours.find((hour) => hour.hour === hoverHour) ?? null);
   const active = hovered ?? hours.at(-1) ?? null;
   const shares = active && stack ? hourShares(active) : (mix?.shares ?? []);
@@ -159,40 +103,7 @@ export function GenerationMixChart({
       ? formatMixClock(activeStart)
       : "";
   const summary = summarizeMixDay(mix);
-  const summaryKpis = summary
-    ? [
-        {
-          key: "renewable",
-          label: "rinnovabili",
-          value: formatShare(summary.renewableShare),
-          hint: "solare, eolico, idro, geo, bio",
-        },
-        {
-          key: "fossil",
-          label: "fossili",
-          value: formatShare(summary.fossilShare),
-          hint: "gas, carbone, olio",
-        },
-        {
-          key: "cleanest",
-          label: "ora più pulita",
-          value: `${formatHourLabel(summary.cleanestHour)}:00`,
-          hint: `${formatShare(summary.cleanestShare)} FER`,
-        },
-        {
-          key: "peak",
-          label: "picco",
-          value: formatGw(summary.peakMw),
-          hint: `${formatHourLabel(summary.peakHour)}:00`,
-        },
-        {
-          key: "total",
-          label: "totale",
-          value: formatGwh(summary.energyMwh),
-          hint: "energia prodotta",
-        },
-      ]
-    : [];
+  const summaryKpis = summary ? mixSummaryKpis(summary) : [];
 
   function onMove(event: PointerEvent<SVGSVGElement>) {
     if (!stack || hours.length === 0) return;

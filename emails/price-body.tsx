@@ -3,6 +3,10 @@ import { MailPromoBanners } from "@/emails/promo-banners";
 import type { PriceMailModel } from "@/lib/mail/content";
 import { MAIL_CHART_DISPLAY_H, MAIL_CHART_DISPLAY_W } from "@/lib/mail/chart";
 import {
+  MAIL_MIX_DISPLAY_H,
+  MAIL_MIX_DISPLAY_W,
+} from "@/lib/mail/mix-chart";
+import {
   MAIL_OUTLOOK_DISPLAY_H,
   MAIL_OUTLOOK_DISPLAY_W,
 } from "@/lib/mail/outlook-chart";
@@ -200,6 +204,76 @@ export function PriceDigestBody({
         />
       </Link>
 
+      {model.mix ? (
+        <>
+          <Text style={styles.mixTitle}>Mix elettrico Italia · {model.mix.dateLabel}</Text>
+          <Link href={model.ctaUrl} style={styles.chartLink}>
+            <Img
+              src={model.mix.chartUrl}
+              alt={`Mix elettrico Italia ${model.mix.dateLabel}`}
+              width={MAIL_MIX_DISPLAY_W}
+              height={MAIL_MIX_DISPLAY_H}
+              style={styles.chart}
+            />
+          </Link>
+          <Text style={styles.mixLead}>
+            {model.mix.lead} il{" "}
+            <span style={styles.mixStrong}>{model.mix.renewable}</span>
+            {" "}dell&apos;elettricità italiana è venuto da rinnovabili, il{" "}
+            <span style={styles.mixStrong}>{model.mix.fossil}</span>
+            {" "}da fonti fossili. In tutto{" "}
+            <span style={styles.mixStrong}>{model.mix.energy}</span>.
+          </Text>
+          <Section style={styles.kpiWrap}>
+            <table style={styles.kpiTable} cellPadding={0} cellSpacing={0}>
+              <thead>
+                <tr>
+                  {model.mix.kpis.map((column, index) => (
+                    <th
+                      key={column.key}
+                      style={{
+                        ...styles.kpiHead,
+                        ...(index > 0 ? styles.kpiDivider : {}),
+                      }}
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {model.mix.kpis.map((column, index) => (
+                    <td
+                      key={column.key}
+                      style={{
+                        ...styles.kpiValue,
+                        ...(index > 0 ? styles.kpiDivider : {}),
+                      }}
+                    >
+                      {column.value}
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  {model.mix.kpis.map((column, index) => (
+                    <td
+                      key={column.key}
+                      style={{
+                        ...styles.kpiHint,
+                        ...(index > 0 ? styles.kpiDivider : {}),
+                      }}
+                    >
+                      {column.hint ?? ""}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </Section>
+        </>
+      ) : null}
+
       <Button href={model.ctaUrl} style={styles.button}>
         Vedi il grafico interattivo
       </Button>
@@ -365,6 +439,22 @@ const styles = {
     fontWeight: 600,
     lineHeight: "20px",
     padding: "2px 8px",
+  },
+  mixTitle: {
+    color: "#111111",
+    fontSize: "15px",
+    fontWeight: 600,
+    margin: "0 0 8px",
+  },
+  mixLead: {
+    color: "#111111",
+    fontSize: "15px",
+    lineHeight: "22px",
+    margin: "0 0 12px",
+  },
+  mixStrong: {
+    fontVariantNumeric: "tabular-nums",
+    fontWeight: 600,
   },
   button: {
     backgroundColor: "#111111",

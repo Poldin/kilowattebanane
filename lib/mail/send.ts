@@ -8,6 +8,7 @@ import {
   unsubscribeApiUrl,
   unsubscribePageUrl,
 } from "@/lib/app-url";
+import { loadMailItalyMix } from "@/lib/generation/load";
 import {
   digestSubjectLine,
   loadZoneMailHistory,
@@ -74,11 +75,14 @@ export async function sendZoneDigest(
   day: ZoneMailDay,
 ) {
   const resend = getResend();
-  const history = await loadZoneMailHistory(zone, deliveryDate);
+  const [history, mix] = await Promise.all([
+    loadZoneMailHistory(zone, deliveryDate),
+    loadMailItalyMix(),
+  ]);
   const payload = [];
 
   for (const subscriber of recipients) {
-    const content = zoneMailContentFromDay(day, subscriber.tariff, history);
+    const content = zoneMailContentFromDay(day, subscriber.tariff, history, mix);
     const model = priceMailModelForRegion(content, subscriber.region);
     const pageUrl = unsubscribePageUrl(subscriber.unsubscribe_token);
     const html = await render(

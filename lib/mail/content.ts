@@ -21,12 +21,18 @@ import { toHourlyAverages } from "@/lib/prices";
 import {
   mailChartUrl,
   mailLearnUrl,
+  mailMixChartUrl,
   mailOfferCompareUrl,
   mailOfferStatsUrl,
   mailOutlookChartUrl,
   mailShareUrl,
   publicSiteUrl,
 } from "@/lib/app-url";
+import { formatGwh, formatShare } from "@/lib/generation/format";
+import { loadMailItalyMix } from "@/lib/generation/load";
+import { mixSummaryKpis, mixSummaryLead, summarizeMixDay } from "@/lib/generation/summary";
+import { formatMixDate } from "@/lib/generation/time";
+import type { ItalyMixPayload } from "@/lib/generation/types";
 import {
   cheapPeakForTariff,
   fasciaAveragesFromQuarters,
@@ -84,6 +90,16 @@ export type MailPriceDeltaColumn = {
   tone: "expensive" | "cheap" | "mid";
 };
 
+export type MailMixBlock = {
+  chartUrl: string;
+  dateLabel: string;
+  lead: string;
+  renewable: string;
+  fossil: string;
+  energy: string;
+  kpis: MailKpiColumn[];
+};
+
 export type ZoneMailContent = {
   deliveryDate: string;
   dateLabel: string;
@@ -97,6 +113,7 @@ export type ZoneMailContent = {
   hourly: { hour: number; label: string; priceLabel: string }[];
   chartUrl: string;
   outlookChartUrl: string;
+  mix: MailMixBlock | null;
   yearPercentile: YearPercentileCopy | null;
   priceDeltas: MailPriceDeltaColumn[];
 };
@@ -233,10 +250,27 @@ function mailPriceDeltaColumns(
   }));
 }
 
+function mailMixBlock(mix: ItalyMixPayload | null): MailMixBlock | null {
+  if (!mix) return null;
+  const summary = summarizeMixDay(mix);
+  if (!summary) return null;
+  const dateLabel = formatMixDate(mix.date);
+  return {
+    chartUrl: mailMixChartUrl(mix.date),
+    dateLabel,
+    lead: mixSummaryLead(dateLabel, summary),
+    renewable: formatShare(summary.renewableShare),
+    fossil: formatShare(summary.fossilShare),
+    energy: formatGwh(summary.energyMwh),
+    kpis: mixSummaryKpis(summary),
+  };
+}
+
 export function zoneMailContentFromDay(
   day: ZoneMailDay,
   tariff: TariffPlanId = MAIL_DEFAULT_TARIFF_PLAN,
   history: ZoneHourlyPayload[] = [],
+  mix: ItalyMixPayload | null = null,
 ): ZoneMailContent {
   const resolved = resolveMailTariff(tariff);
   const tips = computeTariffTips(day.prices, day.deliveryDate, resolved);
@@ -259,6 +293,7 @@ export function zoneMailContentFromDay(
     })),
     chartUrl: mailChartUrl(day.zone, day.deliveryDate, resolved),
     outlookChartUrl: mailOutlookChartUrl(day.zone, day.deliveryDate, resolved),
+    mix: mailMixBlock(mix),
     yearPercentile: yearPercentileForMail(day, resolved, history),
     priceDeltas: mailPriceDeltaColumns(day, resolved, history),
   };
@@ -280,12 +315,13 @@ export async function buildZoneMailContent(
   deliveryDate: string,
   tariff: TariffPlanId = MAIL_DEFAULT_TARIFF_PLAN,
 ): Promise<ZoneMailContent | null> {
-  const [day, history] = await Promise.all([
+  const [day, history, mix] = await Promise.all([
     loadZoneMailDay(zone, deliveryDate),
     loadZoneMailHistory(zone, deliveryDate),
+    loadMailItalyMix(),
   ]);
   if (!day) return null;
-  return zoneMailContentFromDay(day, tariff, history);
+  return zoneMailContentFromDay(day, tariff, history, mix);
 }
 
 export function priceMailModelForRegion(
