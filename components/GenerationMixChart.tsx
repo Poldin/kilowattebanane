@@ -302,7 +302,7 @@ export function GenerationMixChart({
           );
         })}
       </div>
-      {summary ? (
+      {summary && mixDateLabel ? (
         <>
           <p className="mt-3 text-sm text-foreground">
             {mixSummaryLead(mixDateLabel, summary)} il{" "}
