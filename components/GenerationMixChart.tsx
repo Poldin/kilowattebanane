@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type PointerEvent, type ReactNode } from "react";
+import { DayShiftControls } from "@/components/DayShiftControls";
 import { fetchItalyMix } from "@/lib/generation/client";
 import { formatGw, formatGwh, formatShare } from "@/lib/generation/format";
 import { MIX_SOURCE_META, sharesFromMw } from "@/lib/generation/sources";
@@ -34,9 +35,19 @@ function hourShares(point: MixHourPoint): MixShare[] {
 export function GenerationMixChart({
   date,
   initialMix,
+  dateLabel,
+  onPrevDate,
+  onNextDate,
+  disablePrevDate,
+  disableNextDate,
 }: {
   date: string;
   initialMix?: ItalyMixPayload | null;
+  dateLabel: string;
+  onPrevDate: () => void;
+  onNextDate: () => void;
+  disablePrevDate: boolean;
+  disableNextDate: boolean;
 }) {
   const seed = initialMix?.date === date ? initialMix : null;
   const [mix, setMix] = useState<ItalyMixPayload | null>(seed);
@@ -93,17 +104,15 @@ export function GenerationMixChart({
   const activeTotal = active?.totalMw ?? mix?.totalMw ?? 0;
   const activeStart = active?.slotStart ?? mix?.slotStart;
 
-  if (missing && !mix) return null;
-  if (!mix || shares.length === 0) return null;
-
-  const dateLabel = formatMixDate(mix.date);
   const clock = stack && active
     ? `${formatHourLabel(active.hour)}:00`
     : activeStart
       ? formatMixClock(activeStart)
       : "";
-  const summary = summarizeMixDay(mix);
+  const summary = mix ? summarizeMixDay(mix) : null;
   const summaryKpis = summary ? mixSummaryKpis(summary) : [];
+  const mixDateLabel = mix ? formatMixDate(mix.date) : null;
+  const hasChart = Boolean(mix && shares.length > 0 && !missing);
 
   function onMove(event: PointerEvent<SVGSVGElement>) {
     if (!stack || hours.length === 0) return;
@@ -128,12 +137,39 @@ export function GenerationMixChart({
     setHoverHour(nearest.hour);
   }
 
+  const dateShift = (
+    <DayShiftControls
+      label={dateLabel}
+      onPrev={onPrevDate}
+      onNext={onNextDate}
+      disablePrev={disablePrevDate}
+      disableNext={disableNextDate}
+    />
+  );
+
+  if (!mix || !hasChart) {
+    return (
+      <div className="mt-4 w-full max-w-full">
+        {dateShift}
+        <p className="mt-3 text-sm font-medium text-foreground">Mix elettrico Italia</p>
+        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+          {missing
+            ? "Nessun mix disponibile per questo giorno."
+            : "Carico il mix elettrico…"}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-4 w-full max-w-full">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      {dateShift}
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-sm font-medium text-foreground">Mix elettrico Italia</p>
         <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-          {dateLabel} · {clock} · {formatGw(activeTotal)}
+          {mixDateLabel}
+          {clock ? ` · ${clock}` : ""}
+          {` · ${formatGw(activeTotal)}`}
         </p>
       </div>
       <div className="mt-2 rounded-lg border border-neutral-800 bg-[#111111]">
@@ -141,7 +177,7 @@ export function GenerationMixChart({
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
           className="h-auto w-full touch-none"
           role="img"
-          aria-label={`Mix elettrico Italia ${dateLabel} alle ${clock}: ${shares
+          aria-label={`Mix elettrico Italia ${mixDateLabel} alle ${clock}: ${shares
             .map((share) => `${share.label} ${formatShare(share.share)}`)
             .join(", ")}`}
           onPointerMove={stack ? onMove : undefined}
@@ -269,7 +305,7 @@ export function GenerationMixChart({
       {summary ? (
         <>
           <p className="mt-3 text-sm text-foreground">
-            {mixSummaryLead(dateLabel, summary)} il{" "}
+            {mixSummaryLead(mixDateLabel, summary)} il{" "}
             <span className="font-semibold tabular-nums">{formatShare(summary.renewableShare)}</span>
             {" "}dell&apos;elettricità italiana è venuto da rinnovabili, il{" "}
             <span className="font-semibold tabular-nums">{formatShare(summary.fossilShare)}</span>
@@ -307,18 +343,6 @@ export function GenerationMixChart({
                       }`}
                     >
                       {kpi.value}
-                    </td>
-                  ))}
-                </tr>
-                <tr className="border-t border-neutral-100 dark:border-neutral-800/80">
-                  {summaryKpis.map((kpi, index) => (
-                    <td
-                      key={kpi.key}
-                      className={`px-1.5 py-0.5 text-[10px] leading-tight whitespace-nowrap tabular-nums text-neutral-400 dark:text-neutral-500 ${
-                        index > 0 ? "border-l border-neutral-200 dark:border-neutral-800" : ""
-                      }`}
-                    >
-                      {kpi.hint}
                     </td>
                   ))}
                 </tr>

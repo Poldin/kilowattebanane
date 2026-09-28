@@ -63,7 +63,7 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
   }
 
   return (
-    <div className="mt-8">
+    <div className="mt-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-sm font-medium text-foreground">Mix elettrico Italia</p>
         <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
@@ -216,18 +216,6 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
                   }`}
                 >
                   {kpi.value}
-                </td>
-              ))}
-            </tr>
-            <tr className="border-t border-neutral-100 dark:border-neutral-800/80">
-              {kpis.map((kpi, index) => (
-                <td
-                  key={kpi.key}
-                  className={`px-1.5 py-0.5 text-[10px] leading-tight whitespace-nowrap tabular-nums text-neutral-400 dark:text-neutral-500 ${
-                    index > 0 ? "border-l border-neutral-200 dark:border-neutral-800" : ""
-                  }`}
-                >
-                  {kpi.hint}
                 </td>
               ))}
             </tr>

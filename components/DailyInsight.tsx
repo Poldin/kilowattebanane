@@ -25,6 +25,7 @@ import {
 import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
 import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { MonthlyOutlookChart } from "@/components/MonthlyOutlookChart";
+import { DayShiftControls } from "@/components/DayShiftControls";
 import { GenerationMixChart } from "@/components/GenerationMixChart";
 import type { ItalyMixPayload, MixDayPoint } from "@/lib/generation/types";
 import { SignupSlot } from "@/components/SignupForm";
@@ -625,6 +626,11 @@ function DayStats({
   forward,
   today,
   mix,
+  dateLabel,
+  onPrevDate,
+  onNextDate,
+  disablePrevDate,
+  disableNextDate,
 }: {
   date: string;
   prices: number[];
@@ -634,6 +640,11 @@ function DayStats({
   forward: ZoneForwardPayload;
   today: string;
   mix?: ItalyMixPayload | null;
+  dateLabel: string;
+  onPrevDate: () => void;
+  onNextDate: () => void;
+  disablePrevDate: boolean;
+  disableNextDate: boolean;
 }) {
   const showLineStats = tariff === "dinamica";
   const visibleFasciaIds = fasciaBadgesForPlan(tariff);
@@ -772,7 +783,15 @@ function DayStats({
         forward={forward}
         tariff={tariff}
       />
-      <GenerationMixChart date={date} initialMix={mix?.date === date ? mix : null} />
+      <GenerationMixChart
+        date={date}
+        initialMix={mix?.date === date ? mix : null}
+        dateLabel={dateLabel}
+        onPrevDate={onPrevDate}
+        onNextDate={onNextDate}
+        disablePrevDate={disablePrevDate}
+        disableNextDate={disableNextDate}
+      />
     </>
   );
 }
@@ -2007,36 +2026,19 @@ export function DailyInsight({
           <TariffSelect value={tariff} onChange={handleTariffChange} />
         }
       >
-        <button
-          type="button"
-          onClick={() => {
+        <DayShiftControls
+          label={dateLabel}
+          onPrev={() => {
             const next = dates[dateIndex + 1];
             if (next) goToDate(next);
           }}
-          disabled={isOldest || dates.length === 0 || fetching}
-          aria-label="Giorno precedente"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-2xl leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:text-lg dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-        >
-          ‹
-        </button>
-        <button
-          type="button"
-          onClick={() => {
+          onNext={() => {
             const next = dates[dateIndex - 1];
             if (next) goToDate(next);
           }}
-          disabled={isNewest || dates.length === 0 || fetching}
-          aria-label="Giorno successivo"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-2xl leading-none text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:text-lg dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-        >
-          ›
-        </button>
-        <p
-          className="min-w-0 truncate text-sm font-medium capitalize tracking-tight text-foreground sm:text-base"
-          aria-live="polite"
-        >
-          {dateLabel}
-        </p>
+          disablePrev={isOldest || dates.length === 0 || fetching}
+          disableNext={isNewest || dates.length === 0 || fetching}
+        />
       </RegionZoneBar>
 
       {error ? (
@@ -2084,6 +2086,17 @@ export function DailyInsight({
               forward={home?.forward ?? { asOf: null, source: null, months: [] }}
               today={today}
               mix={initialMix}
+              dateLabel={dateLabel}
+              onPrevDate={() => {
+                const next = dates[dateIndex + 1];
+                if (next) goToDate(next);
+              }}
+              onNextDate={() => {
+                const next = dates[dateIndex - 1];
+                if (next) goToDate(next);
+              }}
+              disablePrevDate={isOldest || dates.length === 0 || fetching}
+              disableNextDate={isNewest || dates.length === 0 || fetching}
             />
             <div className="mt-6 flex w-full flex-col gap-3">
               <MarketLearnBanner />

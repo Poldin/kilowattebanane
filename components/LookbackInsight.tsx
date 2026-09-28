@@ -30,7 +30,6 @@ import {
 } from "@/lib/fasce";
 import {
   DEFAULT_LOOKBACK_RANGE,
-  LOOKBACK_RANGES,
   bandPath,
   dayHourlyCentSeriesFromHours,
   formatLatestDayRank,
@@ -52,6 +51,7 @@ import {
   type LookbackRangeId,
 } from "@/lib/lookback";
 import { LookbackMixChart } from "@/components/LookbackMixChart";
+import { LookbackRangeTabs } from "@/components/LookbackRangeTabs";
 import { RegionZoneBar } from "@/components/RegionZoneBar";
 import type { MixDayPoint } from "@/lib/generation/types";
 import type { ItalianRegion } from "@/lib/market-zones";
@@ -794,31 +794,11 @@ export function LookbackInsight({
       </p>
 
       <RegionZoneBar region={region} onRegionChange={onRegionChange}>
-        <div
-          role="tablist"
-          aria-label="Periodo del grafico"
-          className="flex min-w-0 flex-1 gap-1 overflow-x-auto pb-1"
-        >
-          {LOOKBACK_RANGES.map((item) => {
-            const active = item.id === rangeId;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setRangeId(item.id)}
-                className={
-                  active
-                    ? "shrink-0 rounded-md bg-[#F5D547] px-2.5 py-1.5 text-xs font-semibold text-[#111111]"
-                    : "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
-                }
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
+        <LookbackRangeTabs
+          value={rangeId}
+          onChange={setRangeId}
+          ariaLabel="Periodo del grafico"
+        />
       </RegionZoneBar>
 
       <div className="mt-3">
@@ -909,8 +889,21 @@ export function LookbackInsight({
         ) : null}
       </div>
 
-      {windowMixDays.length > 0 ? (
-        <LookbackMixChart key={rangeId} days={windowMixDays} />
+      {mixDays.length > 0 ? (
+        <div className="mt-8">
+          <LookbackRangeTabs
+            value={rangeId}
+            onChange={setRangeId}
+            ariaLabel="Periodo del mix elettrico"
+          />
+          {windowMixDays.length > 0 ? (
+            <LookbackMixChart key={rangeId} days={windowMixDays} />
+          ) : (
+            <p className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">
+              Nessun mix disponibile per questo periodo.
+            </p>
+          )}
+        </div>
       ) : null}
     </section>
   );

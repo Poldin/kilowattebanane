@@ -3,6 +3,7 @@ import {
   MIX_FOSSIL_IDS,
   MIX_RENEWABLE_IDS,
   MIX_SOURCE_META,
+  sharesFromMw,
 } from "@/lib/generation/sources";
 import { formatHourLabel, romeHour } from "@/lib/generation/time";
 import {
@@ -13,7 +14,6 @@ import {
   type MixShare,
   type MixSourceId,
 } from "@/lib/generation/types";
-import { sharesFromMw } from "@/lib/generation/sources";
 
 export type MixDaySummary = {
   renewableShare: number;
