@@ -174,7 +174,7 @@ export function PodBanner() {
         Qual è la tua cabina primaria?
       </p>
       <p className="mt-2 text-sm text-emerald-100">
-        Inserisci il POD della bolletta. Ti diremo la tua cabina primaria e le CER in quest’area.
+        Inserisci il POD della bolletta. Ti diremo la tua cabina primaria e le comunità energetiche a cui puoi aderire.
       </p>
       <a
         href={POD_HELP_HREF}
