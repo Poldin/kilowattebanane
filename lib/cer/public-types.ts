@@ -1,5 +1,5 @@
 export const GSE_MAPPA_URL =
-  "https://www.gse.it/servizi-per-te/autoconsumo/mappa-interattiva-delle-configurazioni";
+  "https://www.gse.it/servizi-per-te/autoconsumo/mappa-interattiva-delle-cabine-primarie/";
 
 export type CerTipologiaKind =
   | "cer"

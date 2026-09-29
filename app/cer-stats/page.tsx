@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { CerStats } from "@/components/cer/CerStats";
+import { PodBanner } from "@/components/cer/PodBanner";
 import { SignupProvider, SignupSlot } from "@/components/SignupForm";
 import { publicSiteUrl } from "@/lib/app-url";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
@@ -39,6 +40,7 @@ export default async function CerStatsPage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
             Statistiche CER
           </h1>
+          <PodBanner />
           <CerStats stats={stats} />
           <SignupSlot className="mt-16 w-full scroll-mt-20 sm:mt-20" />
         </main>
