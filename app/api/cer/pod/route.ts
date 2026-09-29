@@ -1,20 +1,32 @@
-import { lookupPod } from "@/lib/cer/pod";
-import { POD_FORMAT_HINT, parsePod } from "@/lib/cer/pod-parse";
+import { lookupCersInArea, lookupPod } from "@/lib/cer/pod";
+import { isAreaConvenzionaleCode, POD_FORMAT_HINT, parsePod } from "@/lib/cer/pod-parse";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+export const preferredRegion = "fra1";
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
 
 export async function POST(request: Request) {
-  let raw = "";
+  let podRaw = "";
+  let codiceRaw = "";
   try {
-    const body = (await request.json()) as { pod?: unknown };
-    raw = typeof body.pod === "string" ? body.pod : "";
+    const body = (await request.json()) as { pod?: unknown; codice?: unknown };
+    podRaw = typeof body.pod === "string" ? body.pod : "";
+    codiceRaw = typeof body.codice === "string" ? body.codice.trim().toUpperCase() : "";
   } catch {
     return Response.json({ error: "Richiesta non valida" }, { status: 400, headers: NO_STORE });
   }
 
-  const parsed = parsePod(raw);
+  if (codiceRaw) {
+    if (!isAreaConvenzionaleCode(codiceRaw)) {
+      return Response.json({ error: "Codice area non valido" }, { status: 400, headers: NO_STORE });
+    }
+    const cer = await lookupCersInArea(codiceRaw);
+    return Response.json({ cer }, { headers: NO_STORE });
+  }
+
+  const parsed = parsePod(podRaw);
   if (!parsed.ok) {
     return Response.json({ error: POD_FORMAT_HINT }, { status: 400, headers: NO_STORE });
   }

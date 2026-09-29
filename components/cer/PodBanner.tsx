@@ -1,12 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
+import { lookupPodOnGse } from "@/lib/cer/pod-gse";
 import {
   normalizePodInput,
   parsePod,
+  type PodCerHit,
   type PodLookupOk,
 } from "@/lib/cer/pod-parse";
+import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
+
+type ApiError = { error?: string };
+type CerPayload = { cer?: PodCerHit[] };
+type PodPayload = PodLookupOk | { found: false } | ApiError;
+
+async function postJson<T>(body: unknown) {
+  const response = await fetch("/api/cer/pod", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as T;
+  return { ok: response.ok, payload };
+}
+
+async function loadCers(codice: string): Promise<PodCerHit[]> {
+  try {
+    const { ok, payload } = await postJson<CerPayload | ApiError>({ codice });
+    if (!ok || !payload || !("cer" in payload) || !Array.isArray(payload.cer)) return [];
+    return payload.cer;
+  } catch {
+    return [];
+  }
+}
 
 export function PodBanner() {
   const [pod, setPod] = useState("");
@@ -14,6 +40,20 @@ export function PodBanner() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PodLookupOk | { found: false } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  async function searchViaApi(podCode: string) {
+    const { ok, payload } = await postJson<PodPayload>({ pod: podCode });
+    if (!ok) {
+      setResult(null);
+      setError(payload && "error" in payload ? (payload.error ?? "Riprova.") : "Riprova.");
+      return;
+    }
+    if ("found" in payload && payload.found) {
+      setResult(payload);
+    } else {
+      setResult({ found: false });
+    }
+  }
 
   async function search() {
     const parsed = parsePod(pod);
@@ -27,28 +67,20 @@ export function PodBanner() {
     setResult(null);
     setCopied(false);
     try {
-      const response = await fetch("/api/cer/pod", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pod: parsed.pod }),
-      });
-      const payload = (await response.json()) as
-        | PodLookupOk
-        | { found: false }
-        | { error?: string };
-      if (!response.ok) {
-        setResult(null);
-        setError(payload && "error" in payload ? (payload.error ?? "Riprova.") : "Riprova.");
+      const gse = await lookupPodOnGse(parsed.pod);
+      if (!gse.found) {
+        setResult({ found: false });
         return;
       }
-      if ("found" in payload && payload.found) {
-        setResult(payload);
-      } else {
-        setResult({ found: false });
-      }
+      setResult({ ...gse, cer: [] });
+      setResult({ ...gse, cer: await loadCers(gse.codice) });
     } catch {
-      setResult(null);
-      setError("Non riesco a interrogare il GSE. Riprova.");
+      try {
+        await searchViaApi(parsed.pod);
+      } catch {
+        setResult(null);
+        setError("Non riesco a interrogare il GSE. Riprova.");
+      }
     } finally {
       setPending(false);
     }
@@ -165,7 +197,7 @@ export function PodBanner() {
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : pending ? null : (
             <p className="mt-3 text-sm text-emerald-100">
               Nessuna CER sulla mappa GSE in quest’area, per ora.
             </p>
