@@ -54,6 +54,9 @@ const UTENZE_BUCKETS = [
   { key: "200+", label: "oltre 200 utenze", max: Infinity },
 ] as const;
 
+type PotenzaBucketKey = (typeof POTENZA_BUCKETS)[number]["key"];
+type UtenzeBucketKey = (typeof UTENZE_BUCKETS)[number]["key"];
+
 async function loadLiveRows() {
   const client = cerReadClient();
   const page = 1000;
@@ -131,7 +134,7 @@ function gestoreKey(raw: string | null) {
   return raw.trim();
 }
 
-function potenzaKey(value: number | null) {
+function potenzaKey(value: number | null): PotenzaBucketKey | null {
   if (value == null) return null;
   for (const bucket of POTENZA_BUCKETS) {
     if (value <= bucket.max) return bucket.key;
@@ -139,7 +142,7 @@ function potenzaKey(value: number | null) {
   return "1000+";
 }
 
-function utenzeKey(value: number | null) {
+function utenzeKey(value: number | null): UtenzeBucketKey | null {
   if (value == null) return null;
   for (const bucket of UTENZE_BUCKETS) {
     if (value <= bucket.max) return bucket.key;
@@ -194,10 +197,14 @@ function statsFromRows(rows: LiveRow[]): CerStats {
   const regioneCounts = new Map(regioni.map((row) => [row.key, row.total]));
   const gestoreCounts = countBy(rows.map((row) => gestoreKey(row.gestore_rete)));
   const potenzaCounts = countBy(
-    rows.map((row) => potenzaKey(num(row.potenza_kw))).filter((key): key is string => key != null),
+    rows
+      .map((row) => potenzaKey(num(row.potenza_kw)))
+      .filter((key): key is PotenzaBucketKey => key != null),
   );
   const utenzeCounts = countBy(
-    rows.map((row) => utenzeKey(row.n_utenze)).filter((key): key is string => key != null),
+    rows
+      .map((row) => utenzeKey(row.n_utenze))
+      .filter((key): key is UtenzeBucketKey => key != null),
   );
 
   const snapshotDate =
