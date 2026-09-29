@@ -380,9 +380,29 @@ body {
   animation: hot-offer-in 360ms ease-out both;
 }
 
+@keyframes cer-region-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cer-region-in {
+  animation: cer-region-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cer-region-in img {
+  filter: saturate(1.24) contrast(1.07) brightness(1.04);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hot-offer-in,
-  .learn-chapter-in {
+  .learn-chapter-in,
+  .cer-region-in {
     animation: none;
   }
 }

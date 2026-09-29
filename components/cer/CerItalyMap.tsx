@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ITALY_MAP_VIEWBOX, ITALY_REGION_PATHS } from "@/lib/cer/italy-paths";
+import { regionPhoto } from "@/lib/cer/region-photos";
 import type { CerRegionStat } from "@/lib/cer/public-types";
 import type { ItalianRegion } from "@/lib/market-zones";
 
@@ -29,23 +30,41 @@ export function CerItalyMap({
   const [selected, setSelected] = useState(defaultKey);
   const [hovered, setHovered] = useState<string | null>(null);
   const current = byKey.get(selected) ?? regions[0];
+  const hoveredRow = hovered ? byKey.get(hovered) : undefined;
+
+  function warm(key: string) {
+    const photo = regionPhoto(key);
+    if (!photo) return;
+    const img = new window.Image();
+    img.src = photo.src;
+  }
+
+  function preview(key: string) {
+    setHovered(key);
+    warm(key);
+  }
+
+  function choose(key: string) {
+    warm(key);
+    setSelected(key);
+  }
 
   return (
     <section className="mt-8" aria-labelledby="cer-mappa">
       <h2 id="cer-mappa" className="text-xl font-semibold tracking-tight sm:text-2xl">
-        Per regione
+        Comunità energetiche in Italia
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        Sede della configurazione, come la pubblica il GSE. Clicca una regione.
+        Clicca una regione.
       </p>
 
-      <div className="mt-6 grid items-start gap-6 sm:grid-cols-[minmax(0,1fr)_13.5rem]">
-        <div>
+      <div className="mt-6 grid items-start gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,14rem)] sm:gap-8">
+        <div className="min-w-0">
           <svg
             viewBox={ITALY_MAP_VIEWBOX}
             role="img"
             aria-labelledby="cer-mappa-title"
-            className="mx-auto h-auto w-full max-w-[20rem] sm:max-w-none"
+            className="mx-auto h-auto w-full max-w-[20rem] sm:mx-0 sm:max-w-none"
           >
             <title id="cer-mappa-title">Configurazioni TIAD per regione</title>
             {(Object.keys(ITALY_REGION_PATHS) as ItalianRegion[]).map((key) => {
@@ -54,7 +73,8 @@ export function CerItalyMap({
               const t = count / max;
               const isSelected = selected === key;
               const isHovered = hovered === key;
-              const mix = 10 + Math.round(t * 78);
+              const mix = 12 + Math.round(t * 70);
+              const shown = isSelected ? Math.min(100, mix + 28) : isHovered ? Math.min(94, mix + 14) : mix;
               return (
                 <path
                   key={key}
@@ -62,24 +82,28 @@ export function CerItalyMap({
                   tabIndex={0}
                   role="button"
                   aria-pressed={isSelected}
+                  aria-controls="cer-regione"
                   aria-label={`${key}: ${formatIt(count)} configurazioni`}
-                  onClick={() => setSelected(key)}
+                  onClick={() => choose(key)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      setSelected(key);
+                      choose(key);
                     }
                   }}
-                  onMouseEnter={() => setHovered(key)}
+                  onMouseEnter={() => preview(key)}
                   onMouseLeave={() => setHovered((value) => (value === key ? null : value))}
-                  onFocus={() => setHovered(key)}
+                  onFocus={() => preview(key)}
                   onBlur={() => setHovered((value) => (value === key ? null : value))}
-                  className="cursor-pointer outline-none transition-[fill,stroke-width] duration-150"
+                  className="cursor-pointer outline-none transition-[fill,stroke,stroke-width] duration-300 ease-out"
                   vectorEffect="non-scaling-stroke"
                   style={{
-                    fill: `color-mix(in srgb, var(--foreground) ${isHovered || isSelected ? Math.min(92, mix + 10) : mix}%, var(--background))`,
+                    fill:
+                      shown >= 100
+                        ? "var(--foreground)"
+                        : `color-mix(in srgb, var(--foreground) ${shown}%, var(--background))`,
                     stroke: isSelected ? "var(--foreground)" : "var(--background)",
-                    strokeWidth: isSelected ? 1.6 : 0.9,
+                    strokeWidth: isSelected ? 2 : isHovered ? 1.35 : 0.85,
                   }}
                 />
               );
@@ -96,6 +120,14 @@ export function CerItalyMap({
               aria-hidden
             />
             <span>molte</span>
+          </p>
+          <p className="mt-1 min-h-5 text-center text-xs text-neutral-500 sm:text-left dark:text-neutral-400">
+            {hoveredRow ? (
+              <>
+                <span className="font-medium text-foreground">{hoveredRow.label}</span>
+                {` · ${formatIt(hoveredRow.total)}`}
+              </>
+            ) : null}
           </p>
         </div>
 
@@ -155,11 +187,11 @@ export function CerItalyMap({
               return (
                 <tr
                   key={region.key}
-                  onClick={() => setSelected(region.key)}
+                  onClick={() => choose(region.key)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      setSelected(region.key);
+                      choose(region.key);
                     }
                   }}
                   tabIndex={0}
@@ -237,31 +269,54 @@ function RegionCard({
   utenzeItalia: number;
 }) {
   const pct = national > 0 ? (region.total / national) * 100 : 0;
-  const cerShare = region.total > 0 ? (region.cer / region.total) * 100 : 0;
+  const photo = regionPhoto(region.key);
   return (
-    <aside aria-live="polite" className="sm:pt-4">
-      <p className="text-base font-medium tracking-tight">{region.label}</p>
-      <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        <strong className="font-medium text-foreground">
-          {formatIt(region.total)} configurazioni
-        </strong>
-        {` · ${formatPct(pct)} dell’Italia`}
-      </p>
-      <p className="mt-1 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        {formatIt(region.cer)} CER
-        {region.cerUniche !== region.cer ? ` (${formatIt(region.cerUniche)} nomi)` : null}
-        {region.total > 0 ? ` · ${formatPct(cerShare)} della regione` : null}
-      </p>
-      {medianLine(region) ? (
-        <p className="mt-1 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
-          {medianLine(region)}
+    <aside id="cer-regione" aria-live="polite" className="min-w-0 sm:justify-self-end">
+      <div key={region.key} className="cer-region-in">
+        {photo ? (
+          <img
+            src={photo.src}
+            alt={photo.alt}
+            width={1200}
+            height={340}
+            decoding="async"
+            className="aspect-1200/340 h-auto w-full rounded-xl object-cover object-center"
+          />
+        ) : null}
+        <p className={`${photo ? "mt-3" : ""} text-base font-medium tracking-tight`}>{region.label}</p>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+          <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-1.5 rounded-full bg-neutral-900 px-2.5 py-1 text-white dark:bg-neutral-100 dark:text-neutral-900">
+            <span className="text-lg font-semibold tabular-nums leading-none">
+              {formatIt(region.cer)}
+            </span>
+            <span className="text-xs font-semibold">comunità energetiche (CER)</span>
+          </span>
         </p>
-      ) : null}
-      {totalsLine(region, potenzaItalia, utenzeItalia) ? (
-        <p className="mt-1 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
-          {totalsLine(region, potenzaItalia, utenzeItalia)}
+        {region.cabinePrimarie != null ? (
+          <p className="mt-1 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+            su{" "}
+            <strong className="font-medium text-foreground">
+              {formatIt(region.cabinePrimarie)} cabine primarie
+            </strong>
+          </p>
+        ) : null}
+        <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+          <strong className="font-medium text-foreground">
+            {formatIt(region.total)} configurazioni
+          </strong>
+          {` · ${formatPct(pct)} dell’Italia`}
         </p>
-      ) : null}
+        {medianLine(region) ? (
+          <p className="mt-1 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
+            {medianLine(region)}
+          </p>
+        ) : null}
+        {totalsLine(region, potenzaItalia, utenzeItalia) ? (
+          <p className="mt-1 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
+            {totalsLine(region, potenzaItalia, utenzeItalia)}
+          </p>
+        ) : null}
+      </div>
     </aside>
   );
 }

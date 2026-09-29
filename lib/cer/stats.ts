@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { countCabinePrimarieByRegion } from "@/lib/cer/cabine";
 import { cerReadClient } from "@/lib/cer/client";
 import type {
   CerClusterBucket,
@@ -18,6 +19,7 @@ type LiveRow = {
   n_impianti: number | null;
   n_utenze: number | null;
   regione: string | null;
+  area_convenzionale: string | null;
   gestore_rete: string | null;
   gse_aggiornato_il: string | null;
   in_vetrina: boolean;
@@ -65,7 +67,7 @@ async function loadLiveRows() {
     const { data, error } = await client
       .from("cer_configurazioni_live")
       .select(
-        "codice_richiesta, tipologia, tipologia_kind, denominazione, potenza_kw, n_impianti, n_utenze, regione, gestore_rete, gse_aggiornato_il, in_vetrina, last_seen_on",
+        "codice_richiesta, tipologia, tipologia_kind, denominazione, potenza_kw, n_impianti, n_utenze, regione, area_convenzionale, gestore_rete, gse_aggiornato_il, in_vetrina, last_seen_on",
       )
       .range(from, from + page - 1);
     if (error) throw new Error(error.message);
@@ -162,7 +164,10 @@ function rowsByCanonicalRegion(rows: LiveRow[]) {
   return by;
 }
 
-function regionStats(rows: LiveRow[]): CerRegionStat[] {
+function regionStats(
+  rows: LiveRow[],
+  cabineByRegion: Map<ItalianRegion, number> | null,
+): CerRegionStat[] {
   const by = rowsByCanonicalRegion(rows);
   return ITALIAN_REGIONS.map((key) => {
     const list = by.get(key) ?? [];
@@ -182,6 +187,7 @@ function regionStats(rows: LiveRow[]): CerRegionStat[] {
         cer.map((row) => (row.denominazione ?? row.codice_richiesta).trim().toLowerCase()),
       ).size,
       cerInVetrina: cer.filter((row) => row.in_vetrina).length,
+      cabinePrimarie: cabineByRegion?.get(key) ?? null,
       medianaPotenzaKw: median(potenza),
       potenzaKwTotale: potenza.length > 0 ? potenza.reduce((sum, value) => sum + value, 0) : null,
       medianaUtenze: median(utenze),
@@ -190,10 +196,13 @@ function regionStats(rows: LiveRow[]): CerRegionStat[] {
   }).sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "it"));
 }
 
-function statsFromRows(rows: LiveRow[]): CerStats {
+function statsFromRows(
+  rows: LiveRow[],
+  cabineByRegion: Map<ItalianRegion, number> | null,
+): CerStats {
   const cerRows = rows.filter((row) => row.tipologia_kind === "cer");
   const kindCounts = countBy(rows.map((row) => row.tipologia_kind));
-  const regioni = regionStats(rows);
+  const regioni = regionStats(rows, cabineByRegion);
   const regioneCounts = new Map(regioni.map((row) => [row.key, row.total]));
   const gestoreCounts = countBy(rows.map((row) => gestoreKey(row.gestore_rete)));
   const potenzaCounts = countBy(
@@ -268,8 +277,13 @@ function statsFromRows(rows: LiveRow[]): CerStats {
   };
 }
 
+async function buildCerStats(rows: LiveRow[]) {
+  const cabineByRegion = await countCabinePrimarieByRegion(rows).catch(() => null);
+  return statsFromRows(rows, cabineByRegion);
+}
+
 export const loadCerStats = unstable_cache(
-  async (): Promise<CerStats> => statsFromRows(await loadLiveRows()),
-  ["cer-stats-v4"],
+  async (): Promise<CerStats> => buildCerStats(await loadLiveRows()),
+  ["cer-stats-v5"],
   { revalidate: CER_CACHE_REVALIDATE, tags: [CER_CACHE_TAG] },
 );

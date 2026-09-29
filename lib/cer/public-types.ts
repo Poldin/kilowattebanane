@@ -21,6 +21,7 @@ export type CerRegionStat = {
   cer: number;
   cerUniche: number;
   cerInVetrina: number;
+  cabinePrimarie: number | null;
   medianaPotenzaKw: number | null;
   potenzaKwTotale: number | null;
   medianaUtenze: number | null;
