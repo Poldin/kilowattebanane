@@ -34,6 +34,26 @@ async function loadCers(codice: string): Promise<PodCerHit[]> {
   }
 }
 
+function CerMark() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5 shrink-0 text-emerald-200"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
+      <circle cx="8" cy="3.9" r="1.55" />
+      <path d="M5.6 12.6c.2-1.85 1.15-2.9 2.4-2.9s2.2 1.05 2.4 2.9" strokeLinecap="round" />
+      <circle cx="3.6" cy="5.4" r="1.2" />
+      <path d="M1.7 12.6c.15-1.4.9-2.15 1.9-2.15s1.75.75 1.9 2.15" strokeLinecap="round" />
+      <circle cx="12.4" cy="5.4" r="1.2" />
+      <path d="M10.5 12.6c.15-1.4.9-2.15 1.9-2.15s1.75.75 1.9 2.15" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function PodBanner() {
   const [pod, setPod] = useState("");
   const [pending, setPending] = useState(false);
@@ -153,57 +173,84 @@ export function PodBanner() {
           )}
         </button>
       </form>
-      {error ? <p className="mt-3 text-sm text-amber-100">{error}</p> : null}
-      {result?.found === false ? (
-        <p className="mt-3 text-sm text-emerald-100">
-          Il GSE non ha questo POD. A volte il gestore di rete non ha ancora inviato i dati.
-          Riprova sulla{" "}
-          <a
-            href={GSE_MAPPA_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="underline decoration-emerald-300/70 underline-offset-2 hover:text-white"
-          >
-            mappa GSE
-          </a>
-          .
-        </p>
-      ) : null}
-      {result?.found ? (
-        <div className="mt-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
-            Area convenzionale
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <p className="text-2xl font-semibold tracking-[0.08em]">{result.codice}</p>
-            <button
-              type="button"
-              onClick={() => void copyCodice(result.codice)}
-              className="rounded-md border border-emerald-200/30 bg-emerald-950/20 px-2 py-1 text-xs font-medium text-emerald-50 hover:bg-emerald-950/35"
-            >
-              {copied ? "Copiato" : "Copia"}
-            </button>
-          </div>
-          {result.gestore ? (
-            <p className="mt-1 text-sm text-emerald-100">{result.gestore}</p>
-          ) : null}
-          {result.cer.length > 0 ? (
-            <ul className="mt-3 space-y-1 text-sm text-emerald-50">
-              {result.cer.map((row, index) => (
-                <li key={`${row.denominazione ?? "cer"}-${index}`}>
-                  {row.denominazione ?? "CER"}
-                  {row.comune ? ` · ${row.comune}` : null}
-                  {row.inVetrina ? " · in vetrina" : null}
-                </li>
-              ))}
-            </ul>
-          ) : pending ? null : (
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
+          error || result ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden">
+          {error ? <p className="mt-3 text-sm text-amber-100">{error}</p> : null}
+          {result?.found === false ? (
             <p className="mt-3 text-sm text-emerald-100">
-              Nessuna CER sulla mappa GSE in quest’area, per ora.
+              Il GSE non ha questo POD. A volte il gestore di rete non ha ancora inviato i dati.
+              Riprova sulla{" "}
+              <a
+                href={GSE_MAPPA_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-emerald-300/70 underline-offset-2 hover:text-white"
+              >
+                mappa GSE
+              </a>
+              .
             </p>
-          )}
+          ) : null}
+          {result?.found ? (
+            <div className="mt-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
+                Area convenzionale
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <p className="text-2xl font-semibold tracking-[0.08em]">{result.codice}</p>
+                <button
+                  type="button"
+                  onClick={() => void copyCodice(result.codice)}
+                  className="rounded-md border border-emerald-200/30 bg-emerald-950/20 px-2 py-1 text-xs font-medium text-emerald-50 hover:bg-emerald-950/35"
+                >
+                  {copied ? "Copiato" : "Copia"}
+                </button>
+              </div>
+              {result.gestore ? (
+                <p className="mt-1 text-sm text-emerald-100">{result.gestore}</p>
+              ) : null}
+              <div
+                className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
+                  result.cer.length > 0 || !pending ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                }`}
+              >
+                <div className="overflow-hidden">
+                  {result.cer.length > 0 ? (
+                    <div className="mt-4">
+                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
+                        CER in quest’area
+                      </p>
+                      <ul className="mt-2 flex flex-col items-start gap-1.5">
+                        {result.cer.map((row, index) => (
+                          <li
+                            key={`${row.denominazione ?? "cer"}-${index}`}
+                            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-200/35 bg-emerald-950/25 px-2.5 py-1 text-sm leading-snug text-emerald-50"
+                          >
+                            <CerMark />
+                            <span className="min-w-0">
+                              {row.denominazione ?? "CER"}
+                              {row.comune ? ` · ${row.comune}` : null}
+                              {row.inVetrina ? " · in vetrina" : null}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-emerald-100">
+                      Nessuna CER sulla mappa GSE in quest’area, per ora.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
