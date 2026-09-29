@@ -10,12 +10,22 @@ import {
 } from "@/lib/cer/pod-parse";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
 
-const POD_HELP_HREF = `https://www.google.com/search?${new URLSearchParams({
-  udm: "50",
-  hl: "it",
-  gl: "it",
-  q: "Cos'è il codice POD della bolletta della luce in Italia? Spiegamelo in modo semplice. Poi guidami passo dopo passo a trovarlo sulla mia bolletta e a inserirlo sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/cer-stats) per scoprire la mia cabina primaria e le comunità energetiche della mia area. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
-}).toString()}`;
+function googleAiHref(query: string) {
+  return `https://www.google.com/search?${new URLSearchParams({
+    udm: "50",
+    hl: "it",
+    gl: "it",
+    q: query,
+  }).toString()}`;
+}
+
+const POD_HELP_HREF = googleAiHref(
+  "Cos'è il codice POD della bolletta della luce in Italia? Spiegamelo in modo semplice. Poi guidami passo dopo passo a trovarlo sulla mia bolletta e a inserirlo sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/cer-stats) per scoprire la mia cabina primaria e le comunità energetiche della mia area. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
+);
+
+const CABINA_HELP_HREF = googleAiHref(
+  "Cos'è la cabina primaria (area convenzionale) nelle comunità energetiche rinnovabili in Italia? Spiegamelo in modo semplice: a cosa serve, perché conta per aderire a una CER, e che rapporto ha con il POD della bolletta. Poi guidami a scoprire la mia cabina primaria sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/cer-stats), inserendo il POD. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
+);
 
 type ApiError = { error?: string };
 type CerPayload = { cer?: PodCerHit[] };
@@ -107,6 +117,33 @@ function CerMark() {
   );
 }
 
+function AiHelpLink({ href, children }: { href: string; children: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-200/35 bg-emerald-950/20 px-3 text-sm font-medium text-emerald-50 hover:bg-emerald-950/35"
+    >
+      {children}
+      <svg
+        aria-hidden
+        viewBox="0 0 16 16"
+        className="h-3.5 w-3.5 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+      >
+        <path
+          d="M4.5 11.5 11.5 4.5M6.5 4.5h5v5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </a>
+  );
+}
+
 export function PodBanner() {
   const [pod, setPod] = useState("");
   const [pending, setPending] = useState(false);
@@ -176,28 +213,10 @@ export function PodBanner() {
       <p className="mt-2 text-sm text-emerald-100">
         Inserisci il POD della bolletta. Ti diremo la tua cabina primaria e le comunità energetiche a cui puoi aderire.
       </p>
-      <a
-        href={POD_HELP_HREF}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-200/35 bg-emerald-950/20 px-3 text-sm font-medium text-emerald-50 hover:bg-emerald-950/35"
-      >
-        cos’è il POD?
-        <svg
-          aria-hidden
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5 shrink-0"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-        >
-          <path
-            d="M4.5 11.5 11.5 4.5M6.5 4.5h5v5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </a>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <AiHelpLink href={POD_HELP_HREF}>cos’è il POD?</AiHelpLink>
+        <AiHelpLink href={CABINA_HELP_HREF}>cos’è la cabina primaria?</AiHelpLink>
+      </div>
       <form
         className="mt-4 w-full"
         onSubmit={(event) => {
