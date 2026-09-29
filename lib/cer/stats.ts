@@ -237,6 +237,9 @@ function statsFromRows(
       cerRows.map((row) => (row.denominazione ?? row.codice_richiesta).trim().toLowerCase()),
     ).size,
     cerInVetrina: cerRows.filter((row) => row.in_vetrina).length,
+    cabinePrimarie: cabineByRegion
+      ? [...cabineByRegion.values()].reduce((sum, count) => sum + count, 0)
+      : null,
     snapshotDate,
     ingestedOn: rows.map((row) => row.last_seen_on).find((value) => value != null) ?? null,
     tipologia: bucketsFrom(
@@ -284,6 +287,6 @@ async function buildCerStats(rows: LiveRow[]) {
 
 export const loadCerStats = unstable_cache(
   async (): Promise<CerStats> => buildCerStats(await loadLiveRows()),
-  ["cer-stats-v5"],
+  ["cer-stats-v6"],
   { revalidate: CER_CACHE_REVALIDATE, tags: [CER_CACHE_TAG] },
 );

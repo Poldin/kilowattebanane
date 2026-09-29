@@ -33,6 +33,7 @@ export type CerStats = {
   cer: number;
   cerUniche: number;
   cerInVetrina: number;
+  cabinePrimarie: number | null;
   snapshotDate: string | null;
   ingestedOn: string | null;
   tipologia: CerClusterBucket[];

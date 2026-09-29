@@ -36,7 +36,15 @@ const SECTIONS: {
   },
 ];
 
+function cabinePrimarieItalia(stats: CerStatsData) {
+  if (stats.cabinePrimarie != null) return stats.cabinePrimarie;
+  if (!stats.regioni.some((region) => region.cabinePrimarie != null)) return null;
+  return stats.regioni.reduce((sum, region) => sum + (region.cabinePrimarie ?? 0), 0);
+}
+
 export function CerStats({ stats }: { stats: CerStatsData }) {
+  const cabinePrimarie = cabinePrimarieItalia(stats);
+
   if (stats.total === 0) {
     return (
       <p className="mt-4 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
@@ -62,7 +70,7 @@ export function CerStats({ stats }: { stats: CerStatsData }) {
         </strong>
         {" · "}
         {formatIt(stats.cer)} CER
-        {stats.cerUniche !== stats.cer ? ` (${formatIt(stats.cerUniche)} nomi)` : null}
+        {cabinePrimarie != null ? ` · ${formatIt(cabinePrimarie)} cabine primarie` : null}
         {stats.potenzaKwTotale != null ? ` · ${formatPower(stats.potenzaKwTotale)}` : null}
         {stats.utenzeTotale != null ? ` · ${formatIt(stats.utenzeTotale)} utenze` : null}
         {stats.snapshotDate ? ` · ${formatItDate(stats.snapshotDate)}` : null}.
