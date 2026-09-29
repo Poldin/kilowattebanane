@@ -121,7 +121,7 @@ export function PodBanner() {
         Qual è la tua cabina primaria?
       </p>
       <p className="mt-2 text-sm text-emerald-100">
-        Inserisci il POD della bolletta.
+        Inserisci il POD della bolletta. Ti diremo la tua cabina primaria e le CER in quest’area.
       </p>
       <form
         className="mt-4 flex w-full flex-col gap-2 sm:flex-row sm:items-center"
