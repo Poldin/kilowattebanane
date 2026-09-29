@@ -222,7 +222,7 @@ export function PodBanner() {
                   {result.cer.length > 0 ? (
                     <div className="mt-4">
                       <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
-                        CER in quest’area
+                        Comunità energetiche in quest’area
                       </p>
                       <ul className="mt-2 flex flex-col items-start gap-1.5">
                         {result.cer.map((row, index) => (
