@@ -7,6 +7,8 @@ export type PodCerHit = {
   denominazione: string | null;
   comune: string | null;
   inVetrina: boolean;
+  potenzaKw: number | null;
+  nUtenze: number | null;
 };
 
 export type PodLookupOk = {

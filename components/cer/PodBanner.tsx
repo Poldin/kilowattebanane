@@ -41,6 +41,52 @@ async function loadCers(codice: string): Promise<PodCerHit[]> {
   }
 }
 
+function formatKw(value: number) {
+  if (value >= 1000) {
+    const mw = value / 1000;
+    const rounded = mw >= 10 ? Math.round(mw) : Math.round(mw * 10) / 10;
+    const label = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(".", ",");
+    return `${label} MW`;
+  }
+  const rounded = Math.round(value * 10) / 10;
+  const label = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(".", ",");
+  return `${label} kW`;
+}
+
+function formatItInt(value: number) {
+  return String(Math.trunc(Math.abs(value))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function BoltMark() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5 shrink-0 text-emerald-200"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
+      <path d="M8.8 1.75 3.75 9.1h4.1L7.2 14.25l5.05-7.35h-4.1Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function UtenzeMark() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5 shrink-0 text-emerald-200"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
+      <circle cx="8" cy="5" r="2.1" />
+      <path d="M3.5 13.25c.4-2.2 2-3.4 4.5-3.4s4.1 1.2 4.5 3.4" strokeLinecap="round" />
+    </svg>
+  );
+}
 function CerMark() {
   return (
     <svg
@@ -262,14 +308,35 @@ export function PodBanner() {
                         {result.cer.map((row, index) => (
                           <li
                             key={`${row.denominazione ?? "cer"}-${index}`}
-                            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-200/35 bg-emerald-950/25 px-2.5 py-1 text-sm leading-snug text-emerald-50"
+                            className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-emerald-200/35 bg-emerald-950/25 px-2.5 py-1 text-sm leading-snug text-emerald-50"
                           >
-                            <CerMark />
-                            <span className="min-w-0">
-                              {row.denominazione ?? "CER"}
-                              {row.comune ? ` · ${row.comune}` : null}
-                              {row.inVetrina ? " · in vetrina" : null}
+                            <span className="inline-flex min-w-0 items-center gap-1.5">
+                              <CerMark />
+                              <span className="min-w-0">
+                                {row.denominazione ?? "CER"}
+                                {row.comune ? ` · ${row.comune}` : null}
+                                {row.inVetrina ? " · in vetrina" : null}
+                              </span>
                             </span>
+                            {row.potenzaKw != null ? (
+                              <span
+                                title="potenza"
+                                className="inline-flex items-center gap-1 text-emerald-100"
+                              >
+                                <BoltMark />
+                                {formatKw(row.potenzaKw)}
+                              </span>
+                            ) : null}
+                            {row.nUtenze != null ? (
+                              <span
+                                title="utenze"
+                                className="inline-flex items-center gap-1 text-emerald-100"
+                              >
+                                <UtenzeMark />
+                                {formatItInt(row.nUtenze)}
+                                <span className="sr-only"> utenze</span>
+                              </span>
+                            ) : null}
                           </li>
                         ))}
                       </ul>

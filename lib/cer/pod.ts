@@ -25,22 +25,33 @@ function text(value: unknown) {
   return s.length > 0 ? s : null;
 }
 
+function num(value: unknown) {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function lookupCersInArea(codice: string): Promise<PodCerHit[]> {
   if (!isAreaConvenzionaleCode(codice)) return [];
   try {
     const { data, error } = await cerReadClient()
       .from("cer_configurazioni_live")
-      .select("denominazione, comune, in_vetrina")
+      .select("denominazione, comune, in_vetrina, potenza_kw, n_utenze")
       .eq("area_convenzionale", codice)
       .eq("tipologia_kind", "cer")
       .order("in_vetrina", { ascending: false })
       .limit(8);
     if (error) return [];
-    return (data ?? []).map((row) => ({
-      denominazione: text(row.denominazione),
-      comune: text(row.comune),
-      inVetrina: Boolean(row.in_vetrina),
-    }));
+    return (data ?? []).map((row) => {
+      const nUtenze = num(row.n_utenze);
+      return {
+        denominazione: text(row.denominazione),
+        comune: text(row.comune),
+        inVetrina: Boolean(row.in_vetrina),
+        potenzaKw: num(row.potenza_kw),
+        nUtenze: nUtenze != null ? Math.trunc(nUtenze) : null,
+      };
+    });
   } catch {
     return [];
   }
