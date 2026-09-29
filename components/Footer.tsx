@@ -64,6 +64,11 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link href="/cer-stats" className={itemClass}>
+                statistiche CER
+              </Link>
+            </li>
+            <li>
               <button
                 type="button"
                 onClick={showTodayPrices}

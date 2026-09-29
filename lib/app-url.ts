@@ -57,6 +57,10 @@ export function mailOfferStatsUrl() {
   return `${publicSiteUrl()}/offer-stats`;
 }
 
+export function mailCerStatsUrl() {
+  return `${publicSiteUrl()}/cer-stats`;
+}
+
 export function mailShareUrl() {
   const url = new URL("/", publicSiteUrl());
   url.searchParams.set("utm_source", "mail");
