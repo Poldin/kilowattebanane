@@ -28,6 +28,12 @@ export type CerRegionStat = {
   utenzeTotale: number | null;
 };
 
+export type CerShowcaseCard = {
+  denominazione: string;
+  potenzaKw: number | null;
+  nUtenze: number | null;
+};
+
 export type CerStats = {
   total: number;
   cer: number;

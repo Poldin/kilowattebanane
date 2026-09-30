@@ -399,11 +399,250 @@ body {
   filter: saturate(1.24) contrast(1.07) brightness(1.04);
 }
 
+.cer-marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+.cer-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: cer-marquee 38s linear infinite;
+}
+
+.cer-marquee-set {
+  display: flex;
+  gap: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.cer-marquee:hover .cer-marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes cer-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.cer-energy-line {
+  fill: none;
+  stroke: #165b44;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-dasharray: 3 10;
+  animation: cer-energy-dash 1.4s linear infinite;
+}
+
+.cer-energy-track {
+  fill: none;
+  stroke: color-mix(in srgb, #165b44 16%, transparent);
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+
+.cer-day-sun,
+.cer-night-moon {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.cer-day-sun,
+.cer-day-energy {
+  animation: cer-day-visible 12s ease-in-out infinite;
+}
+
+.cer-night-moon {
+  opacity: 0;
+  animation: cer-night-visible 12s ease-in-out infinite;
+}
+
+.cer-panel-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-panel-spark 1.8s ease-in-out infinite;
+}
+
+.cer-hub-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-hub-ring 2.7s ease-out infinite;
+}
+
+.cer-hub-core {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-hub-core 1.35s ease-in-out infinite;
+}
+
+.cer-consumer-window {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-window-on 2.7s ease-in-out infinite;
+}
+
+.cer-house-signal {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-signal 2.7s ease-out infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cer-energy-line {
+    stroke: #f5d547;
+  }
+
+  .cer-energy-track {
+    stroke: color-mix(in srgb, #f5d547 14%, transparent);
+  }
+}
+
+@keyframes cer-energy-dash {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+
+@keyframes cer-day-visible {
+  0%,
+  38% {
+    opacity: 1;
+  }
+  48%,
+  88% {
+    opacity: 0;
+  }
+  98%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes cer-night-visible {
+  0%,
+  42% {
+    opacity: 0;
+    transform: translateY(5px) scale(0.75);
+  }
+  52%,
+  86% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  96%,
+  100% {
+    opacity: 0;
+    transform: translateY(5px) scale(0.75);
+  }
+}
+
+@keyframes cer-panel-spark {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes cer-hub-ring {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.78);
+  }
+  75%,
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes cer-hub-core {
+  50% {
+    transform: scale(1.45);
+  }
+}
+
+@keyframes cer-window-on {
+  0%,
+  25% {
+    opacity: 0.25;
+  }
+  42%,
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes cer-signal {
+  0%,
+  30% {
+    opacity: 0;
+    transform: translateY(3px) scale(0.5);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1);
+  }
+  80%,
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.5);
+  }
+}
+
+.cer-sun {
+  transform-origin: 102px 61px;
+  animation: cer-sun-pulse 5s linear infinite;
+}
+
+@keyframes cer-sun-pulse {
+  50% {
+    transform: rotate(18deg) scale(1.08);
+  }
+}
+
+.cer-consumer-light {
+  animation: cer-light-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes cer-light-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hot-offer-in,
   .learn-chapter-in,
-  .cer-region-in {
+  .cer-region-in,
+  .cer-marquee-track,
+  .cer-energy-line,
+  .cer-sun,
+  .cer-consumer-light,
+  .cer-day-sun,
+  .cer-night-moon,
+  .cer-day-energy,
+  .cer-panel-spark,
+  .cer-hub-ring,
+  .cer-hub-core,
+  .cer-consumer-window,
+  .cer-house-signal {
     animation: none;
+  }
+
+  .cer-energy-dot {
+    display: none;
   }
 }
 

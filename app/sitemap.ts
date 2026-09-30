@@ -25,6 +25,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.85,
     },
     {
+      url: `${base}/comunita-energetiche`,
+      lastModified: today,
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
+    {
       url: `${base}/cer-stats`,
       lastModified: today,
       changeFrequency: "weekly",

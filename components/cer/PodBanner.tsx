@@ -20,11 +20,11 @@ function googleAiHref(query: string) {
 }
 
 const POD_HELP_HREF = googleAiHref(
-  "Cos'è il codice POD della bolletta della luce in Italia? Spiegamelo in modo semplice. Poi guidami passo dopo passo a trovarlo sulla mia bolletta e a inserirlo sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/cer-stats) per scoprire la mia cabina primaria e le comunità energetiche della mia area. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
+  "Cos'è il codice POD della bolletta della luce in Italia? Spiegamelo in modo semplice. Poi guidami passo dopo passo a trovarlo sulla mia bolletta e a inserirlo sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/comunita-energetiche) per scoprire la mia cabina primaria e le comunità energetiche della mia area. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
 );
 
 const CABINA_HELP_HREF = googleAiHref(
-  "Cos'è la cabina primaria (area convenzionale) nelle comunità energetiche rinnovabili in Italia? Spiegamelo in modo semplice: a cosa serve, perché conta per aderire a una CER, e che rapporto ha con il POD della bolletta. Poi guidami a scoprire la mia cabina primaria sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/cer-stats), inserendo il POD. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
+  "Cos'è la cabina primaria (area convenzionale) nelle comunità energetiche rinnovabili in Italia? Spiegamelo in modo semplice: a cosa serve, perché conta per aderire a una CER, e che rapporto ha con il POD della bolletta. Poi guidami a scoprire la mia cabina primaria sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/comunita-energetiche), inserendo il POD. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
 );
 
 type ApiError = { error?: string };

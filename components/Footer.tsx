@@ -64,6 +64,11 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link href="/comunita-energetiche" className={itemClass}>
+                comunità energetiche
+              </Link>
+            </li>
+            <li>
               <Link href="/cer-stats" className={itemClass}>
                 statistiche CER
               </Link>

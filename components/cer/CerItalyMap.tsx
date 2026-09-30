@@ -9,9 +9,11 @@ import type { ItalianRegion } from "@/lib/market-zones";
 export function CerItalyMap({
   regions,
   total,
+  showTable = true,
 }: {
   regions: CerRegionStat[];
   total: number;
+  showTable?: boolean;
 }) {
   const byKey = useMemo(
     () => new Map(regions.map((region) => [region.key, region])),
@@ -141,6 +143,7 @@ export function CerItalyMap({
         ) : null}
       </div>
 
+      {showTable ? (
       <div className="mt-8 overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">Configurazioni TIAD per regione</caption>
@@ -253,6 +256,7 @@ export function CerItalyMap({
           </tbody>
         </table>
       </div>
+      ) : null}
     </section>
   );
 }
