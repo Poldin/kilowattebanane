@@ -10,10 +10,11 @@ import { useTypewriter } from "@/lib/use-typewriter";
 
 const LOGO_TEXT = "kilowatt e banane";
 const LOGO_EMOJI = "💡e 🍌🍌🍌";
+const CER_HEADER_PATHS = new Set(["/comunita-energetiche", "/cer-stats"]);
 
 export function Header() {
   const pathname = usePathname();
-  const isCerLandingPage = pathname === "/comunita-energetiche";
+  const isCerPage = CER_HEADER_PATHS.has(pathname);
   const { openSignup } = useSignup();
   const cerSignup = useCerSignupOptional();
   const tick = useSyncedTick(10_000);
@@ -59,19 +60,19 @@ export function Header() {
           <button
             type="button"
             onClick={() => {
-              if (isCerLandingPage && cerSignup) {
+              if (isCerPage && cerSignup) {
                 cerSignup.openSignup();
                 return;
               }
               openSignup();
             }}
             className={
-              isCerLandingPage
+              isCerPage
                 ? CER_SIGNUP_BUTTON_CLASS
                 : "rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
             }
           >
-            {isCerLandingPage ? "Iscriviti a una CER" : "Iscriviti gratis"}
+            {isCerPage ? "Iscriviti a una CER" : "Iscriviti gratis"}
           </button>
         </div>
       </div>

@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { CerStats } from "@/components/cer/CerStats";
 import { PodBanner } from "@/components/cer/PodBanner";
 import { CerSignupProvider } from "@/components/cer/CerSignupProvider";
-import { SignupProvider, SignupSlot } from "@/components/SignupForm";
+import { SignupProvider } from "@/components/SignupForm";
 import { publicSiteUrl } from "@/lib/app-url";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
 import { loadCerStats } from "@/lib/cer/stats";
@@ -44,7 +44,6 @@ export default async function CerStatsPage() {
             </h1>
             <PodBanner />
             <CerStats stats={stats} />
-            <SignupSlot className="mt-16 w-full scroll-mt-20 sm:mt-20" />
           </main>
           <Footer />
         </div>
