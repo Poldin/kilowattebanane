@@ -167,7 +167,7 @@ export async function lookupPodOnGse(
   );
   const codice = text(rows[0]?.attributes?.COD_AC)?.toUpperCase() ?? null;
   if (!codice || !isAreaConvenzionaleCode(codice)) {
-    return { found: false, pod: parsed.pod };
+    return { found: false, query: "pod" };
   }
 
   const gestore = await lookupGestoreOnGse(codice, options).catch(() => null);
@@ -176,5 +176,37 @@ export async function lookupPodOnGse(
     pod: parsed.pod,
     codice,
     gestore,
+  };
+}
+
+export async function lookupCabinaOnGse(
+  raw: string,
+  options?: { userAgent?: string },
+): Promise<GsePodResult> {
+  const codice = raw.trim().toUpperCase();
+  if (!isAreaConvenzionaleCode(codice)) {
+    throw new Error("Codice area non valido");
+  }
+
+  const rows = await gseQuery(
+    GSE_AC_LAYER_URL,
+    {
+      where: `COD_AC = ${sqlLiteral(codice)}`,
+      outFields: "COD_AC,RAG_SOC",
+      returnGeometry: "false",
+      resultRecordCount: "1",
+    },
+    options,
+  );
+  const found = text(rows[0]?.attributes?.COD_AC)?.toUpperCase() ?? null;
+  if (!found || !isAreaConvenzionaleCode(found)) {
+    return { found: false, query: "cabina" };
+  }
+
+  return {
+    found: true,
+    pod: null,
+    codice: found,
+    gestore: text(rows[0]?.attributes?.RAG_SOC),
   };
 }

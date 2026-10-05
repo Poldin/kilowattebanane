@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { lookupComuniOnGse, lookupPodOnGse } from "@/lib/cer/pod-gse";
+import { lookupCabinaOnGse, lookupComuniOnGse, lookupPodOnGse } from "@/lib/cer/pod-gse";
 import {
   normalizePodInput,
-  parsePod,
+  parseLookupInput,
   type PodCerHit,
+  type PodLookupMiss,
   type PodLookupOk,
 } from "@/lib/cer/pod-parse";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
@@ -24,12 +25,12 @@ const POD_HELP_HREF = googleAiHref(
 );
 
 const CABINA_HELP_HREF = googleAiHref(
-  "Cos'è la cabina primaria (area convenzionale) nelle comunità energetiche rinnovabili in Italia? Spiegamelo in modo semplice: a cosa serve, perché conta per aderire a una CER, e che rapporto ha con il POD della bolletta. Poi guidami a scoprire la mia cabina primaria sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/comunita-energetiche), inserendo il POD. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
+  "Cos'è la cabina primaria (area convenzionale) nelle comunità energetiche rinnovabili in Italia? Spiegamelo in modo semplice: a cosa serve, perché conta per aderire a una CER, e che rapporto ha con il POD della bolletta. Poi guidami a scoprire la mia cabina primaria sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/comunita-energetiche), inserendo il POD oppure il codice della cabina (AC…). kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
 );
 
 type ApiError = { error?: string };
 type CerPayload = { cer?: PodCerHit[] };
-type PodPayload = PodLookupOk | { found: false } | ApiError;
+type PodPayload = PodLookupOk | PodLookupMiss | ApiError;
 
 async function postJson<T>(body: unknown) {
   const response = await fetch("/api/cer/pod", {
@@ -148,7 +149,7 @@ export function PodBanner() {
   const [pod, setPod] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<PodLookupOk | { found: false } | null>(null);
+  const [result, setResult] = useState<PodLookupOk | PodLookupMiss | null>(null);
   const [copied, setCopied] = useState(false);
 
   async function searchViaApi(podCode: string) {
@@ -160,13 +161,15 @@ export function PodBanner() {
     }
     if ("found" in payload && payload.found) {
       setResult(payload);
+    } else if ("found" in payload) {
+      setResult(payload);
     } else {
-      setResult({ found: false });
+      setResult({ found: false, query: "pod" });
     }
   }
 
   async function search() {
-    const parsed = parsePod(pod);
+    const parsed = parseLookupInput(pod);
     if (!parsed.ok) {
       setResult(null);
       setError(parsed.error);
@@ -177,9 +180,12 @@ export function PodBanner() {
     setResult(null);
     setCopied(false);
     try {
-      const gse = await lookupPodOnGse(parsed.pod);
+      const gse =
+        parsed.kind === "cabina"
+          ? await lookupCabinaOnGse(parsed.codice)
+          : await lookupPodOnGse(parsed.pod);
       if (!gse.found) {
-        setResult({ found: false });
+        setResult(gse);
         return;
       }
       setResult({ ...gse, cer: [], comuni: [] });
@@ -190,7 +196,7 @@ export function PodBanner() {
       setResult({ ...gse, cer, comuni });
     } catch {
       try {
-        await searchViaApi(parsed.pod);
+        await searchViaApi(parsed.kind === "cabina" ? parsed.codice : parsed.pod);
       } catch {
         setResult(null);
         setError("Non riesco a interrogare il GSE. Riprova.");
@@ -215,7 +221,7 @@ export function PodBanner() {
         Qual è la tua cabina primaria?
       </p>
       <p className="mt-2 text-sm text-emerald-100">
-        Inserisci il POD della bolletta. Ti diremo la tua cabina primaria e le comunità energetiche a cui puoi aderire.
+        Inserisci il POD della bolletta o il codice della cabina primaria. Ti diremo l’area e le comunità energetiche a cui puoi aderire.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         <AiHelpLink href={POD_HELP_HREF}>cos’è il POD?</AiHelpLink>
@@ -230,7 +236,7 @@ export function PodBanner() {
       >
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
         <label htmlFor="cer-pod" className="sr-only">
-          Codice POD
+          Codice POD o cabina primaria
         </label>
         <input
           id="cer-pod"
@@ -285,7 +291,9 @@ export function PodBanner() {
           {error ? <p className="mt-3 text-sm text-amber-100">{error}</p> : null}
           {result?.found === false ? (
             <p className="mt-3 text-sm text-emerald-100">
-              Il GSE non ha questo POD. 
+              {result.query === "cabina"
+                ? "Il GSE non ha questa cabina primaria. "
+                : "Il GSE non ha questo POD. "}
               Riprova sulla{" "}
               <a
                 href={GSE_MAPPA_URL}

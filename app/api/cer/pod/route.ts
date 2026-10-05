@@ -1,5 +1,5 @@
 import { lookupCersInArea, lookupPod } from "@/lib/cer/pod";
-import { isAreaConvenzionaleCode, POD_FORMAT_HINT, parsePod } from "@/lib/cer/pod-parse";
+import { isAreaConvenzionaleCode, parseLookupInput } from "@/lib/cer/pod-parse";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -26,13 +26,13 @@ export async function POST(request: Request) {
     return Response.json({ cer }, { headers: NO_STORE });
   }
 
-  const parsed = parsePod(podRaw);
+  const parsed = parseLookupInput(podRaw);
   if (!parsed.ok) {
-    return Response.json({ error: POD_FORMAT_HINT }, { status: 400, headers: NO_STORE });
+    return Response.json({ error: parsed.error }, { status: 400, headers: NO_STORE });
   }
 
   try {
-    const result = await lookupPod(parsed.pod);
+    const result = await lookupPod(podRaw);
     return Response.json(result, { headers: NO_STORE });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Lookup failed";

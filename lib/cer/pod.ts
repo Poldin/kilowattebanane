@@ -3,13 +3,14 @@ import {
   isAreaConvenzionaleCode,
   type PodCerHit,
   type PodLookupResult,
-  parsePod,
+  parseLookupInput,
 } from "@/lib/cer/pod-parse";
-import { lookupComuniOnGse, lookupPodOnGse } from "@/lib/cer/pod-gse";
+import { lookupCabinaOnGse, lookupComuniOnGse, lookupPodOnGse } from "@/lib/cer/pod-gse";
 
 export {
   POD_FORMAT_HINT,
   normalizePodInput,
+  parseLookupInput,
   parsePod,
   type PodCerHit,
   type PodLookupMiss,
@@ -57,12 +58,15 @@ export async function lookupCersInArea(codice: string): Promise<PodCerHit[]> {
 }
 
 export async function lookupPod(raw: string): Promise<PodLookupResult> {
-  const parsed = parsePod(raw);
+  const parsed = parseLookupInput(raw);
   if (!parsed.ok) {
     throw new Error(parsed.error);
   }
 
-  const gse = await lookupPodOnGse(parsed.pod, { userAgent: UA });
+  const gse =
+    parsed.kind === "cabina"
+      ? await lookupCabinaOnGse(parsed.codice, { userAgent: UA })
+      : await lookupPodOnGse(parsed.pod, { userAgent: UA });
   if (!gse.found) return gse;
 
   const [cer, comuni] = await Promise.all([
