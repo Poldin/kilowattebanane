@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { countCabinePrimarieByRegion } from "@/lib/cer/cabine";
 import { cerReadClient } from "@/lib/cer/client";
+import { cerNamesAnalysis } from "@/lib/cer/names";
 import type {
   CerClusterBucket,
   CerRegionStat,
@@ -18,6 +19,7 @@ type LiveRow = {
   potenza_kw: number | string | null;
   n_impianti: number | null;
   n_utenze: number | null;
+  comune: string | null;
   regione: string | null;
   area_convenzionale: string | null;
   gestore_rete: string | null;
@@ -67,7 +69,7 @@ async function loadLiveRows() {
     const { data, error } = await client
       .from("cer_configurazioni_live")
       .select(
-        "codice_richiesta, tipologia, tipologia_kind, denominazione, potenza_kw, n_impianti, n_utenze, regione, area_convenzionale, gestore_rete, gse_aggiornato_il, in_vetrina, last_seen_on",
+        "codice_richiesta, tipologia, tipologia_kind, denominazione, potenza_kw, n_impianti, n_utenze, comune, regione, area_convenzionale, gestore_rete, gse_aggiornato_il, in_vetrina, last_seen_on",
       )
       .range(from, from + page - 1);
     if (error) throw new Error(error.message);
@@ -277,6 +279,7 @@ function statsFromRows(
     utenzeTotale: utenze.length > 0 ? utenze.reduce((sum, value) => sum + value, 0) : null,
     impiantiTotale:
       impianti.length > 0 ? impianti.reduce((sum, value) => sum + value, 0) : null,
+    nomi: cerNamesAnalysis(cerRows),
   };
 }
 
@@ -287,6 +290,6 @@ async function buildCerStats(rows: LiveRow[]) {
 
 export const loadCerStats = unstable_cache(
   async (): Promise<CerStats> => buildCerStats(await loadLiveRows()),
-  ["cer-stats-v6"],
+  ["cer-stats-v7"],
   { revalidate: CER_CACHE_REVALIDATE, tags: [CER_CACHE_TAG] },
 );

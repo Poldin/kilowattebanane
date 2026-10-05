@@ -28,6 +28,7 @@ export function CerItalyMap({
     (sum, region) => sum + (region.utenzeTotale ?? 0),
     0,
   );
+  const cerItalia = regions.reduce((sum, region) => sum + region.cer, 0);
   const defaultKey = regions[0]?.key ?? "Lombardia";
   const [selected, setSelected] = useState(defaultKey);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -136,7 +137,7 @@ export function CerItalyMap({
         {current ? (
           <RegionCard
             region={current}
-            national={total}
+            cerItalia={cerItalia}
             potenzaItalia={potenzaItalia}
             utenzeItalia={utenzeItalia}
           />
@@ -263,16 +264,16 @@ export function CerItalyMap({
 
 function RegionCard({
   region,
-  national,
+  cerItalia,
   potenzaItalia,
   utenzeItalia,
 }: {
   region: CerRegionStat;
-  national: number;
+  cerItalia: number;
   potenzaItalia: number;
   utenzeItalia: number;
 }) {
-  const pct = national > 0 ? (region.total / national) * 100 : 0;
+  const cerPct = cerItalia > 0 ? (region.cer / cerItalia) * 100 : 0;
   const photo = regionPhoto(region.key);
   return (
     <aside id="cer-regione" aria-live="polite" className="min-w-0 sm:justify-self-end">
@@ -291,9 +292,13 @@ function RegionCard({
         <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
           <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-1.5 rounded-full bg-neutral-900 px-2.5 py-1 text-white dark:bg-neutral-100 dark:text-neutral-900">
             <span className="text-lg font-semibold tabular-nums leading-none">
-              {formatIt(region.cer)}
+              {formatIt(region.cer)} CER
             </span>
-            <span className="text-xs font-semibold">comunità energetiche (CER)</span>
+            {cerItalia > 0 ? (
+              <span className="text-xs font-semibold tabular-nums">
+                ({formatPct(cerPct)} dell’Italia)
+              </span>
+            ) : null}
           </span>
         </p>
         {region.cabinePrimarie != null ? (
@@ -304,36 +309,14 @@ function RegionCard({
             </strong>
           </p>
         ) : null}
-        <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-          <strong className="font-medium text-foreground">
-            {formatIt(region.total)} configurazioni
-          </strong>
-          {` · ${formatPct(pct)} dell’Italia`}
-        </p>
-        {medianLine(region) ? (
-          <p className="mt-1 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
-            {medianLine(region)}
-          </p>
-        ) : null}
         {totalsLine(region, potenzaItalia, utenzeItalia) ? (
-          <p className="mt-1 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
+          <p className="mt-2 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
             {totalsLine(region, potenzaItalia, utenzeItalia)}
           </p>
         ) : null}
       </div>
     </aside>
   );
-}
-
-function medianLine(region: CerRegionStat) {
-  const bits: string[] = [];
-  if (region.medianaPotenzaKw != null) {
-    bits.push(`mediana ${formatItNum(region.medianaPotenzaKw)} kW`);
-  }
-  if (region.medianaUtenze != null) {
-    bits.push(`${formatItNum(region.medianaUtenze)} utenze`);
-  }
-  return bits.length > 0 ? bits.join(" · ") : null;
 }
 
 function totalsLine(region: CerRegionStat, potenzaItalia: number, utenzeItalia: number) {
@@ -343,14 +326,14 @@ function totalsLine(region: CerRegionStat, potenzaItalia: number, utenzeItalia: 
       potenzaItalia > 0
         ? ` (${formatPct((region.potenzaKwTotale / potenzaItalia) * 100)})`
         : "";
-    bits.push(`${formatIt(region.potenzaKwTotale)} kW tot${share}`);
+    bits.push(`${formatIt(region.potenzaKwTotale)} kW${share}`);
   }
   if (region.utenzeTotale != null) {
     const share =
       utenzeItalia > 0
         ? ` (${formatPct((region.utenzeTotale / utenzeItalia) * 100)})`
         : "";
-    bits.push(`${formatIt(region.utenzeTotale)} utenze tot${share}`);
+    bits.push(`${formatIt(region.utenzeTotale)} utenze${share}`);
   }
   return bits.length > 0 ? bits.join(" · ") : null;
 }

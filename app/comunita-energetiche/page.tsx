@@ -22,7 +22,6 @@ export const metadata: Metadata = {
 
 export default async function ComunitaEnergetichePage() {
   const [stats, topCers] = await Promise.all([loadCerStats(), loadTopCers()]);
-  const cerCount = stats.cerUniche > 0 ? stats.cerUniche : stats.cer;
 
   return (
     <SignupProvider>
@@ -34,7 +33,7 @@ export default async function ComunitaEnergetichePage() {
           </h1>
           <CerSchema />
           <PodBanner />
-          {cerCount > 0 ? <CerShowcaseBanner count={cerCount} cers={topCers} /> : null}
+          {stats.cer > 0 ? <CerShowcaseBanner count={stats.cer} cers={topCers} /> : null}
           {stats.regioni.length > 0 ? (
             <CerItalyMap regions={stats.regioni} total={stats.total} showTable={false} />
           ) : null}

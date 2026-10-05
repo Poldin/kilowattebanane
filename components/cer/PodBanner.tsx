@@ -269,7 +269,7 @@ export function PodBanner() {
         </button>
         </div>
         <p className="mt-1.5 text-[11px] leading-none text-emerald-200/45">
-          privacy: non salviamo il tuo POD nei nostri sistemi.
+          si applicano privacy policy e termini di servizio
         </p>
       </form>
       <div

@@ -1,4 +1,5 @@
 import { CerItalyMap } from "@/components/cer/CerItalyMap";
+import { CerNamesExplorer } from "@/components/cer/CerNamesExplorer";
 import { GSE_MAPPA_URL, type CerClusterBucket, type CerStats as CerStatsData } from "@/lib/cer/public-types";
 
 const BAR_FILL = [
@@ -65,11 +66,9 @@ export function CerStats({ stats }: { stats: CerStatsData }) {
   return (
     <>
       <p className="mt-4 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        <strong className="font-medium text-foreground">
-          {formatIt(stats.total)} configurazioni
-        </strong>
-        {" · "}
-        {formatIt(stats.cer)} CER
+        <span className="mx-0.5 inline-flex translate-y-px items-center rounded-full bg-[#F5D547] px-2.5 py-0.5 font-semibold tabular-nums text-[#111111]">
+          {formatIt(stats.cer)} CER
+        </span>
         {cabinePrimarie != null ? ` · ${formatIt(cabinePrimarie)} cabine primarie` : null}
         {stats.potenzaKwTotale != null ? ` · ${formatPower(stats.potenzaKwTotale)}` : null}
         {stats.utenzeTotale != null ? ` · ${formatIt(stats.utenzeTotale)} utenze` : null}
@@ -84,6 +83,8 @@ export function CerStats({ stats }: { stats: CerStatsData }) {
       {stats.regioni.length > 0 ? (
         <CerItalyMap regions={stats.regioni} total={stats.total} />
       ) : null}
+
+      {stats.nomi ? <CerNamesExplorer analysis={stats.nomi} /> : null}
 
       <div className="mt-10 flex flex-col gap-4">
         {SECTIONS.filter((section) => section.key === "tipologia").map((section) => (

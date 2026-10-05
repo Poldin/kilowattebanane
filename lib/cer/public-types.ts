@@ -34,6 +34,26 @@ export type CerShowcaseCard = {
   nUtenze: number | null;
 };
 
+export type CerNameGroup = {
+  denominazione: string;
+  configurazioni: number;
+  cabinePrimarie: number;
+  comuni: number;
+  potenzaKwTotale: number | null;
+  utenzeTotale: number | null;
+};
+
+export type CerNamesAnalysis = {
+  totaleConfigurazioni: number;
+  nomiDistinti: number;
+  nomiUnaVolta: number;
+  nomiRipetuti: number;
+  configurazioniNomiUnici: number;
+  configurazioniNomiRipetuti: number;
+  mediaConfigurazioniPerNomeRipetuto: number | null;
+  topRipetuti: CerNameGroup[];
+};
+
 export type CerStats = {
   total: number;
   cer: number;
@@ -54,4 +74,5 @@ export type CerStats = {
   potenzaKwTotale: number | null;
   utenzeTotale: number | null;
   impiantiTotale: number | null;
+  nomi: CerNamesAnalysis | null;
 };
