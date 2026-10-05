@@ -5,6 +5,7 @@ import { CerExplainer, CerSchema } from "@/components/cer/CerExplainer";
 import { CerItalyMap } from "@/components/cer/CerItalyMap";
 import { CerShowcaseBanner } from "@/components/cer/CerShowcaseBanner";
 import { PodBanner } from "@/components/cer/PodBanner";
+import { CerSignupProvider } from "@/components/cer/CerSignupProvider";
 import { SignupProvider, SignupSlot } from "@/components/SignupForm";
 import { publicSiteUrl } from "@/lib/app-url";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
@@ -25,23 +26,25 @@ export default async function ComunitaEnergetichePage() {
 
   return (
     <SignupProvider>
-      <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
-        <Header />
-        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12">
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Comunità energetiche rinnovabili (CER)
-          </h1>
-          <CerSchema />
-          <PodBanner />
-          {stats.cer > 0 ? <CerShowcaseBanner count={stats.cer} cers={topCers} /> : null}
-          {stats.regioni.length > 0 ? (
-            <CerItalyMap regions={stats.regioni} total={stats.total} showTable={false} />
-          ) : null}
-          <CerExplainer />
-          <SignupSlot className="mt-16 w-full scroll-mt-20 sm:mt-20" />
-        </main>
-        <Footer />
-      </div>
+      <CerSignupProvider>
+        <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
+          <Header />
+          <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12">
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Comunità energetiche rinnovabili (CER)
+            </h1>
+            <CerSchema />
+            <PodBanner />
+            {stats.cer > 0 ? <CerShowcaseBanner count={stats.cer} cers={topCers} /> : null}
+            {stats.regioni.length > 0 ? (
+              <CerItalyMap regions={stats.regioni} total={stats.total} showTable={false} />
+            ) : null}
+            <CerExplainer />
+            <SignupSlot className="mt-16 w-full scroll-mt-20 sm:mt-20" />
+          </main>
+          <Footer />
+        </div>
+      </CerSignupProvider>
     </SignupProvider>
   );
 }

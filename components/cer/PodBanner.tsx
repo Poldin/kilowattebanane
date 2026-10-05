@@ -9,24 +9,9 @@ import {
   type PodLookupMiss,
   type PodLookupOk,
 } from "@/lib/cer/pod-parse";
+import { useCerSignup } from "@/components/cer/CerSignupProvider";
+import { CABINA_HELP_HREF, POD_HELP_HREF } from "@/lib/cer/help";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
-
-function googleAiHref(query: string) {
-  return `https://www.google.com/search?${new URLSearchParams({
-    udm: "50",
-    hl: "it",
-    gl: "it",
-    q: query,
-  }).toString()}`;
-}
-
-const POD_HELP_HREF = googleAiHref(
-  "Cos'è il codice POD della bolletta della luce in Italia? Spiegamelo in modo semplice. Poi guidami passo dopo passo a trovarlo sulla mia bolletta e a inserirlo sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/comunita-energetiche) per scoprire la mia cabina primaria e le comunità energetiche della mia area. kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
-);
-
-const CABINA_HELP_HREF = googleAiHref(
-  "Cos'è la cabina primaria (area convenzionale) nelle comunità energetiche rinnovabili in Italia? Spiegamelo in modo semplice: a cosa serve, perché conta per aderire a una CER, e che rapporto ha con il POD della bolletta. Poi guidami a scoprire la mia cabina primaria sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/comunita-energetiche), inserendo il POD oppure il codice della cabina (AC…). kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
-);
 
 type ApiError = { error?: string };
 type CerPayload = { cer?: PodCerHit[] };
@@ -151,6 +136,7 @@ export function PodBanner() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PodLookupOk | PodLookupMiss | null>(null);
   const [copied, setCopied] = useState(false);
+  const { openSignup } = useCerSignup();
 
   async function searchViaApi(podCode: string) {
     const { ok, payload } = await postJson<PodPayload>({ pod: podCode });
@@ -216,8 +202,9 @@ export function PodBanner() {
   }
 
   return (
-    <div className="mt-10 w-full rounded-lg bg-[#165B44] p-5 text-[#f5f5f5] sm:mt-12 sm:p-6">
-      <p className="text-3xl font-bold tracking-tight leading-tight sm:text-4xl">
+    <div id="cer-cabina" className="mt-10 w-full scroll-mt-20 rounded-lg bg-[#165B44] p-5 text-[#f5f5f5] sm:mt-12 sm:p-6">
+      <p className="text-xs text-emerald-100/90 sm:text-sm">per iscriverti devi sapere:</p>
+      <p className="mt-1 text-3xl font-bold tracking-tight leading-tight sm:text-4xl">
         Qual è la tua cabina primaria?
       </p>
       <p className="mt-2 text-sm text-emerald-100">
@@ -252,7 +239,7 @@ export function PodBanner() {
             setPod(normalizePodInput(event.target.value));
             setError(null);
           }}
-          className="h-10 min-w-0 flex-1 rounded-md border border-emerald-900/30 bg-[#f5f5f5] px-3 text-base tracking-[0.12em] text-[#111111] outline-none placeholder:tracking-normal placeholder:text-neutral-400 focus:border-emerald-700 sm:max-w-[16rem]"
+          className="h-10 min-h-10 w-full shrink-0 rounded-md border border-emerald-900/30 bg-[#f5f5f5] px-3 text-base tracking-[0.12em] text-[#111111] outline-none placeholder:tracking-normal placeholder:text-neutral-400 focus:border-emerald-700 sm:min-w-0 sm:max-w-[16rem] sm:flex-1"
         />
         <button
           type="submit"
@@ -332,60 +319,69 @@ export function PodBanner() {
                   <p className="mt-1 text-sm text-emerald-100">{result.comuni.join(" · ")}</p>
                 </div>
               ) : null}
-              <div
-                className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
-                  result.cer.length > 0 || !pending ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                }`}
-              >
-                <div className="overflow-hidden">
+              {!pending ? (
+                <div className="mt-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
+                    Comunità energetiche
+                  </p>
                   {result.cer.length > 0 ? (
-                    <div className="mt-4">
-                      <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
-                        Comunità energetiche
-                      </p>
-                      <ul className="mt-2 flex flex-col items-start gap-1.5">
-                        {result.cer.map((row, index) => (
-                          <li
-                            key={`${row.denominazione ?? "cer"}-${index}`}
-                            className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-emerald-200/35 bg-emerald-950/25 px-2.5 py-1 text-sm leading-snug text-emerald-50"
-                          >
-                            <span className="inline-flex min-w-0 items-center gap-1.5">
-                              <CerMark />
-                              <span className="min-w-0">
-                                {row.denominazione ?? "CER"}
-                                {row.inVetrina ? " · in vetrina" : null}
-                              </span>
+                    <ul className="mt-2 flex flex-col items-start gap-1.5">
+                      {result.cer.map((row, index) => (
+                        <li
+                          key={`${row.denominazione ?? "cer"}-${index}`}
+                          className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-emerald-200/35 bg-emerald-950/25 px-2.5 py-1 text-sm leading-snug text-emerald-50"
+                        >
+                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                            <CerMark />
+                            <span className="min-w-0">
+                              {row.denominazione ?? "CER"}
+                              {row.inVetrina ? " · in vetrina" : null}
                             </span>
-                            {row.potenzaKw != null ? (
-                              <span
-                                title="potenza"
-                                className="inline-flex items-center gap-1 text-emerald-100"
-                              >
-                                <BoltMark />
-                                {formatKw(row.potenzaKw)}
-                              </span>
-                            ) : null}
-                            {row.nUtenze != null ? (
-                              <span
-                                title="utenze"
-                                className="inline-flex items-center gap-1 text-emerald-100"
-                              >
-                                <UtenzeMark />
-                                {formatItInt(row.nUtenze)}
-                                <span className="sr-only"> utenze</span>
-                              </span>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                          </span>
+                          {row.potenzaKw != null ? (
+                            <span
+                              title="potenza"
+                              className="inline-flex items-center gap-1 text-emerald-100"
+                            >
+                              <BoltMark />
+                              {formatKw(row.potenzaKw)}
+                            </span>
+                          ) : null}
+                          {row.nUtenze != null ? (
+                            <span
+                              title="utenze"
+                              className="inline-flex items-center gap-1 text-emerald-100"
+                            >
+                              <UtenzeMark />
+                              {formatItInt(row.nUtenze)}
+                              <span className="sr-only"> utenze</span>
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
                   ) : (
-                    <p className="mt-3 text-sm text-emerald-100">
-                      Nessuna CER sulla mappa GSE in quest’area, per ora.
+                    <p className="mt-2 text-sm text-emerald-100">
+                      Nessuna CER attiva in quest’area, per ora. Puoi iscriverti alla lista
+                      d’attesa: ti ricontattiamo se si aprono nuove adesioni.
                     </p>
                   )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openSignup({
+                        cabinaCodice: result.codice,
+                        cabinaGestore: result.gestore,
+                        initialPod: result.pod,
+                        cers: result.cer,
+                      })
+                    }
+                    className="mt-3 inline-flex h-10 items-center justify-center rounded-md bg-[#f5f5f5] px-4 text-sm font-medium text-[#111111] transition-opacity hover:opacity-90"
+                  >
+                    iscriviti!
+                  </button>
                 </div>
-              </div>
+              ) : null}
             </div>
           ) : null}
         </div>

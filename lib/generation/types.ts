@@ -64,6 +64,7 @@ export type GenerationPullSummary = {
   previousLatest: string | null;
   updated: boolean;
   source: "energy-charts";
+  pendingFrom: string | null;
 };
 
 export type GenerationLookbackSummary = {

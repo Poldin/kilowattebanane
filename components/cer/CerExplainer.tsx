@@ -1,11 +1,13 @@
+import { CerPodCta } from "@/components/cer/CerPodCta";
+
 const DEFINITIONS = [
   {
     title: "Consumatore",
-    body: "Preleva energia dalla rete. In una CER riceve una quota dell’energia condivisa e l’incentivo, senza dover installare pannelli.",
+    body: "Preleva energia dalla rete. In una CER riceve una quota dell’energia condivisa e l’incentivo, senza dover installare pannelli o cambiare fornitore.",
   },
   {
     title: "Produttore",
-    body: "Ha un impianto rinnovabile — di solito fotovoltaico — e immette energia in rete, nella stessa cabina primaria degli altri membri.",
+    body: "Ha un impianto rinnovabile e immette energia in rete, nella stessa cabina primaria degli altri membri. Riceve incentivi se l'energia che immette viene consumata dalla CER.",
   },
   {
     title: "Prosumatore",
@@ -32,6 +34,7 @@ export function CerExplainer() {
         lavastoviglie o caricare l’auto. Più i consumi coincidono con il sole, più incentivo
         riceve la comunità.
       </p>
+      <CerPodCta className="mt-3" />
     </section>
   );
 }
@@ -143,7 +146,8 @@ export function CerSchema() {
         <FlagIt /> incentivano il l'energia prodotta e consumata nella CER.
       </p>
       <p className="mt-3 max-w-2xl text-pretty text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-        se consumi o produci energia all&apos;interno di una CER ti vengono dati soldi💰
+        se consumi o produci energia all&apos;interno di una CER ti vengono dati soldi💰{" "}
+        <CerPodCta className="align-baseline" />
       </p>
       <p className="mt-3 max-w-2xl text-pretty text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-400">
         per iscriverti a una CER non devi cambiare fornitore di energia ne pagare:

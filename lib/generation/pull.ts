@@ -1,11 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadMixCoverage, planMixRecovery } from "@/lib/generation/coverage";
 import {
   loadStoredMixSlots,
   mixDaysFromSlots,
   upsertMixDayStats,
 } from "@/lib/generation/day-stats";
 import { fetchItalyGeneration } from "@/lib/generation/fetch";
-import { addCalendarDays, romeToday } from "@/lib/generation/time";
+import { revalidateGeneration } from "@/lib/generation/revalidate";
+import { romeToday } from "@/lib/generation/time";
 import type {
   GenerationLookbackSummary,
   GenerationPullSummary,
@@ -60,27 +62,48 @@ async function upsertSlots(slots: GenerationSlot[]) {
   return upserted;
 }
 
-export async function pullItalyGeneration(daysBack = 1): Promise<GenerationPullSummary> {
-  const to = romeToday();
-  const from = addCalendarDays(to, -Math.max(0, daysBack));
-  const previousLatest = await latestStoredSlot();
-  const slots = await fetchItalyGeneration(from, to);
+async function storeSlots(slots: GenerationSlot[]) {
   const upserted = await upsertSlots(slots);
-  await upsertMixDayStats(mixDaysFromSlots(slots));
-  const latestSlot =
-    slots.reduce<Date | null>((latest, slot) => {
-      if (!latest || slot.slotStart > latest) return slot.slotStart;
-      return latest;
-    }, null)?.toISOString() ?? previousLatest;
+  const days = mixDaysFromSlots(slots);
+  const written = await upsertMixDayStats(days);
+  if (upserted > 0 || written > 0) revalidateGeneration();
+  return { upserted, days: days.length };
+}
 
+export async function pullItalyGeneration(daysBack = 1): Promise<GenerationPullSummary> {
+  const today = romeToday();
+  const plan = planMixRecovery(await loadMixCoverage(), today, daysBack);
+  const previousLatest = await latestStoredSlot();
+  let upserted = 0;
+  let from = today;
+  let to = today;
+  let latestMs = previousLatest ? Date.parse(previousLatest) : Number.NaN;
+  let latestSlot = Number.isNaN(latestMs) ? null : new Date(latestMs).toISOString();
+
+  for (const range of plan.ranges) {
+    const slots = await fetchItalyGeneration(range.from, range.to, 40_000);
+    upserted += (await storeSlots(slots)).upserted;
+    if (range.from < from) from = range.from;
+    if (range.to > to) to = range.to;
+    for (const slot of slots) {
+      const ms = slot.slotStart.getTime();
+      if (Number.isNaN(latestMs) || ms > latestMs) {
+        latestMs = ms;
+        latestSlot = slot.slotStart.toISOString();
+      }
+    }
+  }
+
+  const previousMs = previousLatest ? Date.parse(previousLatest) : Number.NaN;
   return {
     from,
     to,
     upserted,
     latestSlot,
     previousLatest,
-    updated: Boolean(latestSlot && latestSlot !== previousLatest),
+    updated: Boolean(latestSlot && (Number.isNaN(previousMs) || latestMs !== previousMs)),
     source: "energy-charts",
+    pendingFrom: plan.pendingFrom,
   };
 }
 
@@ -100,7 +123,6 @@ export async function pullItalyMixLookback(
   to: string,
 ): Promise<GenerationLookbackSummary> {
   const slots = await fetchItalyGeneration(from, to, 40_000);
-  const days = mixDaysFromSlots(slots);
-  const upserted = await upsertMixDayStats(days);
-  return { from, to, days: upserted, source: "energy-charts" };
+  const stored = await storeSlots(slots);
+  return { from, to, days: stored.days, source: "energy-charts" };
 }
