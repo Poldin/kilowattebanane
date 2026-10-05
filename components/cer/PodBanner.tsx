@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { lookupPodOnGse } from "@/lib/cer/pod-gse";
+import { lookupComuniOnGse, lookupPodOnGse } from "@/lib/cer/pod-gse";
 import {
   normalizePodInput,
   parsePod,
@@ -182,8 +182,12 @@ export function PodBanner() {
         setResult({ found: false });
         return;
       }
-      setResult({ ...gse, cer: [] });
-      setResult({ ...gse, cer: await loadCers(gse.codice) });
+      setResult({ ...gse, cer: [], comuni: [] });
+      const [cer, comuni] = await Promise.all([
+        loadCers(gse.codice),
+        lookupComuniOnGse(gse.codice).catch(() => []),
+      ]);
+      setResult({ ...gse, cer, comuni });
     } catch {
       try {
         await searchViaApi(parsed.pod);
@@ -297,7 +301,7 @@ export function PodBanner() {
           {result?.found ? (
             <div className="mt-4">
               <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
-                Area convenzionale
+                Cabina primaria
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <p className="text-2xl font-semibold tracking-[0.08em]">{result.codice}</p>
@@ -312,6 +316,14 @@ export function PodBanner() {
               {result.gestore ? (
                 <p className="mt-1 text-sm text-emerald-100">{result.gestore}</p>
               ) : null}
+              {result.comuni.length > 0 ? (
+                <div className="mt-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
+                    {result.comuni.length === 1 ? "Comune nell’area" : "Comuni nell’area"}
+                  </p>
+                  <p className="mt-1 text-sm text-emerald-100">{result.comuni.join(" · ")}</p>
+                </div>
+              ) : null}
               <div
                 className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
                   result.cer.length > 0 || !pending ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
@@ -321,7 +333,7 @@ export function PodBanner() {
                   {result.cer.length > 0 ? (
                     <div className="mt-4">
                       <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
-                        Comunità energetiche in quest’area
+                        Comunità energetiche
                       </p>
                       <ul className="mt-2 flex flex-col items-start gap-1.5">
                         {result.cer.map((row, index) => (
@@ -333,7 +345,6 @@ export function PodBanner() {
                               <CerMark />
                               <span className="min-w-0">
                                 {row.denominazione ?? "CER"}
-                                {row.comune ? ` · ${row.comune}` : null}
                                 {row.inVetrina ? " · in vetrina" : null}
                               </span>
                             </span>

@@ -26,6 +26,12 @@ export function CerExplainer() {
           </div>
         ))}
       </dl>
+      <p className="mt-10 max-w-xl text-pretty text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+        L’energia condivisa esiste solo se viene usata nello stesso momento in cui viene
+        prodotta. I pannelli lavorano di giorno: è allora che conviene accendere lavatrice,
+        lavastoviglie o caricare l’auto. Più i consumi coincidono con il sole, più incentivo
+        riceve la comunità.
+      </p>
     </section>
   );
 }
@@ -132,13 +138,65 @@ export function CerSchema() {
         </svg>
       </div>
       <p className="mt-5 max-w-2xl text-pretty text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-400">
-        Una comunità energetica rinnovabile è un gruppo di persone e imprese
-        collegate alla stessa{" "}
-        <mark className="rounded-sm bg-[#F5D547] px-1 py-0.5 font-medium text-[#111111]">cabina primaria</mark>. L’energia del fotovoltaico entra in rete e viene condivisa tra i
-        membri.
+        Una comunità energetica rinnovabile (CER) è un gruppo di persone e imprese
+        collegate alla stessa cabina primaria. L'UE <FlagEu /> e lo Stato Italiano{" "}
+        <FlagIt /> incentivano il l'energia prodotta e consumata nella CER.
+      </p>
+      <p className="mt-3 max-w-2xl text-pretty text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+        se consumi o produci energia all&apos;interno di una CER ti vengono dati soldi💰
+      </p>
+      <p className="mt-3 max-w-2xl text-pretty text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-400">
+        per iscriverti a una CER non devi cambiare fornitore di energia ne pagare:
+        devi solo capire a quale CER puoi iscriverti con il tuo POD. Scopri qual' è la tua cabina primaria 👇👇👇
       </p>
     </div>
   );
+}
+
+function FlagEu() {
+  const stars = Array.from({ length: 12 }, (_, i) => {
+    const angle = ((i * 30 - 90) * Math.PI) / 180;
+    return { x: 15 + Math.cos(angle) * 5.4, y: 10 + Math.sin(angle) * 5.4 };
+  });
+
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 30 20"
+      className="mb-px inline-block h-[0.85em] w-[1.275em] overflow-hidden rounded-xs align-baseline ring-1 ring-black/12 dark:ring-white/20"
+    >
+      <rect width="30" height="20" fill="#003399" />
+      {stars.map((star) => (
+        <polygon
+          key={`${star.x}-${star.y}`}
+          fill="#FFCC00"
+          points={starPoints(star.x, star.y, 1.35)}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function FlagIt() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 30 20"
+      className="mb-px inline-block h-[0.85em] w-[1.275em] overflow-hidden rounded-xs align-baseline ring-1 ring-black/12 dark:ring-white/20"
+    >
+      <rect width="10" height="20" fill="#009246" />
+      <rect x="10" width="10" height="20" fill="#fff" />
+      <rect x="20" width="10" height="20" fill="#CE2B37" />
+    </svg>
+  );
+}
+
+function starPoints(cx: number, cy: number, r: number) {
+  return Array.from({ length: 10 }, (_, i) => {
+    const angle = ((i * 36 - 90) * Math.PI) / 180;
+    const radius = i % 2 === 0 ? r : r * 0.4;
+    return `${cx + Math.cos(angle) * radius},${cy + Math.sin(angle) * radius}`;
+  }).join(" ");
 }
 
 function EnergyPulse({

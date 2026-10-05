@@ -5,7 +5,7 @@ import {
   type PodLookupResult,
   parsePod,
 } from "@/lib/cer/pod-parse";
-import { lookupPodOnGse } from "@/lib/cer/pod-gse";
+import { lookupComuniOnGse, lookupPodOnGse } from "@/lib/cer/pod-gse";
 
 export {
   POD_FORMAT_HINT,
@@ -36,7 +36,7 @@ export async function lookupCersInArea(codice: string): Promise<PodCerHit[]> {
   try {
     const { data, error } = await cerReadClient()
       .from("cer_configurazioni_live")
-      .select("denominazione, comune, in_vetrina, potenza_kw, n_utenze")
+      .select("denominazione, in_vetrina, potenza_kw, n_utenze")
       .eq("area_convenzionale", codice)
       .eq("tipologia_kind", "cer")
       .order("in_vetrina", { ascending: false })
@@ -46,7 +46,6 @@ export async function lookupCersInArea(codice: string): Promise<PodCerHit[]> {
       const nUtenze = num(row.n_utenze);
       return {
         denominazione: text(row.denominazione),
-        comune: text(row.comune),
         inVetrina: Boolean(row.in_vetrina),
         potenzaKw: num(row.potenza_kw),
         nUtenze: nUtenze != null ? Math.trunc(nUtenze) : null,
@@ -66,8 +65,13 @@ export async function lookupPod(raw: string): Promise<PodLookupResult> {
   const gse = await lookupPodOnGse(parsed.pod, { userAgent: UA });
   if (!gse.found) return gse;
 
+  const [cer, comuni] = await Promise.all([
+    lookupCersInArea(gse.codice),
+    lookupComuniOnGse(gse.codice, { userAgent: UA }).catch(() => []),
+  ]);
   return {
     ...gse,
-    cer: await lookupCersInArea(gse.codice),
+    cer,
+    comuni,
   };
 }

@@ -14,7 +14,7 @@ import { loadCerStats } from "@/lib/cer/stats";
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
-  title: "Comunità energetiche",
+  title: "Comunità energetiche rinnovabili (CER)",
   description:
     "Scopri la tua cabina primaria con il POD, quante comunità energetiche ci sono in Italia e come funziona una CER.",
   alternates: { canonical: `${publicSiteUrl()}/comunita-energetiche` },
@@ -29,7 +29,7 @@ export default async function ComunitaEnergetichePage() {
         <Header />
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-12">
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Comunità energetiche
+            Comunità energetiche rinnovabili (CER)
           </h1>
           <CerSchema />
           <PodBanner />

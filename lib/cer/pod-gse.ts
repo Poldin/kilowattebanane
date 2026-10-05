@@ -13,14 +13,27 @@ export const GSE_POD_TABLE_URL =
 export const GSE_AC_LAYER_URL =
   "https://services-eu1.arcgis.com/sawHMGY9o8rHlY2j/arcgis/rest/services/AC_Comuni_2025/FeatureServer/0/query";
 
+/** ISTAT comuni 2025 polygons on the same public item. */
+export const GSE_COMUNI_LAYER_URL =
+  "https://services-eu1.arcgis.com/sawHMGY9o8rHlY2j/arcgis/rest/services/AC_Comuni_2025/FeatureServer/2/query";
+
 const GSE_TIMEOUT_MS = 25_000;
 
+type ArcgisPolygon = {
+  rings: number[][][];
+};
+
+type ArcgisFeature = {
+  attributes?: Record<string, unknown>;
+  geometry?: ArcgisPolygon | Record<string, unknown>;
+};
+
 type ArcgisQueryResponse = {
-  features?: { attributes?: Record<string, unknown> }[];
+  features?: ArcgisFeature[];
   error?: { message?: string; code?: number };
 };
 
-export type GsePodHit = Omit<PodLookupOk, "cer">;
+export type GsePodHit = Omit<PodLookupOk, "cer" | "comuni">;
 export type GsePodResult = GsePodHit | PodLookupMiss;
 
 export function sqlLiteral(value: string) {
@@ -33,23 +46,34 @@ function text(value: unknown) {
   return s.length > 0 ? s : null;
 }
 
+function isPolygonGeometry(value: unknown): value is ArcgisPolygon {
+  if (!value || typeof value !== "object") return false;
+  const rings = (value as { rings?: unknown }).rings;
+  return Array.isArray(rings) && rings.length > 0 && Array.isArray(rings[0]);
+}
+
 export async function gseQuery(
   url: string,
   params: Record<string, string>,
-  options?: { userAgent?: string },
+  options?: { userAgent?: string; method?: "GET" | "POST" },
 ) {
-  const target = new URL(url);
-  for (const [key, value] of Object.entries(params)) {
-    target.searchParams.set(key, value);
-  }
-  target.searchParams.set("f", "json");
+  const method = options?.method ?? "GET";
+  const query = new URLSearchParams(params);
+  query.set("f", "json");
+
   const headers = new Headers();
   if (options?.userAgent) {
     headers.set("user-agent", options.userAgent);
     headers.set("accept", "application/json");
   }
-  const response = await fetch(target, {
-    ...(headers.has("user-agent") ? { headers } : {}),
+  if (method === "POST") {
+    headers.set("content-type", "application/x-www-form-urlencoded");
+  }
+
+  const response = await fetch(method === "POST" ? url : `${url}?${query}`, {
+    method,
+    ...(headers.keys().next().done ? {} : { headers }),
+    body: method === "POST" ? query : undefined,
     cache: "no-store",
     credentials: "omit",
     signal: AbortSignal.timeout(GSE_TIMEOUT_MS),
@@ -79,6 +103,47 @@ export async function lookupGestoreOnGse(
     options,
   );
   return text(rows[0]?.attributes?.RAG_SOC);
+}
+
+export async function lookupComuniOnGse(
+  codice: string,
+  options?: { userAgent?: string },
+) {
+  if (!isAreaConvenzionaleCode(codice)) return [];
+  const cabina = await gseQuery(
+    GSE_AC_LAYER_URL,
+    {
+      where: `COD_AC = ${sqlLiteral(codice)}`,
+      outFields: "COD_AC",
+      returnGeometry: "true",
+      outSR: "32632",
+      resultRecordCount: "1",
+    },
+    options,
+  );
+  const geometry = cabina[0]?.geometry;
+  if (!isPolygonGeometry(geometry)) return [];
+
+  const rows = await gseQuery(
+    GSE_COMUNI_LAYER_URL,
+    {
+      geometry: JSON.stringify(geometry),
+      geometryType: "esriGeometryPolygon",
+      inSR: "32632",
+      spatialRel: "esriSpatialRelIntersects",
+      outFields: "COMUNE",
+      returnGeometry: "false",
+      resultRecordCount: "200",
+    },
+    { ...options, method: "POST" },
+  );
+
+  const names = new Set<string>();
+  for (const row of rows) {
+    const nome = text(row.attributes?.COMUNE);
+    if (nome) names.add(nome);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, "it"));
 }
 
 export async function lookupPodOnGse(

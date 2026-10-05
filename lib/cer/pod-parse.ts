@@ -5,7 +5,6 @@ export const POD_FORMAT_HINT = "Formato: IT + XXX + E + XXXXXXXX";
 
 export type PodCerHit = {
   denominazione: string | null;
-  comune: string | null;
   inVetrina: boolean;
   potenzaKw: number | null;
   nUtenze: number | null;
@@ -16,6 +15,7 @@ export type PodLookupOk = {
   pod: string;
   codice: string;
   gestore: string | null;
+  comuni: string[];
   cer: PodCerHit[];
 };
 
