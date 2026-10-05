@@ -6,7 +6,7 @@ import { CerItalyMap } from "@/components/cer/CerItalyMap";
 import { CerShowcaseBanner } from "@/components/cer/CerShowcaseBanner";
 import { PodBanner } from "@/components/cer/PodBanner";
 import { CerSignupProvider } from "@/components/cer/CerSignupProvider";
-import { SignupProvider, SignupSlot } from "@/components/SignupForm";
+import { SignupProvider } from "@/components/SignupForm";
 import { publicSiteUrl } from "@/lib/app-url";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
 import { loadTopCers } from "@/lib/cer/showcase";
@@ -40,7 +40,6 @@ export default async function ComunitaEnergetichePage() {
               <CerItalyMap regions={stats.regioni} total={stats.total} showTable={false} />
             ) : null}
             <CerExplainer />
-            <SignupSlot className="mt-16 w-full scroll-mt-20 sm:mt-20" />
           </main>
           <Footer />
         </div>

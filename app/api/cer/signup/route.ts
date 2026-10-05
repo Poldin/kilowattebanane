@@ -1,11 +1,16 @@
 import { NextRequest } from "next/server";
+import { hasVerifiedCerSignupOtp } from "@/lib/cer/otp";
 import {
   insertCerSignupRequest,
+  updateCerSignupMailResult,
+  type CerEnrollmentPath,
   type CerSignupAnswers,
   type CerSignupChoice,
   type CerSignupImpianto,
+  type CerSignupRequest,
   type CerSignupRole,
 } from "@/lib/cer/signup";
+import { sendCerSignupConfirmationEmail } from "@/lib/mail/send";
 import { isAreaConvenzionaleCode, parsePod } from "@/lib/cer/pod-parse";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +62,22 @@ function parseAnswers(role: CerSignupRole, raw: unknown): CerSignupAnswers | nul
   return { impianto, potenzaKw, prosumer };
 }
 
+function parseEnrollmentPath(raw: unknown): CerEnrollmentPath | null {
+  return raw === "nocol" || raw === "1col" || raw === "morecol" ? raw : null;
+}
+
+function pathMatchesChoices(path: CerEnrollmentPath, choices: CerSignupChoice[]) {
+  const enabled = choices.filter((choice) => choice.enabled);
+  if (enabled.length === 0) return false;
+  if (path === "nocol") {
+    return enabled.length === 1 && enabled[0]?.kind === "waitlist";
+  }
+  if (path === "1col") {
+    return enabled.length === 1 && enabled[0]?.kind === "cer";
+  }
+  return enabled.some((choice) => choice.kind === "cer");
+}
+
 export async function POST(request: NextRequest) {
   let body: {
     email?: string;
@@ -65,6 +86,7 @@ export async function POST(request: NextRequest) {
     role?: unknown;
     answers?: unknown;
     choices?: unknown;
+    enrollmentPath?: unknown;
     website?: string;
   };
 
@@ -79,11 +101,13 @@ export async function POST(request: NextRequest) {
   }
 
   const email = body.email?.trim().toLowerCase() ?? "";
-  const cabinaCodice = body.cabinaCodice?.trim().toUpperCase() ?? "";
+  const cabinaRaw = body.cabinaCodice?.trim().toUpperCase() ?? "";
+  const cabinaCodice = cabinaRaw || null;
   const podRaw = body.pod?.trim().toUpperCase() ?? "";
   const role = parseRole(body.role);
   const choices = parseChoices(body.choices);
   const answers = role ? parseAnswers(role, body.answers) : null;
+  const enrollmentPath = parseEnrollmentPath(body.enrollmentPath);
 
   if (!role) {
     return Response.json({ error: "Scegli se sei un consumatore o un produttore." }, { status: 400 });
@@ -94,7 +118,7 @@ export async function POST(request: NextRequest) {
   if (!EMAIL_RE.test(email) || email.length > 254) {
     return Response.json({ error: "Inserisci un'email valida." }, { status: 400 });
   }
-  if (!isAreaConvenzionaleCode(cabinaCodice)) {
+  if (cabinaCodice && !isAreaConvenzionaleCode(cabinaCodice)) {
     return Response.json({ error: "Cabina primaria non valida." }, { status: 400 });
   }
   if (!choices) {
@@ -102,6 +126,9 @@ export async function POST(request: NextRequest) {
   }
   if (choices.length > 0 && !choices.some((choice) => choice.enabled)) {
     return Response.json({ error: "Attiva almeno una CER." }, { status: 400 });
+  }
+  if (!enrollmentPath || !pathMatchesChoices(enrollmentPath, choices)) {
+    return Response.json({ error: "Scegli almeno un'opzione." }, { status: 400 });
   }
 
   let pod: string | null = null;
@@ -114,9 +141,36 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await insertCerSignupRequest({ email, pod, cabinaCodice, role, answers, choices });
+    const verified = await hasVerifiedCerSignupOtp(email);
+    if (!verified) {
+      return Response.json(
+        { error: "Conferma l'email con il codice che ti abbiamo inviato." },
+        { status: 400 },
+      );
+    }
+    const signup: CerSignupRequest = {
+      email,
+      pod,
+      cabinaCodice,
+      role,
+      answers,
+      choices,
+      enrollmentPath,
+    };
+    const id = await insertCerSignupRequest(signup);
+    try {
+      const resendId = await sendCerSignupConfirmationEmail(signup);
+      await updateCerSignupMailResult(id, { sent: true, resendId });
+    } catch (error) {
+      console.error("cer signup confirmation mail", error);
+      const message = error instanceof Error ? error.message : "Invio mail non riuscito.";
+      await updateCerSignupMailResult(id, { sent: false, error: message }).catch((updateError) => {
+        console.error("cer signup confirmation mail result", updateError);
+      });
+    }
     return Response.json({ ok: true });
-  } catch {
+  } catch (error) {
+    console.error("cer signup", error);
     return Response.json(
       { error: "Non è stato possibile completare l'iscrizione. Riprova." },
       { status: 500 },

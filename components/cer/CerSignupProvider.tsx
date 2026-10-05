@@ -53,3 +53,7 @@ export function useCerSignup() {
   }
   return context;
 }
+
+export function useCerSignupOptional() {
+  return useContext(CerSignupContext);
+}

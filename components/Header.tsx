@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { CER_SIGNUP_BUTTON_CLASS } from "@/components/cer/CerPodCta";
+import { useCerSignupOptional } from "@/components/cer/CerSignupProvider";
 import { useSignup } from "@/components/SignupForm";
 import { useSyncedTick } from "@/lib/use-synced-tick";
 import { useTypewriter } from "@/lib/use-typewriter";
@@ -9,7 +12,10 @@ const LOGO_TEXT = "kilowatt e banane";
 const LOGO_EMOJI = "💡e 🍌🍌🍌";
 
 export function Header() {
+  const pathname = usePathname();
+  const isCerLandingPage = pathname === "/comunita-energetiche";
   const { openSignup } = useSignup();
+  const cerSignup = useCerSignupOptional();
   const tick = useSyncedTick(10_000);
   const showEmoji = tick % 2 === 1;
   const current = showEmoji ? LOGO_EMOJI : LOGO_TEXT;
@@ -52,10 +58,20 @@ export function Header() {
           </Link>
           <button
             type="button"
-            onClick={openSignup}
-            className="rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            onClick={() => {
+              if (isCerLandingPage && cerSignup) {
+                cerSignup.openSignup();
+                return;
+              }
+              openSignup();
+            }}
+            className={
+              isCerLandingPage
+                ? CER_SIGNUP_BUTTON_CLASS
+                : "rounded-md border border-neutral-200 bg-transparent px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            }
           >
-            Iscriviti gratis
+            {isCerLandingPage ? "Iscriviti a una CER" : "Iscriviti gratis"}
           </button>
         </div>
       </div>

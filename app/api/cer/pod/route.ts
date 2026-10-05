@@ -1,3 +1,4 @@
+import { lookupCollaborazioniInArea } from "@/lib/cer/collaborazioni";
 import { lookupCersInArea, lookupPod } from "@/lib/cer/pod";
 import { isAreaConvenzionaleCode, parseLookupInput } from "@/lib/cer/pod-parse";
 
@@ -22,8 +23,11 @@ export async function POST(request: Request) {
     if (!isAreaConvenzionaleCode(codiceRaw)) {
       return Response.json({ error: "Codice area non valido" }, { status: 400, headers: NO_STORE });
     }
-    const cer = await lookupCersInArea(codiceRaw);
-    return Response.json({ cer }, { headers: NO_STORE });
+    const [cer, collaborazioni] = await Promise.all([
+      lookupCersInArea(codiceRaw),
+      lookupCollaborazioniInArea(codiceRaw).catch(() => []),
+    ]);
+    return Response.json({ cer, collaborazioni }, { headers: NO_STORE });
   }
 
   const parsed = parseLookupInput(podRaw);

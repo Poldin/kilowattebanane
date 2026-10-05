@@ -1,16 +1,36 @@
 "use client";
 
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Users,
+  X,
+  Zap,
+} from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CER_WAITLIST_ID,
+  CER_WAITLIST_LABEL,
+  cerSignupSummary,
+  enrollmentPathForCollaborazioni,
   type CerSignupAnswers,
   type CerSignupChoice,
   type CerSignupImpianto,
   type CerSignupRole,
+  type CerSignupSummary,
 } from "@/lib/cer/signup";
 import { POD_HELP_HREF } from "@/lib/cer/help";
 import { lookupPodOnGse } from "@/lib/cer/pod-gse";
-import { normalizePodInput, parsePod, type PodCerHit } from "@/lib/cer/pod-parse";
+import {
+  normalizePodInput,
+  parsePod,
+  type CerCollaborazioneHit,
+  type PodCerHit,
+} from "@/lib/cer/pod-parse";
 
 type CerSignupDialogProps = {
   open: boolean;
@@ -95,15 +115,15 @@ function stepsFor(role: CerSignupRole | null): StepId[] {
   return ["role", "pod", "email", "cers"];
 }
 
-function buildInitialChoices(cers: PodCerHit[]): DraftChoice[] {
-  return cers.map((cer, index) => ({
-    id: `cer-${index}`,
+function buildInitialChoices(cers: CerCollaborazioneHit[]): DraftChoice[] {
+  return cers.map((cer) => ({
+    id: cer.id,
     kind: "cer" as const,
-    label: cer.denominazione ?? "CER",
+    label: cer.denominazione,
     enabled: true,
     potenzaKw: cer.potenzaKw,
     nUtenze: cer.nUtenze,
-    inVetrina: cer.inVetrina,
+    inVetrina: false,
   }));
 }
 
@@ -111,7 +131,7 @@ function waitlistChoice(rank: number): CerSignupChoice {
   return {
     id: CER_WAITLIST_ID,
     kind: "waitlist",
-    label: "Lista d'attesa kilowatt e banane",
+    label: CER_WAITLIST_LABEL,
     enabled: true,
     rank,
   };
@@ -128,20 +148,33 @@ function withRanks(choices: DraftChoice[]): CerSignupChoice[] {
 }
 
 function enrollmentChoices(choices: DraftChoice[]): CerSignupChoice[] {
-  const ranked = withRanks(choices).filter((choice) => choice.enabled);
-  if (choices.length >= 2) return ranked;
-  return [...ranked, waitlistChoice(ranked.length)];
+  const path = enrollmentPathForCollaborazioni(choices.length);
+  if (path === "nocol") return [waitlistChoice(0)];
+  if (path === "1col") {
+    const only = choices[0];
+    if (!only) return [waitlistChoice(0)];
+    return [
+      {
+        id: only.id,
+        kind: only.kind,
+        label: only.label,
+        enabled: true,
+        rank: 0,
+      },
+    ];
+  }
+  return withRanks(choices).filter((choice) => choice.enabled);
 }
 
-async function loadCers(codice: string): Promise<PodCerHit[]> {
+async function loadCollaborazioni(codice: string): Promise<CerCollaborazioneHit[]> {
   try {
     const response = await fetch("/api/cer/pod", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ codice }),
     });
-    const payload = (await response.json()) as { cer?: PodCerHit[] };
-    return Array.isArray(payload.cer) ? payload.cer : [];
+    const payload = (await response.json()) as { collaborazioni?: CerCollaborazioneHit[] };
+    return Array.isArray(payload.collaborazioni) ? payload.collaborazioni : [];
   } catch {
     return [];
   }
@@ -162,7 +195,6 @@ export function CerSignupDialog({
   cabinaCodice = null,
   cabinaGestore = null,
   initialPod = null,
-  cers = [],
 }: CerSignupDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -175,11 +207,16 @@ export function CerSignupDialog({
   const [podCabina, setPodCabina] = useState<CabinaPreview | null>(null);
   const [podCabinaStatus, setPodCabinaStatus] = useState<CabinaStatus>("idle");
   const [email, setEmail] = useState("");
-  const [choices, setChoices] = useState<DraftChoice[]>(() => buildInitialChoices(cers));
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+  const [choices, setChoices] = useState<DraftChoice[]>([]);
   const [cersReady, setCersReady] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const steps = useMemo(() => {
     const base = stepsFor(role);
@@ -201,16 +238,21 @@ export function CerSignupDialog({
       setPodCabina(null);
       setPodCabinaStatus("idle");
       setEmail("");
-      setChoices(buildInitialChoices(cers));
-      setCersReady(true);
+      setOtp("");
+      setOtpSent(false);
+      setEmailVerified(false);
+      setVerifiedEmail(null);
+      setChoices([]);
+      setCersReady(false);
       setPending(false);
       setError(null);
       setConfirmed(false);
+      setSubmitted(false);
       if (!dialog.open) dialog.showModal();
       return;
     }
     if (dialog.open) dialog.close();
-  }, [open, initialPod, cers]);
+  }, [open, initialPod]);
 
   useEffect(() => {
     if (!open) return;
@@ -258,18 +300,13 @@ export function CerSignupDialog({
   useEffect(() => {
     if (!open) return;
     if (podCabinaStatus !== "ready" || !podCabina) {
-      setChoices(buildInitialChoices(cers));
-      setCersReady(true);
-      return;
-    }
-    if (cabinaCodice && podCabina.codice === cabinaCodice) {
-      setChoices(buildInitialChoices(cers));
-      setCersReady(true);
+      setChoices([]);
+      setCersReady(podCabinaStatus !== "loading");
       return;
     }
     let cancelled = false;
     setCersReady(false);
-    void loadCers(podCabina.codice).then((hits) => {
+    void loadCollaborazioni(podCabina.codice).then((hits) => {
       if (cancelled) return;
       setChoices(buildInitialChoices(hits));
       setCersReady(true);
@@ -277,7 +314,7 @@ export function CerSignupDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, podCabina, podCabinaStatus, cabinaCodice, cers]);
+  }, [open, podCabina, podCabinaStatus]);
 
   function requestClose() {
     dialogRef.current?.close();
@@ -348,6 +385,10 @@ export function CerSignupDialog({
     if (current === "email") {
       const trimmed = email.trim().toLowerCase();
       if (!EMAIL_RE.test(trimmed) || trimmed.length > 254) return "Inserisci un’email valida.";
+      if (emailVerified && verifiedEmail === trimmed) return null;
+      if (otpSent) {
+        if (!/^\d{6}$/.test(otp.trim())) return "Inserisci il codice a 6 cifre.";
+      }
     }
     if (current === "cers" && !choices.some((choice) => choice.enabled)) {
       return "Attiva almeno una CER.";
@@ -357,7 +398,78 @@ export function CerSignupDialog({
 
   function goBack() {
     setError(null);
+    if (confirmed) {
+      setConfirmed(false);
+      return;
+    }
     setStepIndex((index) => Math.max(0, index - 1));
+  }
+
+  function changeEmail(next: string) {
+    setEmail(next);
+    const trimmed = next.trim().toLowerCase();
+    if (verifiedEmail && trimmed === verifiedEmail) {
+      setEmailVerified(true);
+      setOtpSent(true);
+      return;
+    }
+    setEmailVerified(false);
+    setOtpSent(false);
+    setOtp("");
+  }
+
+  async function requestOtp(trimmedEmail: string) {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/cer/signup/otp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: trimmedEmail }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { ok?: boolean; error?: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        setError(payload?.error ?? "Non è stato possibile inviare il codice. Riprova.");
+        return false;
+      }
+      setOtpSent(true);
+      setOtp("");
+      return true;
+    } catch {
+      setError("Non è stato possibile inviare il codice. Riprova.");
+      return false;
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function confirmOtp(trimmedEmail: string) {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/cer/signup/otp/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: trimmedEmail, otp: otp.trim() }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { ok?: boolean; error?: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        setError(payload?.error ?? "Non è stato possibile verificare il codice. Riprova.");
+        return false;
+      }
+      setEmailVerified(true);
+      setVerifiedEmail(trimmedEmail);
+      return true;
+    } catch {
+      setError("Non è stato possibile verificare il codice. Riprova.");
+      return false;
+    } finally {
+      setPending(false);
+    }
   }
 
   async function goNext() {
@@ -368,8 +480,25 @@ export function CerSignupDialog({
       return;
     }
     setError(null);
+    if (step === "email") {
+      const trimmedEmail = email.trim().toLowerCase();
+      const alreadyVerified = emailVerified && verifiedEmail === trimmedEmail;
+      if (!alreadyVerified) {
+        if (!otpSent) {
+          await requestOtp(trimmedEmail);
+          return;
+        }
+        const verified = await confirmOtp(trimmedEmail);
+        if (!verified) return;
+        return;
+      }
+    }
     if (!isLastStep) {
       setStepIndex((index) => Math.min(index + 1, steps.length - 1));
+      return;
+    }
+    if (submitted) {
+      setConfirmed(true);
       return;
     }
     await submit();
@@ -380,11 +509,7 @@ export function CerSignupDialog({
       setError("Scegli se sei un consumatore o un produttore.");
       return;
     }
-    const resolvedCabina = podCabina?.codice ?? cabinaCodice;
-    if (!resolvedCabina) {
-      setError("Inserisci un POD valido per vedere la cabina primaria.");
-      return;
-    }
+    const resolvedCabina = podCabina?.codice ?? cabinaCodice ?? null;
     const trimmedEmail = email.trim().toLowerCase();
     setPending(true);
     setError(null);
@@ -395,10 +520,11 @@ export function CerSignupDialog({
         body: JSON.stringify({
           email: trimmedEmail,
           pod: pod.trim() || undefined,
-          cabinaCodice: resolvedCabina,
+          cabinaCodice: resolvedCabina || undefined,
           role,
           answers: answersPayload(),
           choices: enrollmentChoices(choices),
+          enrollmentPath: enrollmentPathForCollaborazioni(choices.length),
         }),
       });
       const payload = (await response.json().catch(() => null)) as
@@ -408,6 +534,7 @@ export function CerSignupDialog({
         setError(payload?.error ?? "Non è stato possibile completare l'iscrizione. Riprova.");
         return;
       }
+      setSubmitted(true);
       setConfirmed(true);
     } catch {
       setError("Non è stato possibile completare l'iscrizione. Riprova.");
@@ -416,8 +543,26 @@ export function CerSignupDialog({
     }
   }
 
+  const enrollmentPath = enrollmentPathForCollaborazioni(choices.length);
   const activeChoices = enrollmentChoices(choices);
+  const visibleChoices = activeChoices.filter((choice) => choice.kind !== "waitlist");
+  const emailIsVerified = emailVerified && verifiedEmail === email.trim().toLowerCase();
   const progress = confirmed ? 1 : (stepIndex + 1) / steps.length;
+  const primaryLabel = pending
+    ? step === "email" && !emailIsVerified
+      ? otpSent
+        ? "Verifica…"
+        : "Invio codice…"
+      : isLastStep
+        ? "Invio…"
+        : "Avanti…"
+    : step === "email" && !emailIsVerified
+      ? otpSent
+        ? "Verifica"
+        : "Avanti"
+      : isLastStep
+        ? "Invia richiesta"
+        : "Avanti";
 
   return (
     <dialog
@@ -432,6 +577,7 @@ export function CerSignupDialog({
     >
       <form
         className="flex h-full min-h-0 w-full flex-1 flex-col"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
           void goNext();
@@ -459,20 +605,21 @@ export function CerSignupDialog({
                 className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-foreground sm:h-10 sm:w-10 dark:hover:bg-neutral-900"
                 aria-label="Chiudi"
               >
-                <CloseIcon />
+                <X aria-hidden className="h-5 w-5" strokeWidth={1.75} />
               </button>
             </div>
 
             {confirmed ? (
               <ConfirmedSummary
-                role={role}
-                impianto={impianto}
-                potenza={potenza}
-                prosumer={prosumer}
-                email={email}
-                cabinaCodice={podCabina?.codice ?? cabinaCodice ?? ""}
-                pod={pod}
-                choices={activeChoices}
+                summary={cerSignupSummary({
+                  email,
+                  pod: pod.trim() || null,
+                  cabinaCodice: podCabina?.codice ?? cabinaCodice ?? null,
+                  role,
+                  answers: answersPayload(),
+                  choices: visibleChoices,
+                  enrollmentPath,
+                })}
               />
             ) : (
               <div key={step} className="learn-q-in">
@@ -518,7 +665,23 @@ export function CerSignupDialog({
                   />
                 ) : null}
                 {step === "email" ? (
-                  <EmailStep value={email} onChange={setEmail} />
+                  <EmailStep
+                    value={email}
+                    onChange={changeEmail}
+                    otp={otp}
+                    onOtpChange={setOtp}
+                    otpSent={otpSent}
+                    verified={emailIsVerified}
+                    pending={pending}
+                    onResend={() => {
+                      const trimmed = email.trim().toLowerCase();
+                      if (!EMAIL_RE.test(trimmed)) {
+                        setError("Inserisci un’email valida.");
+                        return;
+                      }
+                      void requestOtp(trimmed);
+                    }}
+                  />
                 ) : null}
                 {step === "cers" ? (
                   <CersStep
@@ -551,7 +714,7 @@ export function CerSignupDialog({
                   disabled={pending}
                   className="h-12 min-w-0 flex-1 rounded-md bg-[#165B44] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70 sm:flex-none sm:px-8"
                 >
-                  {pending ? "Invio…" : isLastStep ? "Invia richiesta" : "Avanti"}
+                  {primaryLabel}
                 </button>
               </div>
             )}
@@ -666,20 +829,7 @@ function PodHelpLink() {
       className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-sm font-medium text-foreground hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
     >
       cos’è il POD?
-      <svg
-        aria-hidden
-        viewBox="0 0 16 16"
-        className="h-3.5 w-3.5 shrink-0"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.75"
-      >
-        <path
-          d="M4.5 11.5 11.5 4.5M6.5 4.5h5v5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <ArrowUpRight aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
     </a>
   );
 }
@@ -746,30 +896,83 @@ function PodStep({
 function EmailStep({
   value,
   onChange,
+  otp,
+  onOtpChange,
+  otpSent,
+  verified,
+  pending,
+  onResend,
 }: {
   value: string;
   onChange: (value: string) => void;
+  otp: string;
+  onOtpChange: (value: string) => void;
+  otpSent: boolean;
+  verified: boolean;
+  pending: boolean;
+  onResend: () => void;
 }) {
   return (
-    <label className="block">
-      <span className="block text-3xl font-bold tracking-tight sm:text-4xl">
+    <div>
+      <p className="text-3xl font-bold tracking-tight sm:text-4xl">
         A quale email ti ricontattiamo?
-      </span>
-      <span className="mt-2 block max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+      </p>
+      <p className="mt-2 max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
         Ti scriviamo per le adesioni attive e, se serve, per la lista d’attesa kilowatt e
         banane.
-      </span>
-      <input
-        type="email"
-        inputMode="email"
-        autoComplete="email"
-        required
-        placeholder="nome@esempio.it"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-8 h-14 w-full max-w-md rounded-md border border-neutral-200 bg-transparent px-4 text-lg text-foreground outline-none placeholder:text-neutral-400 focus:border-neutral-400 dark:border-neutral-800 dark:focus:border-neutral-600"
-      />
-    </label>
+      </p>
+      <label className="relative mt-8 block max-w-md">
+        <span className="sr-only">Email</span>
+        <input
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          required
+          placeholder="nome@esempio.it"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={`h-14 w-full rounded-md border border-neutral-200 bg-transparent px-4 text-lg text-foreground outline-none placeholder:text-neutral-400 focus:border-neutral-400 dark:border-neutral-800 dark:focus:border-neutral-600 ${
+            verified ? "pr-12" : ""
+          }`}
+        />
+        {verified ? (
+          <Check
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 right-4 h-5 w-5 -translate-y-1/2 text-emerald-600 dark:text-emerald-400"
+            strokeWidth={2.5}
+          />
+        ) : null}
+        {verified ? <span className="sr-only">Email verificata</span> : null}
+      </label>
+      {verified ? null : otpSent ? (
+        <div className="mt-6 max-w-md">
+          <p className="text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+            Ti abbiamo inviato un codice a 6 cifre. Inseriscilo per confermare l’email.
+          </p>
+          <label className="mt-4 block">
+            <span className="sr-only">Codice di verifica</span>
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              maxLength={6}
+              placeholder="000000"
+              value={otp}
+              onChange={(event) => onOtpChange(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="h-14 w-full max-w-48 rounded-md border border-neutral-200 bg-transparent px-4 text-center text-2xl font-semibold tracking-[0.28em] text-foreground outline-none placeholder:tracking-normal placeholder:text-neutral-400 focus:border-neutral-400 dark:border-neutral-800 dark:focus:border-neutral-600"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={onResend}
+            disabled={pending}
+            className="mt-3 text-sm font-medium text-foreground underline-offset-2 hover:underline disabled:cursor-wait disabled:opacity-70"
+          >
+            Invia di nuovo
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -844,8 +1047,8 @@ function CersStep({
         Che CER preferisci?
       </legend>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        il POD che hai inserito può essere associato alle seguenti CER. Dicci se hai delle
-        preferenze di iscrizione.
+        Queste comunità collaborano con noi sulla tua cabina. Scegli quelle che ti
+        interessano e, se vuoi, mettile in ordine di preferenza.
       </p>
       <div className="mt-8 flex items-center gap-3">
         <button
@@ -900,7 +1103,11 @@ function CersStep({
             <span className="min-w-0 flex-1 text-sm leading-snug text-foreground">
               <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="inline-flex min-w-0 items-center gap-1.5">
-                  <CerMark />
+                  <Users
+                    aria-hidden
+                    className="h-3.5 w-3.5 shrink-0 text-[#165B44] dark:text-[#F5D547]"
+                    strokeWidth={1.5}
+                  />
                   <span className="min-w-0">
                     {choice.label}
                     {choice.inVetrina ? " · in vetrina" : null}
@@ -911,13 +1118,13 @@ function CersStep({
                 <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-neutral-500 dark:text-neutral-400">
                   {choice.potenzaKw != null ? (
                     <span title="potenza" className="inline-flex items-center gap-1">
-                      <BoltMark />
+                      <Zap aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                       {formatKw(choice.potenzaKw)}
                     </span>
                   ) : null}
                   {choice.nUtenze != null ? (
                     <span title="utenze" className="inline-flex items-center gap-1">
-                      <UtenzeMark />
+                      <User aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                       {formatItInt(choice.nUtenze)}
                       <span className="sr-only"> utenze</span>
                     </span>
@@ -931,14 +1138,14 @@ function CersStep({
                 disabled={index === 0}
                 onClick={() => move(choice.id, -1)}
               >
-                <ChevronUpIcon />
+                <ChevronUp aria-hidden className="h-4 w-4" strokeWidth={1.75} />
               </IconButton>
               <IconButton
                 label="Sposta giù"
                 disabled={index === choices.length - 1}
                 onClick={() => move(choice.id, 1)}
               >
-                <ChevronDownIcon />
+                <ChevronDown aria-hidden className="h-4 w-4" strokeWidth={1.75} />
               </IconButton>
             </div>
           </li>
@@ -956,72 +1163,43 @@ function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-function ConfirmedSummary({
-  role,
-  impianto,
-  potenza,
-  prosumer,
-  email,
-  cabinaCodice,
-  pod,
-  choices,
-}: {
-  role: CerSignupRole | null;
-  impianto: CerSignupImpianto | null;
-  potenza: string;
-  prosumer: boolean | null;
-  email: string;
-  cabinaCodice: string;
-  pod: string;
-  choices: CerSignupChoice[];
-}) {
-  const parsedPotenza = parsePotenzaInput(potenza);
+function ConfirmedSummary({ summary }: { summary: CerSignupSummary }) {
   return (
     <div>
-      <p className="text-3xl font-bold tracking-tight sm:text-4xl">✅Richiesta inviata</p>
-      <p className="mt-2 max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        Abbiamo registrato la tua richiesta.
+      <p className="text-3xl font-bold tracking-tight sm:text-4xl">{summary.title}</p>
+      <p
+        className={`max-w-xl leading-relaxed text-neutral-600 dark:text-neutral-400 ${
+          summary.nocol ? "mt-3 text-base" : "mt-2 text-sm"
+        }`}
+      >
+        {summary.lead}
       </p>
+      {summary.remember ? (
+        <p className="mt-5 max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+          <span className="font-medium text-foreground">Ricorda:</span> {summary.remember}
+        </p>
+      ) : null}
       <dl className="mt-6 divide-y divide-neutral-200 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
-        <SummaryRow
-          label="Ruolo"
-          value={role === "produttore" ? "Produttore" : "Consumatore"}
-        />
-        {role === "produttore" && impianto ? (
-          <SummaryRow
-            label="Impianto"
-            value={impianto === "attivo" ? "Già attivo" : "In progetto"}
-          />
-        ) : null}
-        {role === "produttore" && parsedPotenza.ok && parsedPotenza.value != null ? (
-          <SummaryRow label="Potenza" value={`${String(parsedPotenza.value).replace(".", ",")} kW`} />
-        ) : null}
-        {role === "produttore" && prosumer != null ? (
-          <SummaryRow
-            label="Uso"
-            value={prosumer ? "Produco e consumo" : "Solo produco"}
-          />
-        ) : null}
-        <SummaryRow label="Email" value={email.trim()} />
-        <SummaryRow label="Cabina primaria" value={cabinaCodice} mono />
-        {pod.trim() ? <SummaryRow label="POD" value={pod.trim()} mono /> : null}
-        {choices.length > 0 ? (
+        {summary.rows.map((row) => (
+          <SummaryRow key={row.label} label={row.label} value={row.value} mono={row.mono} />
+        ))}
+        {summary.preferences.length > 0 ? (
           <div className="px-4 py-3">
             <dt className="text-xs font-medium tracking-wide text-neutral-500 uppercase">
               Preferenze
             </dt>
             <dd className="mt-2 flex flex-col gap-1.5">
-              {choices.map((choice) => (
+              {summary.preferences.map((label, index) => (
                 <span
-                  key={choice.id}
+                  key={`${index}-${label}`}
                   className="inline-flex max-w-full items-center gap-1.5 text-sm text-foreground"
                 >
-                  {choice.kind === "waitlist" ? <WaitlistLabel /> : <CerMark />}
-                  <span className="min-w-0">
-                    {choice.kind === "waitlist"
-                      ? "Lista d'attesa kilowatt e banane"
-                      : choice.label}
-                  </span>
+                  <Users
+                    aria-hidden
+                    className="h-3.5 w-3.5 shrink-0 text-[#165B44] dark:text-[#F5D547]"
+                    strokeWidth={1.5}
+                  />
+                  <span className="min-w-0">{label}</span>
                 </span>
               ))}
             </dd>
@@ -1030,12 +1208,11 @@ function ConfirmedSummary({
       </dl>
       <div className="mt-8 max-w-xl">
         <p className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-          <span className="text-[#165B44] dark:text-[#F5D547]">il 68%</span>
-          {" "}dei nuovi utenti CER arriva per passaparola
+          <span className="text-[#165B44] dark:text-[#F5D547]">{summary.shareHighlight}</span>
+          {" "}
+          {summary.shareRest}
         </p>
-        <p className="mt-2 text-base leading-relaxed text-foreground">
-          a chi puoi condividerlo?
-        </p>
+        <p className="mt-2 text-base leading-relaxed text-foreground">{summary.shareLead}</p>
         <div className="mt-5">
           <ShareCerPageButton />
         </div>
@@ -1077,16 +1254,7 @@ function ShareCerPageButton() {
     >
       {copied ? "Link copiato" : "Condividi"}
       {copied ? null : (
-        <svg
-          aria-hidden
-          viewBox="0 0 16 16"
-          className="h-4 w-4 shrink-0"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-        >
-          <path d="M3.5 8h9M9 4.5 12.5 8 9 11.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <ArrowRight aria-hidden className="h-4 w-4 shrink-0" strokeWidth={1.75} />
       )}
     </button>
   );
@@ -1102,7 +1270,7 @@ function Flag({ checked }: { checked: boolean }) {
           : "border-neutral-300 bg-transparent dark:border-neutral-600"
       }`}
     >
-      {checked ? <CheckIcon /> : null}
+      {checked ? <Check aria-hidden className="h-4 w-4" strokeWidth={2.2} /> : null}
     </span>
   );
 }
@@ -1123,66 +1291,6 @@ function SummaryRow({
         {value}
       </dd>
     </div>
-  );
-}
-
-function WaitlistLabel() {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-0.5 text-base" aria-hidden>
-      <span>💡</span>
-      <span>🍌</span>
-    </span>
-  );
-}
-
-function BoltMark() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 shrink-0"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    >
-      <path d="M8.8 1.75 3.75 9.1h4.1L7.2 14.25l5.05-7.35h-4.1Z" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function UtenzeMark() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 shrink-0"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    >
-      <circle cx="8" cy="5" r="2.1" />
-      <path d="M3.5 13.25c.4-2.2 2-3.4 4.5-3.4s4.1 1.2 4.5 3.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CerMark() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 shrink-0 text-[#165B44] dark:text-[#F5D547]"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    >
-      <circle cx="8" cy="3.9" r="1.55" />
-      <path d="M5.6 12.6c.2-1.85 1.15-2.9 2.4-2.9s2.2 1.05 2.4 2.9" strokeLinecap="round" />
-      <circle cx="3.6" cy="5.4" r="1.2" />
-      <path d="M1.7 12.6c.15-1.4.9-2.15 1.9-2.15s1.75.75 1.9 2.15" strokeLinecap="round" />
-      <circle cx="12.4" cy="5.4" r="1.2" />
-      <path d="M10.5 12.6c.15-1.4.9-2.15 1.9-2.15s1.75.75 1.9 2.15" strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -1207,65 +1315,5 @@ function IconButton({
     >
       {children}
     </button>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 16 16"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-    >
-      <path d="M3.5 8.2 6.4 11l6.1-7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 16 16"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-    >
-      <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronUpIcon() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 16 16"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-    >
-      <path d="M4 10l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 16 16"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-    >
-      <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }

@@ -12,6 +12,13 @@ export type PodCerHit = {
   nUtenze: number | null;
 };
 
+export type CerCollaborazioneHit = {
+  id: string;
+  denominazione: string;
+  potenzaKw: number | null;
+  nUtenze: number | null;
+};
+
 export type PodLookupOk = {
   found: true;
   pod: string | null;
@@ -19,6 +26,7 @@ export type PodLookupOk = {
   gestore: string | null;
   comuni: string[];
   cer: PodCerHit[];
+  collaborazioni: CerCollaborazioneHit[];
 };
 
 export type PodLookupMiss = {

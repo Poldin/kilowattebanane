@@ -44,6 +44,7 @@ export async function sendOpsKpiEmail(options: { force?: boolean } = {}) {
     report_date: report.reportDate,
     status: "sending",
     subject: report.subject,
+    cer_count: report.cer.count,
     started_at: new Date().toISOString(),
     last_error: null,
   });
@@ -67,6 +68,7 @@ export async function sendOpsKpiEmail(options: { force?: boolean } = {}) {
         status: "sent",
         finished_at: new Date().toISOString(),
         subject: report.subject,
+        cer_count: report.cer.count,
         last_error: null,
       })
       .eq("report_date", report.reportDate);

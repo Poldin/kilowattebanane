@@ -71,10 +71,16 @@ export type OpsLearnStats = {
   topChapterToday: string | null;
 };
 
+export type OpsCerStats = {
+  count: number;
+  delta: number | null;
+};
+
 export type OpsKpiReport = {
   reportDate: string;
   subject: string;
   alerts: string[];
+  cer: OpsCerStats;
   subscribers: {
     active: number;
     newToday: number;
@@ -158,6 +164,23 @@ function aggregateLearnEvents(
     correct,
     topChapterToday,
   };
+}
+
+export function formatItInt(value: number) {
+  return String(Math.trunc(Math.abs(value))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+export function formatSignedInt(value: number) {
+  const abs = formatItInt(value);
+  if (value > 0) return `+${abs}`;
+  if (value < 0) return `-${abs}`;
+  return "+0";
+}
+
+export function formatCerKpi(cer: OpsCerStats) {
+  const abs = formatItInt(cer.count);
+  if (cer.delta == null) return `${abs} CER`;
+  return `${abs} CER (${formatSignedInt(cer.delta)})`;
 }
 
 export function formatLearnLine(learn: OpsLearnStats) {
@@ -291,6 +314,7 @@ export function formatOpsKpiText(report: OpsKpiReport) {
   };
 
   return [
+    `CER          ${formatCerKpi(report.cer)}`,
     `ISCRITTI     ${report.subscribers.active} attivi  (${sign(report.subscribers.newToday)} / ${sign(-report.subscribers.unsubscribedToday)} oggi)`,
     `DIGEST ${shortItDate(report.digest.deliveryDate).padEnd(5)} ${digest}`,
     `ENTSO oggi   ${zoneLine(report.entsoToday)}`,
@@ -323,6 +347,8 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     learnSlidesRes,
     learnTodayRes,
     learnWeekRes,
+    cerTodayRes,
+    cerYesterdayRes,
   ] = await Promise.all([
     supabase
       .from("subscribers")
@@ -378,6 +404,15 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
       .select("session_id")
       .gte("created_at", weekStart)
       .lt("created_at", end),
+    supabase
+      .from("cer_configurazioni_live")
+      .select("codice_richiesta", { count: "exact", head: true })
+      .eq("tipologia_kind", "cer"),
+    supabase
+      .from("ops_kpi_runs")
+      .select("cer_count")
+      .eq("report_date", addCalendarDays(today, -1))
+      .maybeSingle(),
   ]);
 
   for (const result of [
@@ -392,6 +427,8 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     learnSlidesRes,
     learnTodayRes,
     learnWeekRes,
+    cerTodayRes,
+    cerYesterdayRes,
   ]) {
     if (result.error) throw new Error(result.error.message);
   }
@@ -495,12 +532,18 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     topChapterToday: todayLearn.topChapterToday,
   };
 
-  const subject = `KPI ${shortItDate(today)} · ${alerts.length > 0 ? alerts.join(" · ") : "ok"}`;
+  const yesterdayCer = (cerYesterdayRes.data as { cer_count: number | null } | null)?.cer_count;
+  const cer: OpsCerStats = {
+    count: cerTodayRes.count ?? 0,
+    delta: typeof yesterdayCer === "number" ? (cerTodayRes.count ?? 0) - yesterdayCer : null,
+  };
+  const subject = `KPI ${shortItDate(today)} · ${formatCerKpi(cer)} · ${alerts.length > 0 ? alerts.join(" · ") : "ok"}`;
 
   return {
     reportDate: today,
     subject,
     alerts,
+    cer,
     subscribers: {
       active,
       newToday: newRes.count ?? 0,

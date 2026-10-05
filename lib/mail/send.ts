@@ -1,13 +1,17 @@
 import { render } from "react-email";
 import { Resend } from "resend";
+import { CerSignupOtpEmail } from "@/emails/cer-otp";
+import { CerSignupConfirmationEmail } from "@/emails/cer-signup";
 import { DigestEmail } from "@/emails/digest";
 import { WelcomeEmail } from "@/emails/welcome";
 import {
+  mailCerSignupShareUrl,
   publicSiteUrl,
   resendFrom,
   unsubscribeApiUrl,
   unsubscribePageUrl,
 } from "@/lib/app-url";
+import { cerSignupSummary, type CerSignupRequest } from "@/lib/cer/signup";
 import { loadMailItalyMix } from "@/lib/generation/load";
 import {
   digestSubjectLine,
@@ -135,4 +139,36 @@ export async function sendDigestPreview(to: string, model: PriceMailModel) {
 
   if (error) throw new Error(error.message);
   return data?.id;
+}
+
+export async function sendCerSignupOtpEmail(to: string, code: string) {
+  const html = await render(CerSignupOtpEmail({ code }));
+  const text = await render(CerSignupOtpEmail({ code }), { plainText: true });
+  const { data, error } = await getResend().emails.send({
+    from: resendFrom(),
+    to,
+    subject: `Il tuo codice è ${code}`,
+    html,
+    text,
+  });
+  if (error) throw new Error(error.message);
+  return data?.id;
+}
+
+export async function sendCerSignupConfirmationEmail(request: CerSignupRequest) {
+  const summary = cerSignupSummary(request);
+  const shareUrl = mailCerSignupShareUrl();
+  const html = await render(CerSignupConfirmationEmail({ summary, shareUrl }));
+  const text = await render(CerSignupConfirmationEmail({ summary, shareUrl }), {
+    plainText: true,
+  });
+  const { data, error } = await getResend().emails.send({
+    from: resendFrom(),
+    to: request.email,
+    subject: summary.subject,
+    html,
+    text,
+  });
+  if (error) throw new Error(error.message);
+  return data?.id ?? null;
 }

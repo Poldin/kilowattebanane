@@ -9,6 +9,7 @@ import {
   Text,
 } from "react-email";
 import {
+  formatCerKpi,
   formatLearnLine,
   shortItDate,
   type OpsKpiReport,
@@ -32,6 +33,10 @@ export function OpsKpiEmail({ report }: { report: OpsKpiReport }) {
             <Text style={styles.ok}>Tutto ok</Text>
           )}
 
+          <Text style={styles.row}>
+            <span style={styles.label}>CER</span>
+            {formatCerKpi(report.cer)}
+          </Text>
           <Text style={styles.row}>
             <span style={styles.label}>ISCRITTI</span>
             {report.subscribers.active} attivi ({sign(report.subscribers.newToday)} /{" "}

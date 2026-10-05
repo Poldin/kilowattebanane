@@ -6,12 +6,14 @@ import {
   parseLookupInput,
 } from "@/lib/cer/pod-parse";
 import { lookupCabinaOnGse, lookupComuniOnGse, lookupPodOnGse } from "@/lib/cer/pod-gse";
+import { lookupCollaborazioniInArea } from "@/lib/cer/collaborazioni";
 
 export {
   POD_FORMAT_HINT,
   normalizePodInput,
   parseLookupInput,
   parsePod,
+  type CerCollaborazioneHit,
   type PodCerHit,
   type PodLookupMiss,
   type PodLookupOk,
@@ -69,13 +71,15 @@ export async function lookupPod(raw: string): Promise<PodLookupResult> {
       : await lookupPodOnGse(parsed.pod, { userAgent: UA });
   if (!gse.found) return gse;
 
-  const [cer, comuni] = await Promise.all([
+  const [cer, collaborazioni, comuni] = await Promise.all([
     lookupCersInArea(gse.codice),
+    lookupCollaborazioniInArea(gse.codice).catch(() => []),
     lookupComuniOnGse(gse.codice, { userAgent: UA }).catch(() => []),
   ]);
   return {
     ...gse,
     cer,
+    collaborazioni,
     comuni,
   };
 }

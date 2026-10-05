@@ -67,3 +67,10 @@ export function mailShareUrl() {
   url.searchParams.set("utm_medium", "share");
   return url.toString();
 }
+
+export function mailCerSignupShareUrl() {
+  const url = new URL("/comunita-energetiche", publicSiteUrl());
+  url.searchParams.set("utm_source", "mail");
+  url.searchParams.set("utm_medium", "cer-signup");
+  return url.toString();
+}
