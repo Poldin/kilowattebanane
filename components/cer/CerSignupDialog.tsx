@@ -978,7 +978,7 @@ function ConfirmedSummary({
   const parsedPotenza = parsePotenzaInput(potenza);
   return (
     <div>
-      <p className="text-3xl font-bold tracking-tight sm:text-4xl">Richiesta inviata</p>
+      <p className="text-3xl font-bold tracking-tight sm:text-4xl">✅Richiesta inviata</p>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
         Abbiamo registrato la tua richiesta.
       </p>
