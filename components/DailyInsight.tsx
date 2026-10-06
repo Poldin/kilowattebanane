@@ -30,7 +30,7 @@ import { GenerationMixChart } from "@/components/GenerationMixChart";
 import type { ItalyMixPayload, MixDayPoint } from "@/lib/generation/types";
 import { SignupSlot } from "@/components/SignupForm";
 import { MarketLearnBanner } from "@/components/MarketLearnBanner";
-import { CapBanner } from "@/components/CapBanner";
+import { PodBanner } from "@/components/cer/PodBanner";
 import { ShareBanner } from "@/components/ShareBanner";
 import { LoadShiftSim } from "@/components/LoadShiftSim";
 import { LookbackInsight } from "@/components/LookbackInsight";
@@ -2100,7 +2100,7 @@ export function DailyInsight({
             />
             <div className="mt-6 flex w-full flex-col gap-3">
               <MarketLearnBanner />
-              <CapBanner />
+              <PodBanner className="mt-0 sm:mt-0" />
               <SignupSlot className="w-full scroll-mt-20" />
               <ShareBanner />
             </div>

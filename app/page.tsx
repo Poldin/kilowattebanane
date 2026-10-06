@@ -1,4 +1,5 @@
 import { OfferteModule } from "@/components/offerte/OfferteModule";
+import { CerSignupProvider } from "@/components/cer/CerSignupProvider";
 import { Header } from "@/components/Header";
 import { RotatingAction } from "@/components/RotatingAction";
 import { SignupProvider } from "@/components/SignupForm";
@@ -44,6 +45,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
   return (
     <SignupProvider>
+      <CerSignupProvider>
       <div className="flex min-h-full flex-1 flex-col bg-background font-sans text-foreground">
         <Header />
 
@@ -87,6 +89,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
         <Footer />
       </div>
+      </CerSignupProvider>
     </SignupProvider>
   );
 }

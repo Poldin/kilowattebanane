@@ -139,7 +139,7 @@ function AiHelpLink({ href, children }: { href: string; children: string }) {
   );
 }
 
-export function PodBanner() {
+export function PodBanner({ className }: { className?: string }) {
   const [pod, setPod] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,8 +211,11 @@ export function PodBanner() {
   }
 
   return (
-    <div id="cer-cabina" className="mt-10 w-full scroll-mt-20 rounded-lg bg-[#165B44] p-5 text-[#f5f5f5] sm:mt-12 sm:p-6">
-      <p className="text-xs text-emerald-100/90 sm:text-sm">per iscriverti a una CER devi sapere:</p>
+    <div
+      id="cer-cabina"
+      className={`mt-10 w-full scroll-mt-20 rounded-lg bg-[#165B44] p-5 text-[#f5f5f5] sm:mt-12 sm:p-6${className ? ` ${className}` : ""}`}
+    >
+      <p className="text-xs text-emerald-100/90 sm:text-sm">per iscriverti a una Comunità Energetica devi sapere:</p>
       <p className="mt-1 text-3xl font-bold tracking-tight leading-tight sm:text-4xl">
         Qual è la tua cabina primaria?
       </p>
