@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { CER_SIGNUP_BUTTON_CLASS } from "@/components/cer/CerPodCta";
 import { useCerSignupOptional } from "@/components/cer/CerSignupProvider";
 import { useSignup } from "@/components/SignupForm";
@@ -17,10 +18,15 @@ export function Header() {
   const isCerPage = CER_HEADER_PATHS.has(pathname);
   const { openSignup } = useSignup();
   const cerSignup = useCerSignupOptional();
+  const [logoReady, setLogoReady] = useState(false);
   const tick = useSyncedTick(10_000);
-  const showEmoji = tick % 2 === 1;
+  const showEmoji = logoReady && tick % 2 === 1;
   const current = showEmoji ? LOGO_EMOJI : LOGO_TEXT;
-  const { text: typed, isTyping } = useTypewriter(current, 55);
+  const { text: typed, isTyping } = useTypewriter(logoReady ? current : LOGO_TEXT, 55);
+
+  useEffect(() => {
+    setLogoReady(true);
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-background/80 backdrop-blur-md dark:border-neutral-800/80">
@@ -38,10 +44,11 @@ export function Header() {
           </span>
           <span
             className="col-start-1 row-start-1 truncate whitespace-nowrap text-sm sm:text-base"
-            aria-live="polite"
+            aria-live={logoReady ? "polite" : "off"}
+            suppressHydrationWarning
           >
-            {typed}
-            {isTyping ? (
+            {logoReady ? typed : LOGO_TEXT}
+            {logoReady && isTyping ? (
               <span
                 className="ml-px inline-block h-[1em] w-px translate-y-[0.1em] bg-current align-baseline opacity-70"
                 aria-hidden

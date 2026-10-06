@@ -25,6 +25,7 @@ import {
 } from "@/lib/cer/signup";
 import { POD_HELP_HREF } from "@/lib/cer/help";
 import { lookupPodOnGse } from "@/lib/cer/pod-gse";
+import { CerRoleFlowIcon, type CerRoleFlowKind } from "@/components/cer/CerRoleFlowIcon";
 import {
   normalizePodInput,
   parsePod,
@@ -61,15 +62,18 @@ const ROLE_OPTIONS: {
   id: CerSignupRole;
   title: string;
   body: string;
+  flowKind: CerRoleFlowKind;
 }[] = [
   {
     id: "consumatore",
     title: "Consumatore",
+    flowKind: "consumatore",
     body: "Preleva energia dalla rete. In una CER riceve una quota dell’energia condivisa e l’incentivo, senza dover installare pannelli o cambiare fornitore.",
   },
   {
     id: "produttore",
     title: "Produttore",
+    flowKind: "produttore",
     body: "Ha un impianto rinnovabile e immette energia in rete, nella stessa cabina primaria degli altri membri. Riceve inncentivi se l'energia che immette viene consumata dalla CER.",
   },
 ];
@@ -95,15 +99,18 @@ const PROSUMER_OPTIONS: {
   id: "yes" | "no";
   title: string;
   body: string;
+  flowKind: CerRoleFlowKind;
 }[] = [
   {
     id: "yes",
     title: "Produco e consumo",
+    flowKind: "prosumatore",
     body: "Uso prima l’energia dei miei pannelli e condivido il surplus con la comunità.",
   },
   {
     id: "no",
     title: "Solo produco",
+    flowKind: "produttore",
     body: "Immetto in rete e condivido con i consumatori collegati alla stessa cabina.",
   },
 ];
@@ -736,7 +743,7 @@ function ChoiceStep<T extends string>({
   question: string;
   hint?: string;
   value: T | null;
-  options: { id: T; title: string; body: string }[];
+  options: { id: T; title: string; body: string; flowKind?: CerRoleFlowKind }[];
   onChange: (value: T) => void;
   large?: boolean;
 }) {
@@ -767,13 +774,19 @@ function ChoiceStep<T extends string>({
               <Flag checked={selected} />
               <span className="min-w-0 flex-1">
                 <span
-                  className={
+                  className={`flex items-center gap-3 ${
                     large
-                      ? "block text-3xl font-bold tracking-tight sm:text-4xl"
-                      : "block text-2xl font-bold tracking-tight sm:text-3xl"
-                  }
+                      ? "text-3xl font-bold tracking-tight sm:text-4xl"
+                      : "text-2xl font-bold tracking-tight sm:text-3xl"
+                  }`}
                 >
-                  {option.title}
+                  {option.flowKind ? (
+                    <CerRoleFlowIcon
+                      kind={option.flowKind}
+                      className={large ? "mt-1 h-7 sm:h-8" : "mt-0.5 h-6 sm:h-7"}
+                    />
+                  ) : null}
+                  <span>{option.title}</span>
                 </span>
                 <span className="mt-1.5 block max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
                   {option.body}

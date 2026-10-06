@@ -507,6 +507,64 @@ body {
   }
 }
 
+.cer-role-flow-icon {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.cer-role-flow-track {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cer-role-flow-base {
+  color: color-mix(in srgb, #165b44 18%, transparent);
+  opacity: 0.55;
+}
+
+.cer-role-flow-sweep {
+  position: absolute;
+  inset: 0;
+  color: #f5d547;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    #000 22%,
+    #000 78%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    #000 22%,
+    #000 78%,
+    transparent 100%
+  );
+  -webkit-mask-size: 42% 100%;
+  mask-size: 42% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: -42% 0;
+  mask-position: -42% 0;
+  animation: cer-role-flow-sweep 2s linear infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cer-role-flow-base {
+    color: color-mix(in srgb, #f5d547 14%, transparent);
+    opacity: 0.45;
+  }
+}
+
+@keyframes cer-role-flow-sweep {
+  to {
+    -webkit-mask-position: 142% 0;
+    mask-position: 142% 0;
+  }
+}
+
 @keyframes cer-day-visible {
   0%,
   38% {
@@ -643,6 +701,14 @@ body {
 
   .cer-energy-dot {
     display: none;
+  }
+
+  .cer-role-flow-sweep {
+    animation: none;
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
   }
 }
 

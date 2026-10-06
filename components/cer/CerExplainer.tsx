@@ -1,19 +1,27 @@
 import { CerPodCta } from "@/components/cer/CerPodCta";
+import { CerRoleFlowIcon, type CerRoleFlowKind } from "@/components/cer/CerRoleFlowIcon";
 
-const DEFINITIONS = [
+const DEFINITIONS: {
+  title: string;
+  body: string;
+  flowKind: CerRoleFlowKind;
+}[] = [
   {
     title: "Consumatore",
+    flowKind: "consumatore",
     body: "Preleva energia dalla rete. In una CER riceve una quota dell’energia condivisa e l’incentivo, senza dover installare pannelli o cambiare fornitore.",
   },
   {
     title: "Produttore",
+    flowKind: "produttore",
     body: "Ha un impianto rinnovabile e immette energia in rete, nella stessa cabina primaria degli altri membri. Riceve incentivi se l'energia che immette viene consumata dalla CER.",
   },
   {
     title: "Prosumatore",
+    flowKind: "prosumatore",
     body: "Produce e consuma: usa prima l’energia dei propri pannelli e condivide il surplus con la comunità. È produttore e consumatore insieme.",
   },
-] as const;
+];
 
 export function CerExplainer() {
   return (
@@ -21,7 +29,10 @@ export function CerExplainer() {
       <dl className="flex flex-col gap-8">
         {DEFINITIONS.map((item) => (
           <div key={item.title}>
-            <dt className="text-3xl font-bold tracking-tight sm:text-4xl">{item.title}</dt>
+            <dt className="flex items-center gap-3 text-3xl font-bold tracking-tight sm:gap-3.5 sm:text-4xl">
+              <CerRoleFlowIcon kind={item.flowKind} className="mt-1 h-7 sm:h-8" />
+              <span>{item.title}</span>
+            </dt>
             <dd className="mt-1.5 max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
               {item.body}
             </dd>
