@@ -5,6 +5,7 @@ import { lookupCabinaOnGse, lookupComuniOnGse, lookupPodOnGse } from "@/lib/cer/
 import {
   normalizePodInput,
   parseLookupInput,
+  type CerCollaborazioneHit,
   type PodCerHit,
   type PodLookupMiss,
   type PodLookupOk,
@@ -14,7 +15,7 @@ import { CABINA_HELP_HREF, POD_HELP_HREF } from "@/lib/cer/help";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
 
 type ApiError = { error?: string };
-type CerPayload = { cer?: PodCerHit[] };
+type CerPayload = { cer?: PodCerHit[]; collaborazioni?: CerCollaborazioneHit[] };
 type PodPayload = PodLookupOk | PodLookupMiss | ApiError;
 
 async function postJson<T>(body: unknown) {
@@ -27,13 +28,21 @@ async function postJson<T>(body: unknown) {
   return { ok: response.ok, payload };
 }
 
-async function loadCers(codice: string): Promise<PodCerHit[]> {
+async function loadAreaData(codice: string): Promise<{
+  cer: PodCerHit[];
+  collaborazioni: CerCollaborazioneHit[];
+}> {
   try {
     const { ok, payload } = await postJson<CerPayload | ApiError>({ codice });
-    if (!ok || !payload || !("cer" in payload) || !Array.isArray(payload.cer)) return [];
-    return payload.cer;
+    if (!ok || !payload || !("cer" in payload)) {
+      return { cer: [], collaborazioni: [] };
+    }
+    return {
+      cer: Array.isArray(payload.cer) ? payload.cer : [],
+      collaborazioni: Array.isArray(payload.collaborazioni) ? payload.collaborazioni : [],
+    };
   } catch {
-    return [];
+    return { cer: [], collaborazioni: [] };
   }
 }
 
@@ -174,12 +183,12 @@ export function PodBanner() {
         setResult(gse);
         return;
       }
-      setResult({ ...gse, cer: [], comuni: [] });
-      const [cer, comuni] = await Promise.all([
-        loadCers(gse.codice),
+      setResult({ ...gse, cer: [], comuni: [], collaborazioni: [] });
+      const [areaData, comuni] = await Promise.all([
+        loadAreaData(gse.codice),
         lookupComuniOnGse(gse.codice).catch(() => []),
       ]);
-      setResult({ ...gse, cer, comuni });
+      setResult({ ...gse, cer: areaData.cer, collaborazioni: areaData.collaborazioni, comuni });
     } catch {
       try {
         await searchViaApi(parsed.kind === "cabina" ? parsed.codice : parsed.pod);
@@ -203,7 +212,7 @@ export function PodBanner() {
 
   return (
     <div id="cer-cabina" className="mt-10 w-full scroll-mt-20 rounded-lg bg-[#165B44] p-5 text-[#f5f5f5] sm:mt-12 sm:p-6">
-      <p className="text-xs text-emerald-100/90 sm:text-sm">per iscriverti devi sapere:</p>
+      <p className="text-xs text-emerald-100/90 sm:text-sm">per iscriverti a una CER devi sapere:</p>
       <p className="mt-1 text-3xl font-bold tracking-tight leading-tight sm:text-4xl">
         Qual è la tua cabina primaria?
       </p>

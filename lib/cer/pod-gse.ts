@@ -33,7 +33,7 @@ type ArcgisQueryResponse = {
   error?: { message?: string; code?: number };
 };
 
-export type GsePodHit = Omit<PodLookupOk, "cer" | "comuni">;
+export type GsePodHit = Omit<PodLookupOk, "cer" | "comuni" | "collaborazioni">;
 export type GsePodResult = GsePodHit | PodLookupMiss;
 
 export function sqlLiteral(value: string) {
