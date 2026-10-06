@@ -349,6 +349,7 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     learnWeekRes,
     cerTodayRes,
     cerYesterdayRes,
+    cerPullRes,
   ] = await Promise.all([
     supabase
       .from("subscribers")
@@ -413,6 +414,13 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
       .select("cer_count")
       .eq("report_date", addCalendarDays(today, -1))
       .maybeSingle(),
+    supabase
+      .from("cer_import_runs")
+      .select("finished_at")
+      .eq("status", "ok")
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   for (const result of [
@@ -429,6 +437,7 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     learnWeekRes,
     cerTodayRes,
     cerYesterdayRes,
+    cerPullRes,
   ]) {
     if (result.error) throw new Error(result.error.message);
   }
@@ -500,6 +509,16 @@ export async function loadOpsKpiReport(): Promise<OpsKpiReport> {
     alerts.push("gme mai sincronizzato");
   } else if (gmeRes.staleDays > 5) {
     alerts.push(`gme fermo da ${gmeRes.staleDays}g`);
+  }
+  const lastCerPullDay =
+    typeof cerPullRes.data?.finished_at === "string"
+      ? cerPullRes.data.finished_at.slice(0, 10)
+      : null;
+  if (!lastCerPullDay) {
+    alerts.push("cer mai sincronizzato");
+  } else {
+    const cerStaleDays = daysBetween(lastCerPullDay, today);
+    if (cerStaleDays > 2) alerts.push(`cer pull fermo da ${cerStaleDays}g`);
   }
 
   const chapterTitles = new Map(

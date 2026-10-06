@@ -3,6 +3,13 @@ import { createSecretClient } from "@/lib/supabase/secret";
 export const CER_WAITLIST_ID = "kilowatt-banane-waitlist";
 export const CER_WAITLIST_LABEL = "Lista d'attesa kilowatt e banane";
 
+export const CER_SHARE_HIGHLIGHT = "sapevi che il 68%";
+export const CER_SHARE_REST = "dei nuovi utenti CER arriva per passaparola";
+export const CER_SHARE_LEAD = "e tu, con chi puoi condividerlo?";
+export const CER_SHARE_TITLE = "Comunità energetiche rinnovabili (CER) · kilowatt e banane";
+export const CER_SHARE_TEXT =
+  "Scopri la tua cabina primaria e a quali comunità energetiche puoi iscriverti. Gratis.";
+
 export type CerSignupRole = "consumatore" | "produttore";
 
 export type CerSignupImpianto = "attivo" | "progetto";
@@ -121,9 +128,9 @@ export function cerSignupSummary(request: {
       : null,
     rows,
     preferences,
-    shareHighlight: "il 68%",
-    shareRest: "dei nuovi utenti CER arriva per passaparola",
-    shareLead: "e tu, con chi puoi condividerlo?",
+    shareHighlight: CER_SHARE_HIGHLIGHT,
+    shareRest: CER_SHARE_REST,
+    shareLead: CER_SHARE_LEAD,
     subject: nocol ? "Abbiamo registrato la tua richiesta" : "Richiesta inviata",
   };
 }

@@ -30,8 +30,8 @@ export function CerExplainer() {
         {DEFINITIONS.map((item) => (
           <div key={item.title}>
             <dt className="flex items-center gap-3 text-3xl font-bold tracking-tight sm:gap-3.5 sm:text-4xl">
-              <CerRoleFlowIcon kind={item.flowKind} className="mt-1 h-7 sm:h-8" />
               <span>{item.title}</span>
+              <CerRoleFlowIcon kind={item.flowKind} className="mt-1 h-7 sm:h-8" />
             </dt>
             <dd className="mt-1.5 max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
               {item.body}

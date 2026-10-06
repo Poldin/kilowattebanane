@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowRight,
   ArrowUpRight,
   Check,
   ChevronDown,
@@ -26,6 +25,7 @@ import {
 import { POD_HELP_HREF } from "@/lib/cer/help";
 import { lookupPodOnGse } from "@/lib/cer/pod-gse";
 import { CerRoleFlowIcon, type CerRoleFlowKind } from "@/components/cer/CerRoleFlowIcon";
+import { CerShareBlock } from "@/components/cer/CerShareBlock";
 import {
   normalizePodInput,
   parsePod,
@@ -780,13 +780,13 @@ function ChoiceStep<T extends string>({
                       : "text-2xl font-bold tracking-tight sm:text-3xl"
                   }`}
                 >
+                  <span>{option.title}</span>
                   {option.flowKind ? (
                     <CerRoleFlowIcon
                       kind={option.flowKind}
                       className={large ? "mt-1 h-7 sm:h-8" : "mt-0.5 h-6 sm:h-7"}
                     />
                   ) : null}
-                  <span>{option.title}</span>
                 </span>
                 <span className="mt-1.5 block max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
                   {option.body}
@@ -1168,14 +1168,6 @@ function CersStep({
   );
 }
 
-const CER_SHARE_TITLE = "Comunità energetiche rinnovabili (CER) · kilowatt e banane";
-const CER_SHARE_TEXT =
-  "Scopri la tua cabina primaria e a quali comunità energetiche puoi iscriverti. Gratis.";
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
 function ConfirmedSummary({ summary }: { summary: CerSignupSummary }) {
   return (
     <div>
@@ -1219,57 +1211,8 @@ function ConfirmedSummary({ summary }: { summary: CerSignupSummary }) {
           </div>
         ) : null}
       </dl>
-      <div className="mt-8 max-w-xl">
-        <p className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-          <span className="text-[#165B44] dark:text-[#F5D547]">{summary.shareHighlight}</span>
-          {" "}
-          {summary.shareRest}
-        </p>
-        <p className="mt-2 text-base leading-relaxed text-foreground">{summary.shareLead}</p>
-        <div className="mt-5">
-          <ShareCerPageButton />
-        </div>
-      </div>
+      <CerShareBlock className="mt-8" />
     </div>
-  );
-}
-
-function ShareCerPageButton() {
-  const [copied, setCopied] = useState(false);
-
-  async function share() {
-    const url = new URL("/comunita-energetiche", window.location.origin).toString();
-    const data = { title: CER_SHARE_TITLE, text: CER_SHARE_TEXT, url };
-
-    if (typeof navigator.share === "function") {
-      try {
-        await navigator.share(data);
-        return;
-      } catch (error) {
-        if (isAbortError(error)) return;
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard can be blocked; ignore so the button never throws.
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => void share()}
-      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#165B44] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-    >
-      {copied ? "Link copiato" : "Condividi"}
-      {copied ? null : (
-        <ArrowRight aria-hidden className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-      )}
-    </button>
   );
 }
 

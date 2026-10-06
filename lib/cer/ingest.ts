@@ -18,6 +18,7 @@ type ExistingRow = {
   content_hash: string;
   is_listed: boolean;
   first_seen_on: string | null;
+  last_seen_on: string | null;
 };
 
 export type CerIngestSummary = {
@@ -99,7 +100,7 @@ export async function ingestCerMap(): Promise<CerIngestSummary> {
     const existing = await fetchAllRows<ExistingRow>(
       client,
       "cer_configurazioni",
-      "codice_richiesta, content_hash, is_listed, first_seen_on",
+      "codice_richiesta, content_hash, is_listed, first_seen_on, last_seen_on",
     );
     const byCode = new Map(existing.map((row) => [row.codice_richiesta, row]));
     const seenCodes = new Set(parsed.map((row) => row.codice_richiesta));
@@ -124,9 +125,14 @@ export async function ingestCerMap(): Promise<CerIngestSummary> {
         );
         continue;
       }
-      if (prev.content_hash !== row.content_hash) updated += 1;
+      const hashChanged = prev.content_hash !== row.content_hash;
+      const wasDelisted = !prev.is_listed;
+      if (hashChanged) updated += 1;
       else unchanged += 1;
-      if (!prev.is_listed) relisted += 1;
+      if (wasDelisted) relisted += 1;
+      if (!hashChanged && !wasDelisted && prev.last_seen_on === snapshotDate) {
+        continue;
+      }
       toUpdate.push(
         dbRow(row, {
           is_listed: true,
