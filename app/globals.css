@@ -420,6 +420,10 @@ body {
   animation-play-state: paused;
 }
 
+.cer-who-marquee .cer-marquee-track {
+  animation-duration: 56s;
+}
+
 @keyframes cer-marquee {
   from {
     transform: translateX(0);
@@ -491,6 +495,16 @@ body {
   animation: cer-signal 2.7s ease-out infinite;
 }
 
+.cer-who-sun {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-sun-pulse 5s linear infinite;
+}
+
+.cer-who-night-glow {
+  animation: cer-who-window-night 12s ease-in-out infinite;
+}
+
 @media (prefers-color-scheme: dark) {
   .cer-energy-line {
     stroke: #f5d547;
@@ -508,8 +522,10 @@ body {
 }
 
 .cer-role-flow-icon {
+  --cer-flow: 2.75em;
   position: relative;
   display: inline-flex;
+  overflow: visible;
   vertical-align: middle;
 }
 
@@ -528,27 +544,49 @@ body {
   inset: 0;
   color: #f5d547;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    #000 22%,
-    #000 78%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    #000 22%,
-    #000 78%,
-    transparent 100%
-  );
-  -webkit-mask-size: 42% 100%;
-  mask-size: 42% 100%;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
-  -webkit-mask-position: -42% 0;
-  mask-position: -42% 0;
-  animation: cer-role-flow-sweep 2s linear infinite;
+  -webkit-mask-size: var(--cer-flow) 180%;
+  mask-size: var(--cer-flow) 180%;
+  -webkit-mask-position: calc(-1 * var(--cer-flow)) 50%;
+  mask-position: calc(-1 * var(--cer-flow)) 50%;
+  animation: cer-role-flow-sweep 2.6s linear infinite;
+}
+
+.cer-role-flow-trail {
+  -webkit-mask-image: radial-gradient(
+    ellipse 58% 18% at 54% 50%,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.5) 32%,
+    rgba(0, 0, 0, 0.16) 62%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 58% 18% at 54% 50%,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.5) 32%,
+    rgba(0, 0, 0, 0.16) 62%,
+    transparent 100%
+  );
+}
+
+.cer-role-flow-drop {
+  color: #ffe566;
+  filter: drop-shadow(0 0 2px #f5d547);
+  -webkit-mask-image: radial-gradient(
+    ellipse 13% 26% at 88% 50%,
+    #000 0%,
+    #000 42%,
+    rgba(0, 0, 0, 0.45) 74%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 13% 26% at 88% 50%,
+    #000 0%,
+    #000 42%,
+    rgba(0, 0, 0, 0.45) 74%,
+    transparent 100%
+  );
 }
 
 @media (prefers-color-scheme: dark) {
@@ -559,9 +597,18 @@ body {
 }
 
 @keyframes cer-role-flow-sweep {
-  to {
-    -webkit-mask-position: 142% 0;
-    mask-position: 142% 0;
+  0% {
+    -webkit-mask-position: calc(-1 * var(--cer-flow)) 50%;
+    mask-position: calc(-1 * var(--cer-flow)) 50%;
+  }
+  68% {
+    -webkit-mask-position: calc(100% + var(--cer-flow)) 50%;
+    mask-position: calc(100% + var(--cer-flow)) 50%;
+  }
+  68.01%,
+  100% {
+    -webkit-mask-position: calc(-1 * var(--cer-flow)) 50%;
+    mask-position: calc(-1 * var(--cer-flow)) 50%;
   }
 }
 
@@ -642,6 +689,21 @@ body {
   }
 }
 
+@keyframes cer-who-window-night {
+  0%,
+  38% {
+    opacity: 0.32;
+  }
+  48%,
+  88% {
+    opacity: 1;
+  }
+  98%,
+  100% {
+    opacity: 0.32;
+  }
+}
+
 @keyframes cer-signal {
   0%,
   30% {
@@ -695,7 +757,9 @@ body {
   .cer-hub-ring,
   .cer-hub-core,
   .cer-consumer-window,
-  .cer-house-signal {
+  .cer-house-signal,
+  .cer-who-sun,
+  .cer-who-night-glow {
     animation: none;
   }
 
@@ -705,10 +769,31 @@ body {
 
   .cer-role-flow-sweep {
     animation: none;
-    -webkit-mask-position: 0 0;
-    mask-position: 0 0;
+    filter: none;
+    -webkit-mask-image: none;
+    mask-image: none;
     -webkit-mask-size: 100% 100%;
     mask-size: 100% 100%;
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+  }
+
+  .cer-role-flow-trail {
+    display: none;
+  }
+
+  .cer-who-marquee {
+    overflow: visible;
+    mask-image: none;
+  }
+
+  .cer-who-marquee .cer-marquee-track {
+    width: auto;
+    flex-wrap: wrap;
+  }
+
+  .cer-who-marquee .cer-marquee-set:last-child {
+    display: none;
   }
 }
 

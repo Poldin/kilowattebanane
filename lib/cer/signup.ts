@@ -12,6 +12,8 @@ export const CER_SHARE_TEXT =
 
 export type CerSignupRole = "consumatore" | "produttore";
 
+export type CerSignupSoggetto = "privato" | "azienda";
+
 export type CerSignupImpianto = "attivo" | "progetto";
 
 export type CerSignupChoice = {
@@ -23,6 +25,7 @@ export type CerSignupChoice = {
 };
 
 export type CerSignupAnswers = {
+  soggetto?: CerSignupSoggetto;
   impianto?: CerSignupImpianto;
   potenzaKw?: number | null;
   prosumer?: boolean;
@@ -81,9 +84,14 @@ export function cerSignupSummary(request: {
 }): CerSignupSummary {
   const nocol = request.enrollmentPath === "nocol";
   const role = request.role ?? "consumatore";
-  const rows: CerSignupSummaryRow[] = [
-    { label: "Ruolo", value: role === "produttore" ? "Produttore" : "Consumatore" },
-  ];
+  const rows: CerSignupSummaryRow[] = [];
+  if (request.answers.soggetto) {
+    rows.push({
+      label: "Chi sei",
+      value: request.answers.soggetto === "azienda" ? "Azienda" : "Privato",
+    });
+  }
+  rows.push({ label: "Ruolo", value: role === "produttore" ? "Produttore" : "Consumatore" });
 
   if (role === "produttore") {
     if (request.answers.impianto) {

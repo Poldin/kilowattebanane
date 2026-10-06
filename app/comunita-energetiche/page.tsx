@@ -5,6 +5,7 @@ import { CerExplainer, CerSchema } from "@/components/cer/CerExplainer";
 import { CerShareBlock } from "@/components/cer/CerShareBlock";
 import { CerItalyMap } from "@/components/cer/CerItalyMap";
 import { CerShowcaseBanner } from "@/components/cer/CerShowcaseBanner";
+import { CerWhoCanJoin } from "@/components/cer/CerWhoCanJoin";
 import { PodBanner } from "@/components/cer/PodBanner";
 import { CerSignupProvider } from "@/components/cer/CerSignupProvider";
 import { SignupProvider } from "@/components/SignupForm";
@@ -36,6 +37,7 @@ export default async function ComunitaEnergetichePage() {
             </h1>
             <CerSchema />
             <PodBanner />
+            <CerWhoCanJoin />
             {stats.cer > 0 ? <CerShowcaseBanner count={stats.cer} cers={topCers} /> : null}
             {stats.regioni.length > 0 ? (
               <CerItalyMap regions={stats.regioni} total={stats.total} showTable={false} />

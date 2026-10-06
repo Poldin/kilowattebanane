@@ -49,7 +49,10 @@ export function CerRoleFlowIcon({
       <span className="cer-role-flow-track cer-role-flow-base">
         <RoleGlyphs kind={kind} />
       </span>
-      <span className="cer-role-flow-track cer-role-flow-sweep" aria-hidden>
+      <span className="cer-role-flow-track cer-role-flow-sweep cer-role-flow-trail" aria-hidden>
+        <RoleGlyphs kind={kind} />
+      </span>
+      <span className="cer-role-flow-track cer-role-flow-sweep cer-role-flow-drop" aria-hidden>
         <RoleGlyphs kind={kind} />
       </span>
     </span>

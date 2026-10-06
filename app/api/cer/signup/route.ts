@@ -9,6 +9,7 @@ import {
   type CerSignupImpianto,
   type CerSignupRequest,
   type CerSignupRole,
+  type CerSignupSoggetto,
 } from "@/lib/cer/signup";
 import { sendCerSignupConfirmationEmail } from "@/lib/mail/send";
 import { isAreaConvenzionaleCode, parsePod } from "@/lib/cer/pod-parse";
@@ -34,6 +35,10 @@ function parseChoices(raw: unknown): CerSignupChoice[] | null {
   return choices.sort((a, b) => a.rank - b.rank);
 }
 
+function parseSoggetto(raw: unknown): CerSignupSoggetto | null {
+  return raw === "privato" || raw === "azienda" ? raw : null;
+}
+
 function parseRole(raw: unknown): CerSignupRole | null {
   return raw === "consumatore" || raw === "produttore" ? raw : null;
 }
@@ -50,16 +55,18 @@ function parsePotenzaKw(raw: unknown): number | null | undefined {
 }
 
 function parseAnswers(role: CerSignupRole, raw: unknown): CerSignupAnswers | null {
-  if (role === "consumatore") return {};
   if (!raw || typeof raw !== "object") return null;
   const row = raw as Record<string, unknown>;
+  const soggetto = parseSoggetto(row.soggetto);
+  if (!soggetto) return null;
+  if (role === "consumatore") return { soggetto };
   const impianto = parseImpianto(row.impianto);
   const potenzaKw = parsePotenzaKw(row.potenzaKw);
   const prosumer = row.prosumer;
   if (!impianto || potenzaKw === undefined || typeof prosumer !== "boolean") {
     return null;
   }
-  return { impianto, potenzaKw, prosumer };
+  return { soggetto, impianto, potenzaKw, prosumer };
 }
 
 function parseEnrollmentPath(raw: unknown): CerEnrollmentPath | null {

@@ -20,6 +20,7 @@ import {
   type CerSignupChoice,
   type CerSignupImpianto,
   type CerSignupRole,
+  type CerSignupSoggetto,
   type CerSignupSummary,
 } from "@/lib/cer/signup";
 import { POD_HELP_HREF } from "@/lib/cer/help";
@@ -54,15 +55,33 @@ type DraftChoice = Omit<CerSignupChoice, "rank"> & {
   nUtenze: number | null;
   inVetrina: boolean;
 };
-type StepId = "role" | "impianto" | "potenza" | "prosumer" | "pod" | "email" | "cers";
+type StepId = "soggetto" | "role" | "impianto" | "potenza" | "prosumer" | "pod" | "email" | "cers";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const SOGGETTO_OPTIONS: {
+  id: CerSignupSoggetto;
+  title: string;
+  body: string;
+}[] = [
+  {
+    id: "privato",
+    title: "Privato",
+    body: "Casa, famiglia o persona fisica. Con o senza pannelli.",
+  },
+  {
+    id: "azienda",
+    title: "Azienda",
+    body: "Impresa, ente o attività. Con o senza impianto.",
+  },
+];
 
 const ROLE_OPTIONS: {
   id: CerSignupRole;
   title: string;
   body: string;
   flowKind: CerRoleFlowKind;
+  note?: string;
 }[] = [
   {
     id: "consumatore",
@@ -75,6 +94,7 @@ const ROLE_OPTIONS: {
     title: "Produttore",
     flowKind: "produttore",
     body: "Ha un impianto rinnovabile e immette energia in rete, nella stessa cabina primaria degli altri membri. Riceve inncentivi se l'energia che immette viene consumata dalla CER.",
+    note: "Sei sia produttore che consumatore? Clicca qui.",
   },
 ];
 
@@ -117,9 +137,9 @@ const PROSUMER_OPTIONS: {
 
 function stepsFor(role: CerSignupRole | null): StepId[] {
   if (role === "produttore") {
-    return ["role", "impianto", "potenza", "prosumer", "pod", "email", "cers"];
+    return ["soggetto", "role", "impianto", "potenza", "prosumer", "pod", "email", "cers"];
   }
-  return ["role", "pod", "email", "cers"];
+  return ["soggetto", "role", "pod", "email", "cers"];
 }
 
 function buildInitialChoices(cers: CerCollaborazioneHit[]): DraftChoice[] {
@@ -206,6 +226,7 @@ export function CerSignupDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [stepIndex, setStepIndex] = useState(0);
+  const [soggetto, setSoggetto] = useState<CerSignupSoggetto | null>(null);
   const [role, setRole] = useState<CerSignupRole | null>(null);
   const [impianto, setImpianto] = useState<CerSignupImpianto | null>(null);
   const [potenza, setPotenza] = useState("");
@@ -229,7 +250,7 @@ export function CerSignupDialog({
     const base = stepsFor(role);
     return cersReady && choices.length < 2 ? base.filter((id) => id !== "cers") : base;
   }, [role, choices.length, cersReady]);
-  const step = confirmed ? null : (steps[Math.min(stepIndex, steps.length - 1)] ?? "role");
+  const step = confirmed ? null : (steps[Math.min(stepIndex, steps.length - 1)] ?? "soggetto");
   const isLastStep = step != null && step === steps[steps.length - 1];
 
   useEffect(() => {
@@ -237,6 +258,7 @@ export function CerSignupDialog({
     if (!dialog) return;
     if (open) {
       setStepIndex(0);
+      setSoggetto(null);
       setRole(null);
       setImpianto(null);
       setPotenza("");
@@ -355,9 +377,13 @@ export function CerSignupDialog({
   }
 
   function answersPayload(): CerSignupAnswers {
-    if (role !== "produttore") return {};
+    const base: CerSignupAnswers = {
+      soggetto: soggetto ?? undefined,
+    };
+    if (role !== "produttore") return base;
     const parsed = parsePotenzaInput(potenza);
     return {
+      ...base,
       impianto: impianto ?? undefined,
       potenzaKw: parsed.ok ? parsed.value : null,
       prosumer: prosumer ?? undefined,
@@ -365,6 +391,7 @@ export function CerSignupDialog({
   }
 
   function validateStep(current: StepId): string | null {
+    if (current === "soggetto" && !soggetto) return "Scegli se sei un privato o un’azienda.";
     if (current === "role" && !role) return "Scegli se sei un consumatore o un produttore.";
     if (current === "impianto" && !impianto) return "Dimmi se l’impianto è già attivo o in progetto.";
     if (current === "potenza") {
@@ -483,6 +510,12 @@ export function CerSignupDialog({
     if (!step) return;
     const message = validateStep(step);
     if (message) {
+      if (
+        step === "pod" &&
+        (podCabinaStatus === "loading" || (podCabinaStatus === "ready" && !cersReady))
+      ) {
+        return;
+      }
       setError(message);
       return;
     }
@@ -512,6 +545,10 @@ export function CerSignupDialog({
   }
 
   async function submit() {
+    if (!soggetto) {
+      setError("Scegli se sei un privato o un’azienda.");
+      return;
+    }
     if (!role) {
       setError("Scegli se sei un consumatore o un produttore.");
       return;
@@ -555,6 +592,10 @@ export function CerSignupDialog({
   const visibleChoices = activeChoices.filter((choice) => choice.kind !== "waitlist");
   const emailIsVerified = emailVerified && verifiedEmail === email.trim().toLowerCase();
   const progress = confirmed ? 1 : (stepIndex + 1) / steps.length;
+  const podWaiting =
+    step === "pod" &&
+    (podCabinaStatus === "loading" || (podCabinaStatus === "ready" && !cersReady));
+  const nextDisabled = pending || (step === "pod" && validateStep("pod") != null);
   const primaryLabel = pending
     ? step === "email" && !emailIsVerified
       ? otpSent
@@ -563,13 +604,15 @@ export function CerSignupDialog({
       : isLastStep
         ? "Invio…"
         : "Avanti…"
-    : step === "email" && !emailIsVerified
-      ? otpSent
-        ? "Verifica"
-        : "Avanti"
-      : isLastStep
-        ? "Invia richiesta"
-        : "Avanti";
+    : podWaiting
+      ? "Avanti…"
+      : step === "email" && !emailIsVerified
+        ? otpSent
+          ? "Verifica"
+          : "Avanti"
+        : isLastStep
+          ? "Invia richiesta"
+          : "Avanti";
 
   return (
     <dialog
@@ -630,6 +673,20 @@ export function CerSignupDialog({
               />
             ) : (
               <div key={step} className="learn-q-in">
+                {step === "soggetto" ? (
+                  <ChoiceStep
+                    question="Sei un privato o un’azienda?"
+                    hint="Poi ti chiedo se produci o consumi energia."
+                    value={soggetto}
+                    options={SOGGETTO_OPTIONS}
+                    onChange={(value) => {
+                      setSoggetto(value);
+                      setError(null);
+                      setStepIndex((index) => index + 1);
+                    }}
+                    large
+                  />
+                ) : null}
                 {step === "role" ? (
                   <ChoiceStep
                     question="Sei un consumatore o un produttore?"
@@ -638,8 +695,9 @@ export function CerSignupDialog({
                     options={ROLE_OPTIONS}
                     onChange={(value) => {
                       setRole(value);
+                      setProsumer(null);
                       setError(null);
-                      setStepIndex(1);
+                      setStepIndex((index) => index + 1);
                     }}
                     large
                   />
@@ -669,6 +727,7 @@ export function CerSignupDialog({
                     onChange={setPod}
                     cabina={podCabina}
                     cabinaStatus={podCabinaStatus}
+                    cersReady={cersReady}
                   />
                 ) : null}
                 {step === "email" ? (
@@ -718,8 +777,10 @@ export function CerSignupDialog({
                 ) : null}
                 <button
                   type="submit"
-                  disabled={pending}
-                  className="h-12 min-w-0 flex-1 rounded-md bg-[#165B44] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70 sm:flex-none sm:px-8"
+                  disabled={nextDisabled}
+                  className={`h-12 min-w-0 flex-1 rounded-md bg-[#165B44] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-70 sm:flex-none sm:px-8 ${
+                    pending || podWaiting ? "disabled:cursor-wait" : "disabled:cursor-not-allowed"
+                  }`}
                 >
                   {primaryLabel}
                 </button>
@@ -743,7 +804,13 @@ function ChoiceStep<T extends string>({
   question: string;
   hint?: string;
   value: T | null;
-  options: { id: T; title: string; body: string; flowKind?: CerRoleFlowKind }[];
+  options: {
+    id: T;
+    title: string;
+    body: string;
+    flowKind?: CerRoleFlowKind;
+    note?: string;
+  }[];
   onChange: (value: T) => void;
   large?: boolean;
 }) {
@@ -791,6 +858,11 @@ function ChoiceStep<T extends string>({
                 <span className="mt-1.5 block max-w-xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
                   {option.body}
                 </span>
+                {option.note ? (
+                  <span className="mt-3 block text-sm font-medium text-foreground">
+                    {option.note}
+                  </span>
+                ) : null}
               </span>
             </button>
           );
@@ -852,11 +924,13 @@ function PodStep({
   onChange,
   cabina,
   cabinaStatus,
+  cersReady,
 }: {
   value: string;
   onChange: (value: string) => void;
   cabina: CabinaPreview | null;
   cabinaStatus: CabinaStatus;
+  cersReady: boolean;
 }) {
   return (
     <div>
@@ -900,6 +974,11 @@ function PodStep({
           {cabina.gestore ? (
             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{cabina.gestore}</p>
           ) : null}
+          {cersReady ? null : (
+            <p className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+              Cerco le comunità energetiche…
+            </p>
+          )}
         </div>
       ) : null}
     </div>
