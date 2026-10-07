@@ -26,11 +26,6 @@ const CARDS: {
     body: "Comuni, scuole ed enti pubblici.",
     art: ArtPubblica,
   },
-  {
-    title: "Una sola CER",
-    body: "Non è possibile iscriversi a più di una.",
-    art: ArtOneCer,
-  },
 ];
 
 export function CerWhoCanJoin() {
@@ -263,38 +258,6 @@ function ArtPubblica() {
   );
 }
 
-function ArtOneCer() {
-  return (
-    <>
-      <Sun x={80} y={30} />
-      <g transform="translate(22 46)">
-        <MiniHouse />
-        <g className="cer-who-check">
-          <circle cx="44" cy="78" r="11" className="fill-[#F5D547]" />
-          <path
-            d="M39 78 l3.2 3.4 7-7"
-            className="fill-none stroke-[#165B44]"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </g>
-      </g>
-      <g transform="translate(86 58)" opacity="0.42">
-        <MiniHouse />
-      </g>
-      <g className="cer-who-forbid" transform="translate(86 58)">
-        <path
-          d="M18 22 L70 86 M70 22 L18 86"
-          className="stroke-current"
-          strokeWidth="4"
-          strokeLinecap="round"
-        />
-      </g>
-    </>
-  );
-}
-
 function Sun({ x, y }: { x: number; y: number }) {
   return (
     <g transform={`translate(${x} ${y})`}>
@@ -406,36 +369,6 @@ function Factory({ x, y }: { x: number; y: number }) {
         rx="2"
         className="fill-[#165B44]/12 stroke-current dark:fill-white/5"
         strokeWidth="1.3"
-      />
-    </g>
-  );
-}
-
-function MiniHouse() {
-  return (
-    <g strokeLinejoin="round">
-      <path
-        d="M8 52 L44 18 L80 52 V96 H8Z"
-        className="fill-white/80 stroke-current dark:fill-white/5"
-        strokeWidth="1.7"
-      />
-      <rect
-        x="36"
-        y="64"
-        width="14"
-        height="32"
-        rx="1.5"
-        className="fill-[#165B44]/12 stroke-current dark:fill-white/5"
-        strokeWidth="1.2"
-      />
-      <rect
-        x="56"
-        y="58"
-        width="12"
-        height="12"
-        rx="1.5"
-        className="fill-[#F5D547] stroke-current"
-        strokeWidth="1"
       />
     </g>
   );

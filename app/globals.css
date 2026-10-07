@@ -557,16 +557,6 @@ body {
   animation-duration: 8s;
 }
 
-.cer-who-check {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: cer-who-check 2.4s ease-in-out infinite;
-}
-
-.cer-who-forbid {
-  animation: cer-who-forbid 2.8s ease-in-out infinite;
-}
-
 @media (prefers-color-scheme: dark) {
   .cer-energy-line {
     stroke: #f5d547;
@@ -838,30 +828,6 @@ body {
   }
 }
 
-@keyframes cer-who-check {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(1.14);
-  }
-}
-
-@keyframes cer-who-forbid {
-  0%,
-  28% {
-    opacity: 0.28;
-  }
-  48%,
-  78% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.28;
-  }
-}
-
 @keyframes cer-signal {
   0%,
   30% {
@@ -927,9 +893,7 @@ body {
   .cer-who-gather-r,
   .cer-who-flag,
   .cer-who-clock-h,
-  .cer-who-clock-m,
-  .cer-who-check,
-  .cer-who-forbid {
+  .cer-who-clock-m {
     animation: none;
   }
 

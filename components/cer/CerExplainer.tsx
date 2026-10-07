@@ -157,7 +157,9 @@ export function CerSchema() {
         <FlagIt /> incentivano il l'energia prodotta e consumata nella CER.
       </p>
       <p className="mt-3 max-w-2xl text-pretty text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-        se consumi o produci energia all&apos;interno di una CER ti vengono dati soldi💰{" "}
+        se consumi o produci energia all&apos;interno di una CER lo Stato{" "}
+        <FlagIt /> dà soldi in più alla tua CER che può usarli per investimenti
+        nel territorio o redistribuirli ai membri💰{" "}
         <CerPodCta className="align-baseline" />
       </p>
       <p className="mt-3 max-w-2xl text-pretty text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-400">
