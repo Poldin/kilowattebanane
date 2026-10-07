@@ -765,25 +765,34 @@ export function CerSignupDialog({
               </p>
             ) : null}
             {confirmed ? null : (
-              <div className="mt-8 flex gap-3">
-                {stepIndex > 0 ? (
+              <div className="mt-8">
+                <div className="flex gap-3">
+                  {stepIndex > 0 ? (
+                    <button
+                      type="button"
+                      onClick={goBack}
+                      className="h-12 rounded-md border border-neutral-200 px-5 text-sm font-medium text-foreground transition-colors hover:bg-neutral-100 sm:min-w-28 dark:border-neutral-800 dark:hover:bg-neutral-900"
+                    >
+                      Indietro
+                    </button>
+                  ) : null}
                   <button
-                    type="button"
-                    onClick={goBack}
-                    className="h-12 rounded-md border border-neutral-200 px-5 text-sm font-medium text-foreground transition-colors hover:bg-neutral-100 sm:min-w-28 dark:border-neutral-800 dark:hover:bg-neutral-900"
+                    type="submit"
+                    disabled={nextDisabled}
+                    className={`h-12 min-w-0 flex-1 rounded-md bg-[#165B44] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-70 sm:flex-none sm:px-8 ${
+                      pending || podWaiting ? "disabled:cursor-wait" : "disabled:cursor-not-allowed"
+                    }`}
                   >
-                    Indietro
+                    {primaryLabel}
                   </button>
+                </div>
+                {isLastStep ? (
+                  <p className="mt-3 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+                    Inviando accetti i{" "}
+                    <LegalPlaceholderLink href="#termini">termini</LegalPlaceholderLink> e la{" "}
+                    <LegalPlaceholderLink href="#privacy">privacy</LegalPlaceholderLink>.
+                  </p>
                 ) : null}
-                <button
-                  type="submit"
-                  disabled={nextDisabled}
-                  className={`h-12 min-w-0 flex-1 rounded-md bg-[#165B44] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-70 sm:flex-none sm:px-8 ${
-                    pending || podWaiting ? "disabled:cursor-wait" : "disabled:cursor-not-allowed"
-                  }`}
-                >
-                  {primaryLabel}
-                </button>
               </div>
             )}
           </div>
@@ -1326,6 +1335,24 @@ function SummaryRow({
         {value}
       </dd>
     </div>
+  );
+}
+
+function LegalPlaceholderLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className="font-medium text-foreground underline decoration-neutral-300 underline-offset-2 hover:decoration-neutral-500 dark:decoration-neutral-600 dark:hover:decoration-neutral-400"
+      onClick={(event) => event.preventDefault()}
+    >
+      {children}
+    </a>
   );
 }
 

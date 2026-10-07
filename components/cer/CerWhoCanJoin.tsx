@@ -7,24 +7,24 @@ const CARDS: {
   art: () => ReactNode;
 }[] = [
   {
-    title: "Privati senza pannelli",
-    body: "Entri come consumatore, senza cambiare fornitore.",
-    art: ArtHouse,
+    title: "Privati",
+    body: "Casa, famiglia o persona fisica.",
+    art: ArtPrivati,
   },
   {
-    title: "Privati con i pannelli",
-    body: "Usi la tua energia e condividi il surplus.",
-    art: ArtHouseSolar,
+    title: "Aziende",
+    body: "Impresa, attività o società.",
+    art: ArtAziende,
   },
   {
-    title: "Aziende con i pannelli",
-    body: "L’impianto immette in comunità e prende l’incentivo.",
-    art: ArtFactorySolar,
+    title: "Enti no profit",
+    body: "Associazioni, cooperative e fondazioni.",
+    art: ArtNonprofit,
   },
   {
-    title: "Aziende consumatrici",
-    body: "Niente impianto: usi l’energia condivisa.",
-    art: ArtFactory,
+    title: "Pubbliche amministrazioni",
+    body: "Comuni, scuole ed enti pubblici.",
+    art: ArtPubblica,
   },
   {
     title: "Una sola CER",
@@ -40,7 +40,7 @@ export function CerWhoCanJoin() {
         id="cer-who-title"
         className="text-3xl font-bold tracking-tight sm:text-4xl"
       >
-        Chi può iscriversi a una CER??
+        Chi può iscriversi a una CER?
       </h2>
       <div className="cer-marquee cer-who-marquee mt-5">
         <div className="cer-marquee-track">
@@ -67,7 +67,7 @@ function WhoCard({
   card: (typeof CARDS)[number];
 }) {
   return (
-    <li className="w-[9.75rem] shrink-0 sm:w-[10.25rem]">
+    <li className="w-[10.25rem] shrink-0 sm:w-[10.75rem]">
       <article className="flex h-full flex-col">
         <div className="overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
           <svg
@@ -89,43 +89,176 @@ function WhoCard({
   );
 }
 
-function ArtHouse() {
+function ArtPrivati() {
   return (
     <>
-      <Sky x={118} y={38} />
-      <House x={28} y={58} />
-      <Person x={64} y={148} />
+      <Sun x={28} y={36} />
+      <House x={18} y={58} />
+      <Person x={112} y={146} wave />
     </>
   );
 }
 
-function ArtHouseSolar() {
+function ArtAziende() {
   return (
     <>
-      <Sky x={28} y={36} />
-      <House x={28} y={58} />
-      <SolarRoof x={42} y={68} />
-      <g className="cer-day-energy">
-        <circle cx="92" cy="82" r="3.2" className="cer-panel-spark fill-[#F5D547]" />
+      <Sun x={128} y={32} />
+      <Factory x={16} y={44} />
+    </>
+  );
+}
+
+function ArtNonprofit() {
+  return (
+    <>
+      <Sun x={26} y={34} />
+      <g transform="translate(22 52)" strokeLinejoin="round">
+        <path
+          d="M8 64 L58 22 L108 64 V128 H8Z"
+          className="fill-white/80 stroke-current dark:fill-white/5"
+          strokeWidth="1.8"
+        />
+        <rect
+          x="48"
+          y="88"
+          width="20"
+          height="40"
+          rx="2"
+          className="fill-[#165B44]/12 stroke-current dark:fill-white/5"
+          strokeWidth="1.4"
+        />
+        <rect
+          x="20"
+          y="78"
+          width="16"
+          height="14"
+          rx="2"
+          className="fill-[#F5D547]/70 stroke-current"
+          strokeWidth="1.1"
+        />
+        <rect
+          x="80"
+          y="78"
+          width="16"
+          height="14"
+          rx="2"
+          className="fill-[#F5D547]/70 stroke-current"
+          strokeWidth="1.1"
+        />
+        <g transform="translate(49 48)">
+          <g className="cer-who-heart">
+            <path
+              d="M10 6 C10 2 14 0 18 4 C22 0 26 2 26 6 C26 12 18 18 18 18 C18 18 10 12 10 6Z"
+              className="fill-[#165B44] stroke-[#165B44]"
+              strokeWidth="1"
+            />
+          </g>
+        </g>
+      </g>
+      <g className="cer-who-gather-l">
+        <Person x={28} y={158} />
+      </g>
+      <g className="cer-who-gather-r">
+        <Person x={96} y={158} />
       </g>
     </>
   );
 }
 
-function ArtFactorySolar() {
+function ArtPubblica() {
   return (
     <>
-      <Sky x={26} y={34} />
-      <Factory x={18} y={78} solar />
-    </>
-  );
-}
-
-function ArtFactory() {
-  return (
-    <>
-      <Sky x={128} y={36} />
-      <Factory x={18} y={78} />
+      <Sun x={26} y={32} />
+      <g transform="translate(18 54)" strokeLinejoin="round">
+        <path
+          d="M8 78 H116 V138 H8Z"
+          className="fill-white/80 stroke-current dark:fill-white/5"
+          strokeWidth="1.7"
+        />
+        <path
+          d="M44 28 H80 V78 H44Z"
+          className="fill-white/80 stroke-current dark:fill-white/5"
+          strokeWidth="1.7"
+        />
+        <path
+          d="M40 28 L62 8 L84 28Z"
+          className="fill-[#165B44]/18 stroke-current"
+          strokeWidth="1.5"
+        />
+        <rect
+          x="54"
+          y="38"
+          width="16"
+          height="16"
+          rx="8"
+          className="fill-white stroke-current dark:fill-white/5"
+          strokeWidth="1.2"
+        />
+        <g transform="translate(62 46)">
+          <g className="cer-who-clock-h">
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="-5"
+              className="stroke-current"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </g>
+          <g className="cer-who-clock-m">
+            <line
+              x1="0"
+              y1="0"
+              x2="4.5"
+              y2="0"
+              className="stroke-current"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+            />
+          </g>
+        </g>
+        <line
+          x1="86"
+          y1="8"
+          x2="86"
+          y2="-10"
+          className="stroke-current"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <g transform="translate(86 -10)">
+          <g className="cer-who-flag">
+            <path
+              d="M0 0 H22 L18 7 H0Z"
+              className="fill-[#165B44] stroke-[#165B44]"
+              strokeWidth="0.8"
+            />
+            <path d="M0 7 H18 L22 14 H0Z" className="fill-[#F5D547] stroke-[#F5D547]" strokeWidth="0.8" />
+          </g>
+        </g>
+        {[18, 38, 86, 106].map((left) => (
+          <rect
+            key={left}
+            x={left}
+            y="90"
+            width="12"
+            height="14"
+            rx="1.5"
+            className="fill-[#F5D547]/80 stroke-current"
+            strokeWidth="1"
+          />
+        ))}
+        <rect
+          x="52"
+          y="108"
+          width="20"
+          height="30"
+          rx="2"
+          className="fill-[#165B44]/12 stroke-current dark:fill-white/5"
+          strokeWidth="1.3"
+        />
+      </g>
     </>
   );
 }
@@ -133,22 +266,24 @@ function ArtFactory() {
 function ArtOneCer() {
   return (
     <>
-      <Sky x={80} y={30} />
+      <Sun x={80} y={30} />
       <g transform="translate(22 46)">
         <MiniHouse />
-        <circle cx="44" cy="78" r="11" className="fill-[#F5D547]" />
-        <path
-          d="M39 78 l3.2 3.4 7-7"
-          className="fill-none stroke-[#165B44]"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <g className="cer-who-check">
+          <circle cx="44" cy="78" r="11" className="fill-[#F5D547]" />
+          <path
+            d="M39 78 l3.2 3.4 7-7"
+            className="fill-none stroke-[#165B44]"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
       </g>
       <g transform="translate(86 58)" opacity="0.42">
         <MiniHouse />
       </g>
-      <g transform="translate(86 58)">
+      <g className="cer-who-forbid" transform="translate(86 58)">
         <path
           d="M18 22 L70 86 M70 22 L18 86"
           className="stroke-current"
@@ -160,42 +295,25 @@ function ArtOneCer() {
   );
 }
 
-function Sky({ x, y }: { x: number; y: number }) {
+function Sun({ x, y }: { x: number; y: number }) {
   return (
-    <>
-      <g className="cer-day-sun" transform={`translate(${x} ${y})`}>
-        <g className="cer-who-sun">
-          <circle r="12" className="fill-[#F5D547]/18" />
-          <circle r="7" className="fill-[#F5D547]" />
-          {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
-            <line
-              key={deg}
-              y1="-11"
-              y2="-15.5"
-              className="stroke-[#F5D547]"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              transform={`rotate(${deg})`}
-            />
-          ))}
-        </g>
-      </g>
-      <g className="cer-night-moon">
-        <g transform={`translate(${x} ${y})`}>
-          <circle r="9" className="fill-current opacity-90" />
-          <circle
-            cx="4"
-            cy="-3.5"
-            r="9"
-            className="fill-neutral-50 dark:fill-neutral-900"
+    <g transform={`translate(${x} ${y})`}>
+      <g className="cer-who-sun">
+        <circle r="12" className="fill-[#F5D547]/18" />
+        <circle r="7" className="fill-[#F5D547]" />
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
+          <line
+            key={deg}
+            y1="-11"
+            y2="-15.5"
+            className="stroke-[#F5D547]"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            transform={`rotate(${deg})`}
           />
-        </g>
-        <circle cx="24" cy="28" r="1.1" className="fill-current" />
-        <circle cx="138" cy="48" r="1.3" className="fill-current" />
-        <circle cx="48" cy="22" r="0.9" className="fill-current" />
-        <circle cx="118" cy="26" r="1" className="fill-current" />
+        ))}
       </g>
-    </>
+    </g>
   );
 }
 
@@ -222,104 +340,73 @@ function House({ x, y }: { x: number; y: number }) {
         width="16"
         height="15"
         rx="2"
-        className="cer-who-night-glow fill-[#F5D547] stroke-current"
+        className="cer-who-window fill-[#F5D547] stroke-current"
         strokeWidth="1.2"
       />
     </g>
   );
 }
 
-function SolarRoof({ x, y }: { x: number; y: number }) {
-  return (
-    <g transform={`translate(${x} ${y}) rotate(-18 36 18)`}>
-      <path
-        d="M0 10 L62 0 L74 32 L11 42Z"
-        className="fill-[#165B44] stroke-[#F5D547]"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M22 6 L32 38 M42 3 L52 35 M6 22 L68 12 M9 32 L71 22"
-        className="fill-none stroke-[#F5D547]/75"
-        strokeWidth="1"
-      />
-    </g>
-  );
-}
-
-function Factory({
-  x,
-  y,
-  solar = false,
-}: {
-  x: number;
-  y: number;
-  solar?: boolean;
-}) {
+function Factory({ x, y }: { x: number; y: number }) {
   return (
     <g transform={`translate(${x} ${y})`} strokeLinejoin="round">
+      <g transform="translate(103 20)">
+        <g className="cer-who-smoke">
+          <ellipse cx="0" cy="0" rx="10" ry="6" className="fill-current" />
+        </g>
+      </g>
+      <g transform="translate(111 10)">
+        <g className="cer-who-smoke cer-who-smoke-b">
+          <ellipse cx="0" cy="0" rx="8" ry="5" className="fill-current" />
+        </g>
+      </g>
+      <g transform="translate(95 6)">
+        <g className="cer-who-smoke cer-who-smoke-c">
+          <ellipse cx="0" cy="0" rx="7" ry="4.5" className="fill-current" />
+        </g>
+      </g>
       <path
-        d="M0 48 H86 V116 H0Z"
+        d="M0 48 H86 V148 H0Z"
         className="fill-white/80 stroke-current dark:fill-white/5"
         strokeWidth="1.7"
       />
       <path
-        d="M86 64 H124 V116 H86Z"
+        d="M86 64 H128 V148 H86Z"
         className="fill-white/80 stroke-current dark:fill-white/5"
         strokeWidth="1.7"
       />
-      <rect x="96" y="36" width="14" height="28" className="fill-[#165B44]/20 stroke-current" strokeWidth="1.3" />
-      <path d="M93 36 h20 l-4 -12 h-12Z" className="fill-[#165B44]/25 stroke-current" strokeWidth="1.2" />
-      {solar ? <RoofSolar /> : null}
+      <rect x="96" y="28" width="14" height="36" className="fill-[#165B44]/20 stroke-current" strokeWidth="1.3" />
+      <path d="M93 28 h20 l-4 -12 h-12Z" className="fill-[#165B44]/25 stroke-current" strokeWidth="1.2" />
       {[16, 36, 56].map((left) => (
         <rect
           key={left}
           x={left}
-          y="64"
+          y="68"
           width="14"
           height="12"
           rx="1.5"
-          className="cer-who-night-glow fill-[#F5D547] stroke-current"
+          className="fill-[#F5D547] stroke-current"
           strokeWidth="1"
         />
       ))}
       <rect
-        x="96"
-        y="78"
+        x="98"
+        y="82"
         width="14"
         height="12"
         rx="1.5"
-        className="cer-who-night-glow fill-[#F5D547] stroke-current"
+        className="fill-[#F5D547] stroke-current"
         strokeWidth="1"
       />
       <rect
         x="18"
-        y="88"
+        y="112"
         width="22"
-        height="28"
+        height="36"
         rx="2"
         className="fill-[#165B44]/12 stroke-current dark:fill-white/5"
         strokeWidth="1.3"
       />
-    </g>
-  );
-}
-
-function RoofSolar() {
-  return (
-    <g>
-      <path
-        d="M8 48 L80 48 L74 36 L14 36Z"
-        className="fill-[#165B44] stroke-[#F5D547]"
-        strokeWidth="1.4"
-      />
-      <path
-        d="M21 48 L26 36 M40 48 L44 36 M59 48 L62 36 M8 42 H77"
-        className="fill-none stroke-[#F5D547]/75"
-        strokeWidth="1"
-      />
-      <g className="cer-day-energy">
-        <circle cx="46" cy="41" r="3" className="cer-panel-spark fill-[#F5D547]" />
-      </g>
     </g>
   );
 }
@@ -347,18 +434,48 @@ function MiniHouse() {
         width="12"
         height="12"
         rx="1.5"
-        className="cer-who-night-glow fill-[#F5D547] stroke-current"
+        className="fill-[#F5D547] stroke-current"
         strokeWidth="1"
       />
     </g>
   );
 }
 
-function Person({ x, y }: { x: number; y: number }) {
+function Person({
+  x,
+  y,
+  wave = false,
+}: {
+  x: number;
+  y: number;
+  wave?: boolean;
+}) {
   return (
     <g transform={`translate(${x} ${y})`} className="stroke-current" fill="none">
       <circle cx="16" cy="8" r="7" className="fill-white/80 dark:fill-white/5" strokeWidth="1.6" />
-      <path d="M16 16 v8 M8 42 L16 24 L24 42 M6 28 H26" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M16 16 v8 M8 42 L16 24 L24 42"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {wave ? (
+        <>
+          <path d="M16 24 L27 34" strokeWidth="1.7" strokeLinecap="round" />
+          <g transform="translate(16 22)">
+            <g className="cer-who-wave">
+              <path
+                d="M0 0 L-7 -13 L-1 -17"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </g>
+          </g>
+        </>
+      ) : (
+        <path d="M6 28 H26" strokeWidth="1.7" strokeLinecap="round" />
+      )}
     </g>
   );
 }
