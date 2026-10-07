@@ -10,6 +10,7 @@ import {
 import { isCompleteDay } from "@/lib/insights";
 import { MARKET_ZONES, type MarketZoneId } from "@/lib/market-zones";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createSecretClient } from "@/lib/supabase/secret";
 
 const ZONES = Object.keys(MARKET_ZONES) as MarketZoneId[];
 const UPSERT_CHUNK = 500;
@@ -54,7 +55,7 @@ export function rangeWindow(from: string, to: string) {
 
 async function upsertSlots(slots: PriceSlot[]) {
   if (slots.length === 0) return 0;
-  const supabase = createAdminClient();
+  const supabase = createSecretClient();
   const fetchedAt = new Date().toISOString();
   let upserted = 0;
 

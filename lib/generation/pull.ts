@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createSecretClient } from "@/lib/supabase/secret";
 import { loadMixCoverage, planMixRecovery } from "@/lib/generation/coverage";
 import {
   loadStoredMixSlots,
@@ -36,7 +37,7 @@ async function latestStoredSlot() {
 
 async function upsertSlots(slots: GenerationSlot[]) {
   if (slots.length === 0) return 0;
-  const supabase = createAdminClient();
+  const supabase = createSecretClient();
   const fetchedAt = new Date().toISOString();
   let upserted = 0;
 

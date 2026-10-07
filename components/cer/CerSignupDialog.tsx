@@ -485,6 +485,7 @@ export function CerSignupDialog({
     try {
       const response = await fetch("/api/cer/signup/otp/verify", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: trimmedEmail, otp: otp.trim() }),
       });
@@ -560,6 +561,7 @@ export function CerSignupDialog({
     try {
       const response = await fetch("/api/cer/signup", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           email: trimmedEmail,
@@ -575,7 +577,16 @@ export function CerSignupDialog({
         | { ok?: boolean; error?: string }
         | null;
       if (!response.ok || !payload?.ok) {
-        setError(payload?.error ?? "Non è stato possibile completare l'iscrizione. Riprova.");
+        const message = payload?.error ?? "Non è stato possibile completare l'iscrizione. Riprova.";
+        if (message.startsWith("Conferma l'email")) {
+          setEmailVerified(false);
+          setVerifiedEmail(null);
+          setOtpSent(false);
+          setOtp("");
+          const emailIndex = steps.indexOf("email");
+          if (emailIndex >= 0) setStepIndex(emailIndex);
+        }
+        setError(message);
         return;
       }
       setSubmitted(true);

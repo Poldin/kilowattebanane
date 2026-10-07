@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createSecretClient } from "@/lib/supabase/secret";
 import { MIX_FOSSIL_IDS, MIX_RENEWABLE_IDS } from "@/lib/generation/sources";
 import { romeHour } from "@/lib/generation/time";
 import {
@@ -164,7 +165,7 @@ function compactMwh(mwh: Partial<Record<MixSourceId, number>>) {
 
 export async function upsertMixDayStats(days: MixDayPoint[]) {
   if (days.length === 0) return 0;
-  const supabase = createAdminClient();
+  const supabase = createSecretClient();
   const updatedAt = new Date().toISOString();
   let upserted = 0;
 

@@ -1,5 +1,11 @@
-import { NextRequest } from "next/server";
-import { deleteCerSignupOtp, invalidatePreviousCerSignupOtps, issueCerSignupOtp } from "@/lib/cer/otp";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  CER_SIGNUP_PROOF_COOKIE,
+  cerSignupProofCookieOptions,
+  deleteCerSignupOtp,
+  invalidatePreviousCerSignupOtps,
+  issueCerSignupOtp,
+} from "@/lib/cer/otp";
 import { sendCerSignupOtpEmail } from "@/lib/mail/send";
 
 export const dynamic = "force-dynamic";
@@ -40,10 +46,13 @@ export async function POST(request: NextRequest) {
         { status: 500 },
       );
     }
-    await invalidatePreviousCerSignupOtps(email, issued.id).catch((error) => {
-      console.error("cer signup otp invalidate", error);
+    await invalidatePreviousCerSignupOtps(email, issued.id);
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(CER_SIGNUP_PROOF_COOKIE, "", {
+      ...cerSignupProofCookieOptions(),
+      maxAge: 0,
     });
-    return Response.json({ ok: true });
+    return response;
   } catch (error) {
     console.error("cer signup otp", error);
     return Response.json(

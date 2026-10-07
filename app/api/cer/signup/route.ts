@@ -1,5 +1,10 @@
-import { NextRequest } from "next/server";
-import { hasVerifiedCerSignupOtp } from "@/lib/cer/otp";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  CER_SIGNUP_PROOF_COOKIE,
+  cerSignupProofCookieOptions,
+  claimCerSignupProof,
+  releaseCerSignupProof,
+} from "@/lib/cer/otp";
 import {
   insertCerSignupRequest,
   updateCerSignupMailResult,
@@ -148,8 +153,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const verified = await hasVerifiedCerSignupOtp(email);
-    if (!verified) {
+    const proof = await claimCerSignupProof(
+      email,
+      request.cookies.get(CER_SIGNUP_PROOF_COOKIE)?.value,
+    );
+    if (!proof) {
       return Response.json(
         { error: "Conferma l'email con il codice che ti abbiamo inviato." },
         { status: 400 },
@@ -164,7 +172,15 @@ export async function POST(request: NextRequest) {
       choices,
       enrollmentPath,
     };
-    const id = await insertCerSignupRequest(signup);
+    let id: string;
+    try {
+      id = await insertCerSignupRequest(signup);
+    } catch (error) {
+      await releaseCerSignupProof(proof.id, proof.claimedAt).catch((releaseError) => {
+        console.error("cer signup proof release", releaseError);
+      });
+      throw error;
+    }
     try {
       const resendId = await sendCerSignupConfirmationEmail(signup);
       await updateCerSignupMailResult(id, { sent: true, resendId });
@@ -175,7 +191,12 @@ export async function POST(request: NextRequest) {
         console.error("cer signup confirmation mail result", updateError);
       });
     }
-    return Response.json({ ok: true });
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(CER_SIGNUP_PROOF_COOKIE, "", {
+      ...cerSignupProofCookieOptions(),
+      maxAge: 0,
+    });
+    return response;
   } catch (error) {
     console.error("cer signup", error);
     return Response.json(

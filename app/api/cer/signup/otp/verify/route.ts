@@ -1,5 +1,10 @@
-import { NextRequest } from "next/server";
-import { verifyCerSignupOtp } from "@/lib/cer/otp";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  CER_SIGNUP_PROOF_COOKIE,
+  cerSignupProofCookieOptions,
+  createCerSignupProof,
+  verifyCerSignupOtp,
+} from "@/lib/cer/otp";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +37,13 @@ export async function POST(request: NextRequest) {
     if (!verified.ok) {
       return Response.json({ error: verified.error }, { status: verified.status });
     }
-    return Response.json({ ok: true });
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(
+      CER_SIGNUP_PROOF_COOKIE,
+      createCerSignupProof(verified.id, email),
+      cerSignupProofCookieOptions(),
+    );
+    return response;
   } catch {
     return Response.json(
       { error: "Non è stato possibile verificare il codice. Riprova." },
