@@ -326,7 +326,7 @@ export function PodBanner({ className }: { className?: string }) {
               {result.comuni.length > 0 ? (
                 <div className="mt-3">
                   <p className="text-xs uppercase tracking-[0.16em] text-emerald-200">
-                    {result.comuni.length === 1 ? "Comune nell’area" : "Comuni nell’area"}
+                    {result.comuni.length === 1 ? "Comune" : "Comuni coinvolti"}
                   </p>
                   <p className="mt-1 text-sm text-emerald-100">{result.comuni.join(" · ")}</p>
                 </div>
