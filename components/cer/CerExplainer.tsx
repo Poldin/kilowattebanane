@@ -157,12 +157,12 @@ export function CerSchema() {
       <p className="mt-5 max-w-2xl text-pretty text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-400">
         Una comunità energetica rinnovabile (CER) è un gruppo di persone e imprese
         collegate alla stessa cabina primaria. L'UE <FlagEu /> e lo Stato Italiano{" "}
-        <FlagIt /> incentivano il l'energia prodotta e consumata nella CER.
+        <FlagIt /> incentivano l'energia condivisa nella CER.
       </p>
       <p className="mt-3 max-w-2xl text-pretty text-xl font-bold tracking-tight text-foreground sm:text-2xl">
         se consumi o produci energia all&apos;interno di una CER lo Stato{" "}
-        <FlagIt /> dà soldi in più alla tua CER che può usarli per investimenti
-        nel territorio o redistribuirli ai membri💰{" "}
+        <FlagIt /> dà soldi alla tua CER la quale può usarli per redistribuirli ai membri e per investimenti
+        sociali nel territorio 💰{" "}
         <CerPodCta className="align-baseline" />
       </p>
       <p className="mt-3 max-w-2xl text-pretty text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-400">
