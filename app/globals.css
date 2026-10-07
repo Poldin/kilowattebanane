@@ -424,6 +424,34 @@ body {
   animation-duration: 56s;
 }
 
+.cer-why-marquee .cer-marquee-track {
+  animation-duration: 84s;
+}
+
+.cer-why-coin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-why-bob 2.4s ease-in-out infinite;
+}
+
+.cer-why-leaf {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: cer-why-sway 3.2s ease-in-out infinite;
+}
+
+.cer-why-cloud {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-why-cloud 2.8s ease-in-out infinite;
+}
+
+.cer-why-badge {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cer-who-heart 1.8s ease-in-out infinite;
+}
+
 @keyframes cer-marquee {
   from {
     transform: translateX(0);
@@ -778,6 +806,28 @@ body {
   }
 }
 
+@keyframes cer-why-bob {
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+@keyframes cer-why-sway {
+  50% {
+    transform: rotate(5deg);
+  }
+}
+
+@keyframes cer-why-cloud {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 @keyframes cer-signal {
   0%,
   30% {
@@ -843,7 +893,11 @@ body {
   .cer-who-gather-r,
   .cer-who-flag,
   .cer-who-clock-h,
-  .cer-who-clock-m {
+  .cer-who-clock-m,
+  .cer-why-coin,
+  .cer-why-leaf,
+  .cer-why-cloud,
+  .cer-why-badge {
     animation: none;
   }
 

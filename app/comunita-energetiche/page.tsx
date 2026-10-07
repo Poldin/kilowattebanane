@@ -7,12 +7,12 @@ import { CerShareBlock } from "@/components/cer/CerShareBlock";
 import { CerItalyMap } from "@/components/cer/CerItalyMap";
 import { CerShowcaseBanner } from "@/components/cer/CerShowcaseBanner";
 import { CerWhoCanJoin } from "@/components/cer/CerWhoCanJoin";
+import { CerWhyJoin } from "@/components/cer/CerWhyJoin";
 import { PodBanner } from "@/components/cer/PodBanner";
 import { CerSignupProvider } from "@/components/cer/CerSignupProvider";
 import { SignupProvider } from "@/components/SignupForm";
 import { publicSiteUrl } from "@/lib/app-url";
 import { GSE_MAPPA_URL } from "@/lib/cer/public-types";
-import { loadTopCers } from "@/lib/cer/showcase";
 import { loadCerStats } from "@/lib/cer/stats";
 
 export const revalidate = 86400;
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ComunitaEnergetichePage() {
-  const [stats, topCers] = await Promise.all([loadCerStats(), loadTopCers()]);
+  const stats = await loadCerStats();
 
   return (
     <SignupProvider>
@@ -39,11 +39,12 @@ export default async function ComunitaEnergetichePage() {
             <CerSchema />
             <PodBanner />
             <CerWhoCanJoin />
-            {stats.cer > 0 ? <CerShowcaseBanner count={stats.cer} cers={topCers} /> : null}
+            {stats.cer > 0 ? <CerShowcaseBanner count={stats.cer} /> : null}
             {stats.regioni.length > 0 ? (
               <CerItalyMap regions={stats.regioni} total={stats.total} showTable={false} />
             ) : null}
             <CerExplainer />
+            <CerWhyJoin />
             <CerFaq />
             <CerShareBlock className="mt-14 sm:mt-16" />
           </main>
