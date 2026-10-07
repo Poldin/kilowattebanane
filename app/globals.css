@@ -860,6 +860,26 @@ body {
   animation: cer-light-pulse 1.6s ease-in-out infinite;
 }
 
+.cer-arrow-nudge {
+  animation: cer-arrow-nudge 3s ease-in-out infinite;
+}
+
+@keyframes cer-arrow-nudge {
+  0%,
+  82% {
+    transform: translateX(0);
+  }
+  88% {
+    transform: translateX(4px);
+  }
+  94% {
+    transform: translateX(-3px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
 @keyframes cer-light-pulse {
   50% {
     opacity: 0.55;
@@ -897,7 +917,8 @@ body {
   .cer-why-coin,
   .cer-why-leaf,
   .cer-why-cloud,
-  .cer-why-badge {
+  .cer-why-badge,
+  .cer-arrow-nudge {
     animation: none;
   }
 

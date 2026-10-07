@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { listLearnChapters, pickRandomLearnHook } from "@/lib/learn/db";
 import { publicSiteUrl } from "@/lib/app-url";
+import { CerDiscoverBanner } from "@/components/cer/CerDiscoverBanner";
 import { LearnChapterCard } from "@/components/learn/LearnChapterCard";
 import { LearnLandingHook } from "@/components/learn/LearnLandingHook";
 
@@ -19,6 +20,7 @@ export default async function LearnPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-10 sm:px-6 sm:pt-14">
+      <CerDiscoverBanner className="mb-6" />
       <h1 className="max-w-2xl text-balance text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
         Non ci capisci una mazza?!🏏
       </h1>

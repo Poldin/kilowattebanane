@@ -1,4 +1,5 @@
 import { OfferteModule } from "@/components/offerte/OfferteModule";
+import { CerDiscoverBanner } from "@/components/cer/CerDiscoverBanner";
 import { CerSignupProvider } from "@/components/cer/CerSignupProvider";
 import { Header } from "@/components/Header";
 import { RotatingAction } from "@/components/RotatingAction";
@@ -51,6 +52,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-1 pb-16 pt-12 sm:px-6 sm:pt-16">
           <section className="flex flex-col items-center text-center">
+            <CerDiscoverBanner className="mb-6" />
+
             <h1 className="w-full text-balance text-center text-3xl font-semibold leading-tight tracking-tight sm:text-4xl md:text-5xl md:leading-[1.15]">
               <RotatingAction />
             </h1>
