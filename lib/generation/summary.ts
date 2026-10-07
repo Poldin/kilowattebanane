@@ -23,6 +23,7 @@ export type MixDaySummary = {
   cleanestShare: number;
   peakHour: number;
   peakMw: number;
+  avgMw: number;
   fromHour: number;
   toHour: number;
   complete: boolean;
@@ -80,6 +81,7 @@ export function summarizeMixDay(mix: ItalyMixPayload): MixDaySummary | null {
     cleanestShare,
     peakHour: peak.hour,
     peakMw: peak.totalMw,
+    avgMw: total / hours.length,
     fromHour,
     toHour,
     complete: fromHour === 0 && toHour === 23 && hours.length >= 20,
@@ -100,6 +102,7 @@ export type MixWindowSummary = {
   cleanestShare: number;
   peakDate: string;
   peakMw: number;
+  avgMw: number;
   shares: MixShare[];
   mwh: Partial<Record<MixSourceId, number>>;
 };
@@ -108,6 +111,7 @@ export function combineMixDays(days: MixDayPoint[]): MixWindowSummary | null {
   if (days.length === 0) return null;
   const mwh: Partial<Record<MixSourceId, number>> = {};
   let total = 0;
+  let totalHours = 0;
   let cleanest = days[0];
   let peak = days[0];
   for (const day of days) {
@@ -116,6 +120,7 @@ export function combineMixDays(days: MixDayPoint[]): MixWindowSummary | null {
       if (value > 0) mwh[id] = (mwh[id] ?? 0) + value;
     }
     total += day.totalMwh;
+    totalHours += day.hourCount;
     if (day.renewableShare > cleanest.renewableShare + 1e-6) cleanest = day;
     if (day.peakMw > peak.peakMw) peak = day;
   }
@@ -128,13 +133,13 @@ export function combineMixDays(days: MixDayPoint[]): MixWindowSummary | null {
     cleanestShare: cleanest.renewableShare,
     peakDate: peak.date,
     peakMw: peak.peakMw,
+    avgMw: total / Math.max(totalHours, 1),
     shares: sharesFromMw(mwh),
     mwh,
   };
 }
 
-export function mixWindowSourceAverages(summary: MixWindowSummary, days: number) {
-  const count = Math.max(days, 1);
+export function mixWindowSourceBreakdown(summary: MixWindowSummary) {
   const rows = [];
   for (const id of MIX_SOURCE_IDS) {
     const energy = summary.mwh[id] ?? 0;
@@ -144,11 +149,11 @@ export function mixWindowSourceAverages(summary: MixWindowSummary, days: number)
       id,
       emoji: meta.emoji,
       label: meta.label,
+      totalMwh: energy,
       share: energy / summary.energyMwh,
-      avgDailyMwh: energy / count,
     });
   }
-  return rows.sort((a, b) => b.avgDailyMwh - a.avgDailyMwh);
+  return rows.sort((a, b) => b.totalMwh - a.totalMwh);
 }
 
 export function mixWindowKpis(
@@ -179,6 +184,12 @@ export function mixWindowKpis(
       label: "picco",
       value: formatGw(summary.peakMw),
       hint: formatDate(summary.peakDate),
+    },
+    {
+      key: "avg",
+      label: "media",
+      value: formatGw(summary.avgMw),
+      hint: "potenza media",
     },
     {
       key: "total",
@@ -214,6 +225,12 @@ export function mixSummaryKpis(summary: MixDaySummary) {
       label: "picco",
       value: formatGw(summary.peakMw),
       hint: `${formatHourLabel(summary.peakHour)}:00`,
+    },
+    {
+      key: "avg",
+      label: "media",
+      value: formatGw(summary.avgMw),
+      hint: "potenza media",
     },
     {
       key: "total",

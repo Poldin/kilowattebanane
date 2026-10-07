@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { CerExplainer, CerSchema } from "@/components/cer/CerExplainer";
+import { CerFaq } from "@/components/cer/CerFaq";
 import { CerShareBlock } from "@/components/cer/CerShareBlock";
 import { CerItalyMap } from "@/components/cer/CerItalyMap";
 import { CerShowcaseBanner } from "@/components/cer/CerShowcaseBanner";
@@ -43,6 +44,7 @@ export default async function ComunitaEnergetichePage() {
               <CerItalyMap regions={stats.regioni} total={stats.total} showTable={false} />
             ) : null}
             <CerExplainer />
+            <CerFaq />
             <CerShareBlock className="mt-14 sm:mt-16" />
           </main>
           <Footer />

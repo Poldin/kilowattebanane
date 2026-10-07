@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, type PointerEvent } from "react";
-import { formatAvgGwh, formatAvgShare, formatGw, formatGwh, formatShare } from "@/lib/generation/format";
+import { formatAvgShare, formatGw, formatGwh, formatShare } from "@/lib/generation/format";
 import { MIX_SOURCE_META, sharesFromMw } from "@/lib/generation/sources";
 import { stackMixDayMw } from "@/lib/generation/stack";
 import {
   combineMixDays,
   mixWindowKpis,
-  mixWindowSourceAverages,
+  mixWindowSourceBreakdown,
 } from "@/lib/generation/summary";
 import type { MixDayPoint } from "@/lib/generation/types";
 import {
@@ -48,7 +48,7 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
   const shares = picked ? sharesFromMw(picked.mwh) : summary.shares;
   const spanYears = days[0].date.slice(0, 4) !== days[days.length - 1].date.slice(0, 4);
   const kpis = mixWindowKpis(summary, (ymd) => formatLookbackDate(ymd, spanYears));
-  const sourceAvgs = mixWindowSourceAverages(summary, days.length);
+  const sourceBreakdown = mixWindowSourceBreakdown(summary);
   const ticks = pickAxisTicks(days.length);
   const pickedAvgMw = picked
     ? picked.totalMwh / Math.max(picked.hourCount, 1)
@@ -229,12 +229,12 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
 
       <div
         className="mix-avg-scroll mt-3 w-fit max-w-full overflow-x-auto rounded-md border border-neutral-200 pb-1.5 dark:border-neutral-800"
-        aria-label="Media giornaliera per fonte nel periodo"
+        aria-label="Energia per fonte nel periodo"
       >
         <table className="border-collapse text-left">
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/60">
-              {sourceAvgs.map((source, index) => (
+              {sourceBreakdown.map((source, index) => (
                 <th
                   key={source.id}
                   scope="col"
@@ -246,23 +246,32 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
                   {source.label}
                 </th>
               ))}
+              <th
+                scope="col"
+                className="border-l border-neutral-200 px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-neutral-600 dark:border-neutral-800 dark:text-neutral-400"
+              >
+                totale
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              {sourceAvgs.map((source, index) => (
+              {sourceBreakdown.map((source, index) => (
                 <td
                   key={source.id}
                   className={`px-1.5 py-0.5 text-sm font-semibold tracking-tight whitespace-nowrap tabular-nums ${
                     index > 0 ? "border-l border-neutral-200 dark:border-neutral-800" : ""
                   }`}
                 >
-                  {formatAvgGwh(source.avgDailyMwh)}
+                  {formatGwh(source.totalMwh)}
                 </td>
               ))}
+              <td className="border-l border-neutral-200 px-1.5 py-0.5 text-sm font-semibold tracking-tight whitespace-nowrap tabular-nums dark:border-neutral-800">
+                {formatGwh(summary.energyMwh)}
+              </td>
             </tr>
             <tr className="border-t border-neutral-100 dark:border-neutral-800/80">
-              {sourceAvgs.map((source, index) => (
+              {sourceBreakdown.map((source, index) => (
                 <td
                   key={source.id}
                   className={`px-1.5 py-0.5 text-[10px] leading-tight whitespace-nowrap tabular-nums text-neutral-400 dark:text-neutral-500 ${
@@ -272,12 +281,15 @@ export function LookbackMixChart({ days }: { days: MixDayPoint[] }) {
                   {formatAvgShare(source.share)}
                 </td>
               ))}
+              <td className="border-l border-neutral-200 px-1.5 py-0.5 text-[10px] leading-tight whitespace-nowrap tabular-nums text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
+                100%
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
       <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-        Media giornaliera per fonte · {caption}
+        Energia per fonte · {caption}
       </p>
     </div>
   );
