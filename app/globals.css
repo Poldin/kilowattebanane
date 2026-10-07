@@ -573,94 +573,44 @@ body {
   }
 }
 
-.cer-role-flow-icon {
-  --cer-flow: 2.75em;
-  position: relative;
-  display: inline-flex;
-  overflow: visible;
-  vertical-align: middle;
+.cer-role-dot-in,
+.cer-role-dot-out {
+  animation: cer-role-dot-in 1.7s ease-in-out infinite;
 }
 
-.cer-role-flow-track {
-  display: inline-flex;
-  align-items: center;
+.cer-role-dot-out {
+  animation-name: cer-role-dot-out;
 }
 
-.cer-role-flow-base {
-  color: color-mix(in srgb, #165b44 18%, transparent);
-  opacity: 0.55;
+.cer-role-dot-b {
+  animation-delay: 0.85s;
 }
 
-.cer-role-flow-sweep {
-  position: absolute;
-  inset: 0;
-  color: #f5d547;
-  pointer-events: none;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: var(--cer-flow) 180%;
-  mask-size: var(--cer-flow) 180%;
-  -webkit-mask-position: calc(-1 * var(--cer-flow)) 50%;
-  mask-position: calc(-1 * var(--cer-flow)) 50%;
-  animation: cer-role-flow-sweep 2.6s linear infinite;
-}
-
-.cer-role-flow-trail {
-  -webkit-mask-image: radial-gradient(
-    ellipse 58% 18% at 54% 50%,
-    rgba(0, 0, 0, 0.95) 0%,
-    rgba(0, 0, 0, 0.5) 32%,
-    rgba(0, 0, 0, 0.16) 62%,
-    transparent 100%
-  );
-  mask-image: radial-gradient(
-    ellipse 58% 18% at 54% 50%,
-    rgba(0, 0, 0, 0.95) 0%,
-    rgba(0, 0, 0, 0.5) 32%,
-    rgba(0, 0, 0, 0.16) 62%,
-    transparent 100%
-  );
-}
-
-.cer-role-flow-drop {
-  color: #ffe566;
-  filter: drop-shadow(0 0 2px #f5d547);
-  -webkit-mask-image: radial-gradient(
-    ellipse 13% 26% at 88% 50%,
-    #000 0%,
-    #000 42%,
-    rgba(0, 0, 0, 0.45) 74%,
-    transparent 100%
-  );
-  mask-image: radial-gradient(
-    ellipse 13% 26% at 88% 50%,
-    #000 0%,
-    #000 42%,
-    rgba(0, 0, 0, 0.45) 74%,
-    transparent 100%
-  );
-}
-
-@media (prefers-color-scheme: dark) {
-  .cer-role-flow-base {
-    color: color-mix(in srgb, #f5d547 14%, transparent);
-    opacity: 0.45;
-  }
-}
-
-@keyframes cer-role-flow-sweep {
+@keyframes cer-role-dot-in {
   0% {
-    -webkit-mask-position: calc(-1 * var(--cer-flow)) 50%;
-    mask-position: calc(-1 * var(--cer-flow)) 50%;
+    transform: translate(0, 0);
+    opacity: 0;
   }
-  68% {
-    -webkit-mask-position: calc(100% + var(--cer-flow)) 50%;
-    mask-position: calc(100% + var(--cer-flow)) 50%;
+  16% {
+    opacity: 1;
   }
-  68.01%,
   100% {
-    -webkit-mask-position: calc(-1 * var(--cer-flow)) 50%;
-    mask-position: calc(-1 * var(--cer-flow)) 50%;
+    transform: translate(-24px, 4px);
+    opacity: 0;
+  }
+}
+
+@keyframes cer-role-dot-out {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  16% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(22px, 8px);
+    opacity: 0;
   }
 }
 
@@ -901,19 +851,10 @@ body {
     display: none;
   }
 
-  .cer-role-flow-sweep {
+  .cer-role-dot-in,
+  .cer-role-dot-out {
     animation: none;
-    filter: none;
-    -webkit-mask-image: none;
-    mask-image: none;
-    -webkit-mask-size: 100% 100%;
-    mask-size: 100% 100%;
-    -webkit-mask-position: 0 0;
-    mask-position: 0 0;
-  }
-
-  .cer-role-flow-trail {
-    display: none;
+    opacity: 1;
   }
 
   .cer-who-marquee {

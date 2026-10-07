@@ -860,7 +860,11 @@ function ChoiceStep<T extends string>({
                   {option.flowKind ? (
                     <CerRoleFlowIcon
                       kind={option.flowKind}
-                      className={large ? "mt-1 h-7 sm:h-8" : "mt-0.5 h-6 sm:h-7"}
+                      className={
+                        large
+                          ? "h-14 w-14 sm:h-16 sm:w-16"
+                          : "h-12 w-12 sm:h-14 sm:w-14"
+                      }
                     />
                   ) : null}
                 </span>
