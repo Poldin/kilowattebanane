@@ -40,7 +40,7 @@ const AREA_W = 400;
 const AREA_H = 46;
 const AREA_RX = 5;
 const RENEWABLE_COLOR = "#22C55E";
-const FOSSIL_COLOR = "#9A9A9A";
+const FOSSIL_COLOR = "#EF4444";
 const LIMIT_LINE = "rgba(255,255,255,0.32)";
 const ICON_BUTTON_CLASS =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-40";
@@ -246,10 +246,10 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
     if (renewableEl) {
       renewableEl.textContent = formatShare(current[frame.index]?.renewable ?? 0);
     }
-    const range = root.querySelector<HTMLInputElement>("[data-race-range]");
-    if (range) {
-      range.setAttribute("aria-valuetext", formatRaceDate(frame.date));
-      if (document.activeElement !== range) range.value = String(frame.index);
+    const area = root.querySelector<SVGSVGElement>("[data-race-area]");
+    if (area) {
+      area.setAttribute("aria-valuenow", String(frame.index));
+      area.setAttribute("aria-valuetext", formatRaceDate(frame.date));
     }
     const bars = root.querySelector<SVGSVGElement>("[data-race-bars]");
     if (bars) {
@@ -445,9 +445,33 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
           <svg
             data-race-area=""
             viewBox={`0 0 ${AREA_W} ${AREA_H}`}
-            className="mt-1.5 block h-auto w-full cursor-ew-resize touch-none"
-            role="img"
-            aria-label={`Quota rinnovabile e fossile dal ${firstLabel} al ${lastLabel}. La linea segna il limite delle rinnovabili; verde e grigio riempiono il rettangolo fino al giorno corrente.`}
+            className="mt-1.5 block h-auto w-full cursor-ew-resize touch-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-400"
+            role="slider"
+            tabIndex={0}
+            aria-label={`Quota rinnovabile e fossile dal ${firstLabel} al ${lastLabel}. La linea segna il limite delle rinnovabili; verde e rosso riempiono il rettangolo fino al giorno corrente.`}
+            aria-valuemin={0}
+            aria-valuemax={frames.length - 1}
+            aria-valuenow={0}
+            aria-valuetext={formatRaceDate(poster.date)}
+            onKeyDown={(event) => {
+              const key = event.key;
+              if (key !== "ArrowLeft" && key !== "ArrowRight" && key !== "Home" && key !== "End") return;
+              event.preventDefault();
+              const count = framesRef.current.length;
+              if (count < 2) return;
+              pause();
+              const current = Math.round(progressRef.current);
+              const next =
+                key === "Home"
+                  ? 0
+                  : key === "End"
+                    ? count - 1
+                    : key === "ArrowRight"
+                      ? Math.min(count - 1, current + 1)
+                      : Math.max(0, current - 1);
+              progressRef.current = next;
+              paint(next);
+            }}
             onPointerDown={(event) => {
               event.preventDefault();
               event.currentTarget.setPointerCapture(event.pointerId);
@@ -527,24 +551,6 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
               <FastIcon />
             </button>
           </div>
-          <input
-            data-race-range=""
-            type="range"
-            min={0}
-            max={frames.length - 1}
-            step={1}
-            defaultValue={0}
-            aria-label="Giorno della corsa delle fonti"
-            aria-valuetext={formatRaceDate(poster.date)}
-            onPointerDown={pause}
-            onInput={(event) => {
-              pause();
-              const next = Number(event.currentTarget.value);
-              progressRef.current = next;
-              paint(next);
-            }}
-            className="h-8 w-full cursor-pointer accent-[#D4D4D4]"
-          />
         </div>
       </div>
     </section>
