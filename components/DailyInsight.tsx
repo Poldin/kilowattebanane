@@ -27,6 +27,7 @@ import type { ZoneHomePayload } from "@/lib/zone-home-types";
 import { MonthlyOutlookChart } from "@/components/MonthlyOutlookChart";
 import { DayShiftControls } from "@/components/DayShiftControls";
 import { GenerationMixChart } from "@/components/GenerationMixChart";
+import { MixShareRace } from "@/components/MixShareRace";
 import type { ItalyMixPayload, MixDayPoint } from "@/lib/generation/types";
 import { SignupSlot } from "@/components/SignupForm";
 import { MarketLearnBanner } from "@/components/MarketLearnBanner";
@@ -2098,6 +2099,7 @@ export function DailyInsight({
               disablePrevDate={isOldest || dates.length === 0 || fetching}
               disableNextDate={isNewest || dates.length === 0 || fetching}
             />
+            <MixShareRace days={initialMixDays} />
             <div className="mt-6 flex w-full flex-col gap-3">
               <MarketLearnBanner />
               <PodBanner className="mt-0 sm:mt-0" />
