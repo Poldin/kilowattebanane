@@ -348,11 +348,10 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
         id="corsa-fonti-heading"
         className="text-lg font-medium tracking-tight text-foreground"
       >
-        Mix Italia 12 mesi
+        Mix energetico Italia 12 mesi
       </h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-        Quota di ogni fonte sulla produzione italiana, un giorno alla volta,
-        nell&apos;ultimo anno chiuso.
+        Mix energetico fonti sulla produzione italiana negli ultimi 12 mesi
       </p>
       <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
         <div className="flex items-baseline justify-between gap-3 px-3 pt-3">
