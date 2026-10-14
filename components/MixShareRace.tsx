@@ -41,7 +41,7 @@ const AREA_H = 46;
 const AREA_RX = 5;
 const RENEWABLE_COLOR = "#22C55E";
 const FOSSIL_COLOR = "#EF4444";
-const LIMIT_LINE = "rgba(255,255,255,0.32)";
+const LIMIT_LINE = "#F5F5F5";
 const ICON_BUTTON_CLASS =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-40";
 const SPEED_IDLE_CLASS =
@@ -489,19 +489,19 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
               </clipPath>
             </defs>
             <g clipPath={`url(#${clipId})`}>
-              <path
-                d={band.boundary}
-                fill="none"
-                stroke={LIMIT_LINE}
-                strokeWidth={1}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-              />
               <g data-race-fill="" style={{ clipPath: "inset(0 100% 0 0)" }}>
                 <rect width={AREA_W} height={AREA_H} fill={FOSSIL_COLOR} />
                 <path d={band.green} fill={RENEWABLE_COLOR} />
               </g>
+              <path
+                d={band.boundary}
+                fill="none"
+                stroke={LIMIT_LINE}
+                strokeWidth={2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
             </g>
           </svg>
         </div>
