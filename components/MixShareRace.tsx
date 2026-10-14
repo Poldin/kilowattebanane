@@ -3,14 +3,16 @@
 import {
   memo,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
+  type PointerEvent,
 } from "react";
 import { formatShare } from "@/lib/generation/format";
-import { MIX_SOURCE_META, MIX_STACK_ORDER } from "@/lib/generation/sources";
+import { MIX_RENEWABLE_IDS, MIX_SOURCE_META } from "@/lib/generation/sources";
 import {
   MIX_SOURCE_IDS,
   type MixDayPoint,
@@ -33,10 +35,13 @@ const BAR_X = LABEL_W;
 const BAR_MAX = W - LABEL_W - VALUE_W;
 const BAR_Y = (ROW_H - BAR_H) / 2;
 const FONT = "var(--font-geist-sans), system-ui, sans-serif";
-
-const STACK_INDEX = new Map<MixSourceId, number>(
-  MIX_STACK_ORDER.map((id, index) => [id, index]),
-);
+const AREA_W = 400;
+const AREA_H = 46;
+const AREA_RX = 5;
+const RENEWABLE_COLOR = "#22C55E";
+const NON_RENEWABLE_COLOR = "#EF4444";
+const ICON_BUTTON_CLASS =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-40";
 
 function subscribeReducedMotion(onChange: () => void) {
   const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -62,6 +67,7 @@ type ShareMap = Record<MixSourceId, number>;
 type MixShareFrame = {
   date: string;
   shares: ShareMap;
+  renewable: number;
 };
 
 function formatRaceDate(ymd: string) {
@@ -78,25 +84,22 @@ function sharesForDay(day: MixDayPoint): ShareMap {
   return shares;
 }
 
+/** Renewable sources stay the existing list; the complement is non-renewable, so the two shares sum to 100%. */
+function renewableShare(shares: ShareMap) {
+  let sum = 0;
+  for (const id of MIX_RENEWABLE_IDS) sum += shares[id] ?? 0;
+  return Math.min(1, Math.max(0, sum));
+}
+
 export function buildMixShareFrames(days: MixDayPoint[]): MixShareFrame[] {
   return days
     .filter((day) => day.hourCount >= CLOSED_HOURS && day.totalMwh > 0)
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-RACE_DAYS)
-    .map((day) => ({ date: day.date, shares: sharesForDay(day) }));
-}
-
-function ranksFor(shares: ShareMap): ShareMap {
-  const order = [...MIX_SOURCE_IDS].sort((a, b) => {
-    const delta = shares[b] - shares[a];
-    if (Math.abs(delta) > 1e-9) return delta;
-    return (STACK_INDEX.get(a) ?? 0) - (STACK_INDEX.get(b) ?? 0);
-  });
-  const rank = {} as ShareMap;
-  order.forEach((id, index) => {
-    rank[id] = index;
-  });
-  return rank;
+    .map((day) => {
+      const shares = sharesForDay(day);
+      return { date: day.date, shares, renewable: renewableShare(shares) };
+    });
 }
 
 function sampleFrame(frames: MixShareFrame[], time: number) {
@@ -108,24 +111,68 @@ function sampleFrame(frames: MixShareFrame[], time: number) {
   const eased = blend * blend * (3 - 2 * blend);
   const from = frames[index];
   const to = frames[next];
-  const rankFrom = ranksFor(from.shares);
-  const rankTo = ranksFor(to.shares);
   const shares = {} as ShareMap;
-  const rank = {} as ShareMap;
   for (const id of MIX_SOURCE_IDS) {
     shares[id] = from.shares[id] + (to.shares[id] - from.shares[id]) * eased;
-    rank[id] = rankFrom[id] + (rankTo[id] - rankFrom[id]) * eased;
   }
   return {
     shares,
-    rank,
     index,
     date: eased < 0.5 ? from.date : to.date,
   };
 }
 
+function markerX(index: number, count: number) {
+  if (count <= 1) return AREA_W / 2;
+  return (index / (count - 1)) * AREA_W;
+}
+
+function buildRenewableBand(renewables: number[]) {
+  const n = renewables.length;
+  const yAt = (share: number) => (AREA_H * (1 - Math.min(1, Math.max(0, share)))).toFixed(2);
+  if (n === 0) return { green: "", boundary: "" };
+  if (n === 1) {
+    const y = yAt(renewables[0]);
+    return {
+      green: `M0 ${y} H${AREA_W} V${AREA_H} H0 Z`,
+      boundary: `M0 ${y} H${AREA_W}`,
+    };
+  }
+  let boundary = `M0 ${yAt(renewables[0])}`;
+  for (let i = 1; i < n; i++) {
+    const x = ((i / (n - 1)) * AREA_W).toFixed(2);
+    boundary += ` L${x} ${yAt(renewables[i])}`;
+  }
+  return {
+    green: `${boundary} L${AREA_W} ${AREA_H} L0 ${AREA_H} Z`,
+    boundary,
+  };
+}
+
+function PlayIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M5 3.2v9.6l8-4.8-8-4.8z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <rect x="3.25" y="3" width="3.1" height="10" rx="0.7" fill="currentColor" />
+      <rect x="9.65" y="3" width="3.1" height="10" rx="0.7" fill="currentColor" />
+    </svg>
+  );
+}
+
 function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
   const frames = useMemo(() => buildMixShareFrames(days), [days]);
+  const band = useMemo(
+    () => buildRenewableBand(frames.map((frame) => frame.renewable)),
+    [frames],
+  );
+  const clipId = `mix-band-${useId().replace(/:/g, "")}`;
   const reduced = useSyncExternalStore(
     subscribeReducedMotion,
     reducedMotionSnapshot,
@@ -140,6 +187,7 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
   const progressRef = useRef(0);
   const framesRef = useRef(frames);
   const wasReducedRef = useRef(false);
+  const userPausedRef = useRef(false);
   const [inView, setInView] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
 
@@ -155,22 +203,49 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
     const frame = sampleFrame(current, time);
     const dateEl = root.querySelector<HTMLElement>("[data-race-date]");
     if (dateEl) dateEl.textContent = formatRaceDate(frame.date);
+    const renewableEl = root.querySelector<HTMLElement>("[data-race-renewable]");
+    if (renewableEl) {
+      renewableEl.textContent = formatShare(current[frame.index]?.renewable ?? 0);
+    }
     const range = root.querySelector<HTMLInputElement>("[data-race-range]");
     if (range) {
       range.setAttribute("aria-valuetext", formatRaceDate(frame.date));
       if (document.activeElement !== range) range.value = String(frame.index);
     }
-    const svg = root.querySelector("svg");
-    if (!svg) return;
-    for (const id of MIX_SOURCE_IDS) {
-      const group = svg.querySelector<SVGGElement>(`[data-source="${id}"]`);
-      if (!group) continue;
-      group.setAttribute("transform", `translate(0 ${PAD_T + frame.rank[id] * ROW_H})`);
-      const bar = group.querySelector<SVGRectElement>("[data-bar]");
-      bar?.setAttribute("width", (Math.max(0, frame.shares[id]) * BAR_MAX).toFixed(2));
-      const pct = group.querySelector<SVGTextElement>("[data-pct]");
-      if (pct) pct.textContent = formatShare(frame.shares[id]);
+    const bars = root.querySelector<SVGSVGElement>("[data-race-bars]");
+    if (bars) {
+      for (const id of MIX_SOURCE_IDS) {
+        const group = bars.querySelector<SVGGElement>(`[data-source="${id}"]`);
+        if (!group) continue;
+        const bar = group.querySelector<SVGRectElement>("[data-bar]");
+        bar?.setAttribute("width", (Math.max(0, frame.shares[id]) * BAR_MAX).toFixed(2));
+        const pct = group.querySelector<SVGTextElement>("[data-pct]");
+        if (pct) pct.textContent = formatShare(frame.shares[id]);
+      }
     }
+    const x = markerX(frame.index, current.length).toFixed(2);
+    for (const selector of ["[data-race-marker]", "[data-race-marker-shade]"]) {
+      const line = root.querySelector<SVGLineElement>(selector);
+      if (!line) continue;
+      line.setAttribute("x1", x);
+      line.setAttribute("x2", x);
+    }
+  };
+
+  const pause = () => {
+    userPausedRef.current = true;
+    setUserPaused(true);
+  };
+
+  const seekFromPointer = (event: PointerEvent<SVGSVGElement>) => {
+    const count = framesRef.current.length;
+    if (count < 2) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const index = Math.round(ratio * (count - 1));
+    progressRef.current = index;
+    paintRef.current(index);
   };
 
   useLayoutEffect(() => {
@@ -199,6 +274,7 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
     let frameId = 0;
     let last = performance.now();
     const tick = (now: number) => {
+      if (userPausedRef.current) return;
       const dt = Math.min(100, now - last);
       last = now;
       const count = framesRef.current.length;
@@ -216,6 +292,8 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
   const poster = sampleFrame(frames, 0);
   const firstLabel = formatRaceDate(frames[0].date);
   const lastLabel = formatRaceDate(frames[frames.length - 1].date);
+  const startX = markerX(0, frames.length);
+  const controlsDisabled = reduced || frames.length < 2;
 
   return (
     <section
@@ -244,16 +322,17 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
           </p>
         </div>
         <svg
+          data-race-bars=""
           viewBox={`0 0 ${W} ${H}`}
           className="h-auto w-full"
           role="img"
           aria-label={`Corsa delle fonti dal ${firstLabel} al ${lastLabel}`}
         >
-          {MIX_SOURCE_IDS.map((id) => (
+          {MIX_SOURCE_IDS.map((id, index) => (
             <g
               key={id}
               data-source={id}
-              transform={`translate(0 ${PAD_T + poster.rank[id] * ROW_H})`}
+              transform={`translate(0 ${PAD_T + index * ROW_H})`}
             >
               <text
                 x={0}
@@ -298,19 +377,112 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
             </g>
           ))}
         </svg>
-        <div className="flex items-center gap-3 px-3 pb-3">
-          <button
-            type="button"
-            disabled={reduced || frames.length < 2}
-            aria-pressed={playing}
-            aria-label={
-              playing ? "Metti in pausa la corsa delle fonti" : "Avvia la corsa delle fonti"
-            }
-            onClick={() => setUserPaused(playing)}
-            className="inline-flex h-8 shrink-0 items-center rounded-md bg-neutral-100 px-3 text-xs font-medium text-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
+        <div className="px-3 pb-1">
+          <div className="mt-1 flex items-center gap-3 text-[11px] text-neutral-500">
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-[2px]"
+                style={{ backgroundColor: RENEWABLE_COLOR }}
+                aria-hidden
+              />
+              Rinnovabili
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-[2px]"
+                style={{ backgroundColor: NON_RENEWABLE_COLOR }}
+                aria-hidden
+              />
+              Non rinnovabili
+            </span>
+            <span className="ml-auto tabular-nums text-neutral-300">
+              <span data-race-renewable>{formatShare(frames[0].renewable)}</span>
+              {" "}rinnovabili
+            </span>
+          </div>
+          <svg
+            data-race-area=""
+            viewBox={`0 0 ${AREA_W} ${AREA_H}`}
+            className="mt-1.5 block h-auto w-full cursor-ew-resize touch-none"
+            role="img"
+            aria-label={`Quota rinnovabile e non rinnovabile dal ${firstLabel} al ${lastLabel}. Verde in basso le rinnovabili, rosso in alto le non rinnovabili.`}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              pause();
+              seekFromPointer(event);
+            }}
+            onPointerMove={(event) => {
+              if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+              seekFromPointer(event);
+            }}
           >
-            {playing ? "Pausa" : "Avvia"}
-          </button>
+            <defs>
+              <clipPath id={clipId}>
+                <rect width={AREA_W} height={AREA_H} rx={AREA_RX} ry={AREA_RX} />
+              </clipPath>
+            </defs>
+            <g clipPath={`url(#${clipId})`}>
+              <rect width={AREA_W} height={AREA_H} fill={NON_RENEWABLE_COLOR} />
+              <path d={band.green} fill={RENEWABLE_COLOR} />
+              <path
+                d={band.boundary}
+                fill="none"
+                stroke="rgba(255,255,255,0.85)"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+              <line
+                data-race-marker-shade=""
+                x1={startX}
+                x2={startX}
+                y1={0}
+                y2={AREA_H}
+                stroke="rgba(0,0,0,0.45)"
+                strokeWidth={3}
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+              <line
+                data-race-marker=""
+                x1={startX}
+                x2={startX}
+                y1={0}
+                y2={AREA_H}
+                stroke="#FAFAFA"
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+            </g>
+          </svg>
+        </div>
+        <div className="flex items-center gap-3 px-3 pb-3 pt-2">
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              disabled={controlsDisabled || playing}
+              aria-label="Avvia la corsa delle fonti"
+              onClick={() => {
+                userPausedRef.current = false;
+                setUserPaused(false);
+              }}
+              className={ICON_BUTTON_CLASS}
+            >
+              <PlayIcon />
+            </button>
+            <button
+              type="button"
+              disabled={controlsDisabled || !playing}
+              aria-label="Metti in pausa la corsa delle fonti"
+              onClick={pause}
+              className={ICON_BUTTON_CLASS}
+            >
+              <PauseIcon />
+            </button>
+          </div>
           <input
             data-race-range=""
             type="range"
@@ -320,9 +492,9 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
             defaultValue={0}
             aria-label="Giorno della corsa delle fonti"
             aria-valuetext={formatRaceDate(poster.date)}
-            onPointerDown={() => setUserPaused(true)}
+            onPointerDown={pause}
             onInput={(event) => {
-              setUserPaused(true);
+              pause();
               const next = Number(event.currentTarget.value);
               progressRef.current = next;
               paint(next);
