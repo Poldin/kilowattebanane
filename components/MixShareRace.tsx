@@ -348,7 +348,7 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
         id="corsa-fonti-heading"
         className="text-lg font-medium tracking-tight text-foreground"
       >
-        Corsa delle fonti
+        Mix Italia 12 mesi
       </h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Quota di ogni fonte sulla produzione italiana, un giorno alla volta,
