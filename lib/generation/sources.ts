@@ -28,7 +28,7 @@ export const MIX_SOURCE_META: Record<
   { emoji: string; label: string; color: string }
 > = {
   coal: { emoji: "🪨", label: "Carbone", color: "#3F3F46" },
-  oil: { emoji: "🛢️", label: "Olio", color: "#52525B" },
+  oil: { emoji: "🛢️", label: "Olio comb", color: "#52525B" },
   gas: { emoji: "🔥", label: "Gas", color: "#8B8680" },
   other: { emoji: "🔌", label: "Altro", color: "#C4C0B8" },
   biomass: { emoji: "🌿", label: "Biomasse", color: "#84CC16" },
