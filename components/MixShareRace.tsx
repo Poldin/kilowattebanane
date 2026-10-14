@@ -20,7 +20,8 @@ import {
 } from "@/lib/generation/types";
 
 const MONTHS = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"] as const;
-const MS_PER_DAY = 100;
+const FAST_MS = 100;
+const SLOW_MS = 320;
 const RACE_DAYS = 365;
 /** 23 keeps the spring-forward day; a partial today (fewer hours) stays out. */
 const CLOSED_HOURS = 23;
@@ -39,9 +40,12 @@ const AREA_W = 400;
 const AREA_H = 46;
 const AREA_RX = 5;
 const RENEWABLE_COLOR = "#22C55E";
-const NON_RENEWABLE_COLOR = "#EF4444";
+const FOSSIL_COLOR = "#9A9A9A";
+const LIMIT_LINE = "rgba(255,255,255,0.32)";
 const ICON_BUTTON_CLASS =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-40";
+const SPEED_IDLE_CLASS =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-neutral-800 text-neutral-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-neutral-300 disabled:cursor-not-allowed disabled:opacity-40";
 
 function subscribeReducedMotion(onChange: () => void) {
   const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -122,11 +126,6 @@ function sampleFrame(frames: MixShareFrame[], time: number) {
   };
 }
 
-function markerX(index: number, count: number) {
-  if (count <= 1) return AREA_W / 2;
-  return (index / (count - 1)) * AREA_W;
-}
-
 function buildRenewableBand(renewables: number[]) {
   const n = renewables.length;
   const yAt = (share: number) => (AREA_H * (1 - Math.min(1, Math.max(0, share)))).toFixed(2);
@@ -166,6 +165,44 @@ function PauseIcon() {
   );
 }
 
+function SlowIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        d="M6.2 3.4 10.6 8 6.2 12.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FastIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        d="M2.6 3.4 7 8 2.6 12.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.2 3.4 12.6 8 8.2 12.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
   const frames = useMemo(() => buildMixShareFrames(days), [days]);
   const band = useMemo(
@@ -188,8 +225,10 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
   const framesRef = useRef(frames);
   const wasReducedRef = useRef(false);
   const userPausedRef = useRef(false);
+  const speedRef = useRef(FAST_MS);
   const [inView, setInView] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
+  const [speed, setSpeed] = useState<"fast" | "slow">("fast");
 
   const playing =
     frames.length > 1 && inView && tabVisible && !reduced && !userPaused;
@@ -223,13 +262,17 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
         if (pct) pct.textContent = formatShare(frame.shares[id]);
       }
     }
-    const x = markerX(frame.index, current.length).toFixed(2);
-    for (const selector of ["[data-race-marker]", "[data-race-marker-shade]"]) {
-      const line = root.querySelector<SVGLineElement>(selector);
-      if (!line) continue;
-      line.setAttribute("x1", x);
-      line.setAttribute("x2", x);
+    const fill = root.querySelector<SVGGElement>("[data-race-fill]");
+    if (fill) {
+      const count = current.length;
+      const ratio = count <= 1 ? 1 : frame.index / (count - 1);
+      fill.style.clipPath = `inset(0 ${((1 - ratio) * 100).toFixed(3)}% 0 0)`;
     }
+  };
+
+  const chooseSpeed = (next: "fast" | "slow") => {
+    speedRef.current = next === "fast" ? FAST_MS : SLOW_MS;
+    setSpeed(next);
   };
 
   const pause = () => {
@@ -278,7 +321,7 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
       const dt = Math.min(100, now - last);
       last = now;
       const count = framesRef.current.length;
-      progressRef.current += dt / MS_PER_DAY;
+      progressRef.current += dt / speedRef.current;
       if (count > 0 && progressRef.current >= count) progressRef.current = 0;
       paintRef.current(progressRef.current);
       frameId = requestAnimationFrame(tick);
@@ -292,7 +335,6 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
   const poster = sampleFrame(frames, 0);
   const firstLabel = formatRaceDate(frames[0].date);
   const lastLabel = formatRaceDate(frames[frames.length - 1].date);
-  const startX = markerX(0, frames.length);
   const controlsDisabled = reduced || frames.length < 2;
 
   return (
@@ -390,10 +432,10 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
             <span className="inline-flex items-center gap-1.5">
               <span
                 className="h-2 w-2 rounded-[2px]"
-                style={{ backgroundColor: NON_RENEWABLE_COLOR }}
+                style={{ backgroundColor: FOSSIL_COLOR }}
                 aria-hidden
               />
-              Non rinnovabili
+              Fossili
             </span>
             <span className="ml-auto tabular-nums text-neutral-300">
               <span data-race-renewable>{formatShare(frames[0].renewable)}</span>
@@ -405,7 +447,7 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
             viewBox={`0 0 ${AREA_W} ${AREA_H}`}
             className="mt-1.5 block h-auto w-full cursor-ew-resize touch-none"
             role="img"
-            aria-label={`Quota rinnovabile e non rinnovabile dal ${firstLabel} al ${lastLabel}. Verde in basso le rinnovabili, rosso in alto le non rinnovabili.`}
+            aria-label={`Quota rinnovabile e fossile dal ${firstLabel} al ${lastLabel}. La linea segna il limite delle rinnovabili; verde e grigio riempiono il rettangolo fino al giorno corrente.`}
             onPointerDown={(event) => {
               event.preventDefault();
               event.currentTarget.setPointerCapture(event.pointerId);
@@ -423,39 +465,19 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
               </clipPath>
             </defs>
             <g clipPath={`url(#${clipId})`}>
-              <rect width={AREA_W} height={AREA_H} fill={NON_RENEWABLE_COLOR} />
-              <path d={band.green} fill={RENEWABLE_COLOR} />
               <path
                 d={band.boundary}
                 fill="none"
-                stroke="rgba(255,255,255,0.85)"
-                strokeWidth={1.5}
+                stroke={LIMIT_LINE}
+                strokeWidth={1}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
               />
-              <line
-                data-race-marker-shade=""
-                x1={startX}
-                x2={startX}
-                y1={0}
-                y2={AREA_H}
-                stroke="rgba(0,0,0,0.45)"
-                strokeWidth={3}
-                vectorEffect="non-scaling-stroke"
-                pointerEvents="none"
-              />
-              <line
-                data-race-marker=""
-                x1={startX}
-                x2={startX}
-                y1={0}
-                y2={AREA_H}
-                stroke="#FAFAFA"
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
-                pointerEvents="none"
-              />
+              <g data-race-fill="" style={{ clipPath: "inset(0 100% 0 0)" }}>
+                <rect width={AREA_W} height={AREA_H} fill={FOSSIL_COLOR} />
+                <path d={band.green} fill={RENEWABLE_COLOR} />
+              </g>
             </g>
           </svg>
         </div>
@@ -483,6 +505,28 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
               <PauseIcon />
             </button>
           </div>
+          <div className="flex shrink-0 items-center gap-1.5" role="group" aria-label="Velocità della corsa">
+            <button
+              type="button"
+              disabled={controlsDisabled}
+              aria-pressed={speed === "slow"}
+              aria-label="Velocità lenta"
+              onClick={() => chooseSpeed("slow")}
+              className={speed === "slow" ? ICON_BUTTON_CLASS : SPEED_IDLE_CLASS}
+            >
+              <SlowIcon />
+            </button>
+            <button
+              type="button"
+              disabled={controlsDisabled}
+              aria-pressed={speed === "fast"}
+              aria-label="Velocità veloce"
+              onClick={() => chooseSpeed("fast")}
+              className={speed === "fast" ? ICON_BUTTON_CLASS : SPEED_IDLE_CLASS}
+            >
+              <FastIcon />
+            </button>
+          </div>
           <input
             data-race-range=""
             type="range"
@@ -499,7 +543,7 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
               progressRef.current = next;
               paint(next);
             }}
-            className="h-8 w-full cursor-pointer accent-[#F5D547]"
+            className="h-8 w-full cursor-pointer accent-[#D4D4D4]"
           />
         </div>
       </div>
