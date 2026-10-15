@@ -164,6 +164,35 @@ export async function fetchDayStatsForDates(
   return rows;
 }
 
+export async function fetchDayStatsSince(fromDate: string): Promise<DayAheadDayStat[]> {
+  const supabase = createAdminClient();
+  const rows: DayAheadDayStat[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("day_ahead_day_stats")
+      .select("zone, delivery_date, slot_count, min_eur_mwh, avg_eur_mwh, max_eur_mwh")
+      .gte("delivery_date", fromDate)
+      .gte("slot_count", MIN_COMPLETE_SLOTS)
+      .order("delivery_date", { ascending: true })
+      .order("zone", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw new Error(error.message);
+    if (!data?.length) break;
+
+    for (const row of data) {
+      const mapped = mapDayStat(row);
+      if (mapped) rows.push(mapped);
+    }
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return rows;
+}
+
 export async function fetchZoneDayStats(zone: MarketZoneId): Promise<DayAheadDayStat[]> {
   const supabase = createAdminClient();
   const { data, error } = await supabase

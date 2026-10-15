@@ -7,7 +7,8 @@ import { SignupProvider } from "@/components/SignupForm";
 import { DailyInsight } from "@/components/DailyInsight";
 import { Faq, FAQ_TOMORROW_ID, FAQ_TOMORROW_Q } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
-import { loadZoneHome } from "@/lib/zone-home";
+import { loadZoneAvgSeries, loadZoneHome } from "@/lib/zone-home";
+import type { ZoneAvgSeries } from "@/lib/zone-home-types";
 import { loadItalyMix, loadItalyMixDays } from "@/lib/generation/load";
 import type { MixDayPoint } from "@/lib/generation/types";
 import {
@@ -25,12 +26,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
     regionFromParam(params.regione) ?? DEFAULT_REGION;
   const initialZone = zoneForRegion(initialRegion) ?? "IT-North";
   const initialDate = dateFromParam(params.giorno);
-  let initialHome;
-  try {
-    initialHome = await loadZoneHome(initialZone, initialDate);
-  } catch {
-    initialHome = undefined;
-  }
+  const [initialHome, initialZoneAvgs] = await Promise.all([
+    loadZoneHome(initialZone, initialDate).catch(() => undefined),
+    loadZoneAvgSeries().catch(() => [] as ZoneAvgSeries[]),
+  ]);
   let initialMix;
   try {
     initialMix = await loadItalyMix(initialDate ?? initialHome?.date ?? undefined);
@@ -78,6 +77,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               initialHome={initialHome}
               initialMix={initialMix}
               initialMixDays={initialMixDays}
+              initialZoneAvgs={initialZoneAvgs}
             />
           </div>
 

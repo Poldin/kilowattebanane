@@ -1,18 +1,14 @@
 import { unstable_cache } from "next/cache";
-import {
-  fetchZoneDayPrices,
-  fetchZoneDayStats,
-  fetchZoneHourlyStats,
-  fetchZonePriceRange,
-} from "@/lib/day-ahead-query";
+import { fetchDayStatsSince, fetchZoneDayPrices, fetchZoneDayStats, fetchZoneHourlyStats, fetchZonePriceRange } from "@/lib/day-ahead-query";
 import { pickDefaultDeliveryDate, romeToday } from "@/lib/day-ahead-core";
+import { addCalendarDays } from "@/lib/entsoe";
 import { loadPunForwardBlend } from "@/lib/offerte/forward";
-import { MIN_COMPLETE_SLOTS } from "@/lib/insights";
-import { lookbackPointFromHours } from "@/lib/lookback";
-import type { MarketZoneId } from "@/lib/market-zones";
-import type { ZoneForwardPayload, ZoneHomePayload } from "@/lib/zone-home-types";
+import { MIN_COMPLETE_SLOTS, toEurocentPerKwh } from "@/lib/insights";
+import { YEAR_LOOKBACK_DAYS, lookbackPointFromHours } from "@/lib/lookback";
+import { MARKET_ZONE_IDS, type MarketZoneId } from "@/lib/market-zones";
+import type { ZoneAvgSeries, ZoneForwardPayload, ZoneHomePayload } from "@/lib/zone-home-types";
 
-export type { ZoneHomePayload, ZoneHourlyPayload } from "@/lib/zone-home-types";
+export type { ZoneAvgSeries, ZoneHomePayload, ZoneHourlyPayload } from "@/lib/zone-home-types";
 
 const CACHE: { revalidate: number; tags: string[] } = {
   revalidate: 3600,
@@ -44,6 +40,27 @@ async function loadZoneSeriesUncached(zone: MarketZoneId) {
 export const loadZoneSeries = unstable_cache(
   loadZoneSeriesUncached,
   ["zone-series"],
+  CACHE,
+);
+
+async function loadZoneAvgSeriesUncached(): Promise<ZoneAvgSeries[]> {
+  const from = addCalendarDays(romeToday(), -(YEAR_LOOKBACK_DAYS + 21));
+  const stats = await fetchDayStatsSince(from);
+  const grouped = new Map<MarketZoneId, ZoneAvgSeries["points"]>();
+  for (const row of stats) {
+    const list = grouped.get(row.zone) ?? [];
+    list.push({ date: row.deliveryDate, avg: toEurocentPerKwh(row.avgEurMwh) });
+    grouped.set(row.zone, list);
+  }
+  return MARKET_ZONE_IDS.map((zone) => ({
+    zone,
+    points: (grouped.get(zone) ?? []).sort((a, b) => a.date.localeCompare(b.date)),
+  }));
+}
+
+export const loadZoneAvgSeries = unstable_cache(
+  loadZoneAvgSeriesUncached,
+  ["zone-avg-series"],
   CACHE,
 );
 

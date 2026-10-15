@@ -97,14 +97,15 @@ function niceNum(range: number, round: boolean) {
   return niceFrac * 10 ** exp;
 }
 
-export function yScale(prices: number[]) {
+export function yScale(prices: number[], options?: { allowNegative?: boolean }) {
   const dataMin = Math.min(...prices);
   const dataMax = Math.max(...prices);
   const span = dataMax - dataMin || 1;
   const paddedMin = dataMin - span * 0.1;
   const paddedMax = dataMax + span * 0.12;
   const step = niceNum((paddedMax - paddedMin) / 4, true);
-  const min = Math.max(0, Math.floor(paddedMin / step) * step);
+  const rawMin = Math.floor(paddedMin / step) * step;
+  const min = options?.allowNegative ? rawMin : Math.max(0, rawMin);
   const max = Math.ceil(paddedMax / step) * step;
   const ticks: number[] = [];
   for (let value = min; value <= max + step / 2; value += step) {

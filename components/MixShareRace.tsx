@@ -39,9 +39,22 @@ const FONT = "var(--font-geist-sans), system-ui, sans-serif";
 const AREA_W = 400;
 const AREA_H = 46;
 const AREA_RX = 5;
+const LINE_W = 400;
+const LINE_H = 210;
+const LINE_PAD_L = 0;
+const LINE_PAD_R = 0;
+const LINE_PAD_T = 14;
+const LINE_PAD_B = 22;
+const LINE_PLOT_W = LINE_W - LINE_PAD_L - LINE_PAD_R;
+const LINE_PLOT_H = LINE_H - LINE_PAD_T - LINE_PAD_B;
 const RENEWABLE_COLOR = "#22C55E";
 const FOSSIL_COLOR = "#EF4444";
 const LIMIT_LINE = "#F5F5F5";
+const MIX_VIEWS = [
+  { id: "bars", label: "Barre" },
+  { id: "lines", label: "Linee" },
+] as const;
+type MixView = (typeof MIX_VIEWS)[number]["id"];
 const ICON_BUTTON_CLASS =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-40";
 const SPEED_IDLE_CLASS =
@@ -123,7 +136,73 @@ function sampleFrame(frames: MixShareFrame[], time: number) {
     shares,
     index,
     date: eased < 0.5 ? from.date : to.date,
+    ratio: count <= 1 ? 1 : (index + eased) / (count - 1),
   };
+}
+
+/** Coal and oil are too dark to read on the chart background. */
+function lineColor(id: MixSourceId) {
+  if (id === "coal") return "#A1A1AA";
+  if (id === "oil") return "#D4D4D8";
+  return MIX_SOURCE_META[id].color;
+}
+
+function lineX(index: number, count: number) {
+  if (count <= 1) return 0;
+  return (index / (count - 1)) * LINE_PLOT_W;
+}
+
+function lineY(share: number) {
+  const clamped = Math.min(1, Math.max(0, share));
+  return LINE_PAD_T + LINE_PLOT_H * (1 - clamped);
+}
+
+function buildSourceLinePaths(frames: MixShareFrame[]) {
+  const n = frames.length;
+  const order = [...MIX_SOURCE_IDS].sort((a, b) => {
+    let sumA = 0;
+    let sumB = 0;
+    for (const frame of frames) {
+      sumA += frame.shares[a];
+      sumB += frame.shares[b];
+    }
+    return sumA - sumB;
+  });
+  return order.map((id) => {
+    if (n === 0) return { id, d: "" };
+    let d = `M${lineX(0, n).toFixed(2)} ${lineY(frames[0].shares[id]).toFixed(2)}`;
+    for (let i = 1; i < n; i++) {
+      d += ` L${lineX(i, n).toFixed(2)} ${lineY(frames[i].shares[id]).toFixed(2)}`;
+    }
+    return { id, d };
+  });
+}
+
+function buildMonthTicks(frames: MixShareFrame[]) {
+  const ticks: { x: number; label: string; anchor: "start" | "middle" | "end" }[] = [];
+  let lastMonth = "";
+  const n = frames.length;
+  for (let i = 0; i < n; i++) {
+    const month = frames[i].date.slice(5, 7);
+    if (month === lastMonth) continue;
+    lastMonth = month;
+    const x = LINE_PAD_L + lineX(i, n);
+    const prev = ticks[ticks.length - 1];
+    if (prev && x - prev.x < 28) continue;
+    ticks.push({
+      x,
+      label: MONTHS[Number(month) - 1] ?? month,
+      anchor: "middle",
+    });
+  }
+  if (ticks.length > 0) {
+    if (ticks[0].x < LINE_PAD_L + 14) ticks[0] = { ...ticks[0], anchor: "start" };
+    const last = ticks[ticks.length - 1];
+    if (last.x > LINE_W - LINE_PAD_R - 16) {
+      ticks[ticks.length - 1] = { ...last, anchor: "end" };
+    }
+  }
+  return ticks;
 }
 
 function buildRenewableBand(renewables: number[]) {
@@ -209,7 +288,11 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
     () => buildRenewableBand(frames.map((frame) => frame.renewable)),
     [frames],
   );
-  const clipId = `mix-band-${useId().replace(/:/g, "")}`;
+  const linePaths = useMemo(() => buildSourceLinePaths(frames), [frames]);
+  const monthTicks = useMemo(() => buildMonthTicks(frames), [frames]);
+  const clipRaw = useId().replace(/:/g, "");
+  const clipId = `mix-band-${clipRaw}`;
+  const lineClipId = `mix-lines-${clipRaw}`;
   const reduced = useSyncExternalStore(
     subscribeReducedMotion,
     reducedMotionSnapshot,
@@ -229,6 +312,7 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
   const [inView, setInView] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
   const [speed, setSpeed] = useState<"fast" | "slow">("fast");
+  const [view, setView] = useState<MixView>("bars");
 
   const playing =
     frames.length > 1 && inView && tabVisible && !reduced && !userPaused;
@@ -267,6 +351,30 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
       const count = current.length;
       const ratio = count <= 1 ? 1 : frame.index / (count - 1);
       fill.style.clipPath = `inset(0 ${((1 - ratio) * 100).toFixed(3)}% 0 0)`;
+    }
+    const lines = root.querySelector<SVGSVGElement>("[data-race-lines]");
+    if (lines) {
+      const plot = lines.querySelector<SVGRectElement>("[data-race-plot]");
+      if (plot) plot.setAttribute("width", (frame.ratio * LINE_PLOT_W).toFixed(2));
+      const cursor = lines.querySelector<SVGLineElement>("[data-race-cursor]");
+      if (cursor) {
+        const x = (LINE_PAD_L + frame.ratio * LINE_PLOT_W).toFixed(2);
+        cursor.setAttribute("x1", x);
+        cursor.setAttribute("x2", x);
+      }
+      for (const id of MIX_SOURCE_IDS) {
+        const dot = lines.querySelector<SVGCircleElement>(`[data-dot="${id}"]`);
+        if (!dot) continue;
+        dot.setAttribute("cx", (LINE_PAD_L + frame.ratio * LINE_PLOT_W).toFixed(2));
+        dot.setAttribute("cy", lineY(frame.shares[id]).toFixed(2));
+      }
+    }
+    const legend = root.querySelector<HTMLElement>("[data-race-legend]");
+    if (legend) {
+      for (const id of MIX_SOURCE_IDS) {
+        const pct = legend.querySelector<HTMLElement>(`[data-line-pct="${id}"]`);
+        if (pct) pct.textContent = formatShare(frame.shares[id]);
+      }
     }
   };
 
@@ -353,7 +461,39 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Mix energetico fonti sulla produzione italiana negli ultimi 12 mesi
       </p>
-      <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]">
+      <div
+        role="tablist"
+        aria-label="Vista del mix energetico"
+        className="mt-3 flex gap-1"
+      >
+        {MIX_VIEWS.map((item) => {
+          const active = view === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              id={`mix-view-${item.id}`}
+              aria-selected={active}
+              aria-controls="mix-view-panel"
+              onClick={() => setView(item.id)}
+              className={
+                active
+                  ? "shrink-0 rounded-md bg-[#F5D547] px-2.5 py-1.5 text-xs font-semibold text-[#111111]"
+                  : "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
+              }
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        id="mix-view-panel"
+        role="tabpanel"
+        aria-labelledby={`mix-view-${view}`}
+        className="mt-3 overflow-hidden rounded-lg border border-neutral-800 bg-[#111111]"
+      >
         <div className="flex items-baseline justify-between gap-3 px-3 pt-3">
           <p data-race-date className="text-sm font-medium tabular-nums text-neutral-100">
             {formatRaceDate(poster.date)}
@@ -362,6 +502,146 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
             {firstLabel} – {lastLabel}
           </p>
         </div>
+        {view === "lines" ? (
+          <>
+            <div className="px-3">
+            <svg
+              data-race-lines=""
+              viewBox={`0 0 ${LINE_W} ${LINE_H}`}
+              className="block h-auto w-full"
+              role="img"
+              aria-label={`Quota di ogni fonte dal ${firstLabel} al ${lastLabel}. Le linee piene seguono il giorno in corso, quelle tenui mostrano i dodici mesi.`}
+            >
+              {([0, 0.25, 0.5, 0.75, 1] as const).map((share) => {
+                const y = lineY(share);
+                const labeled = share === 0 || share === 0.5 || share === 1;
+                return (
+                  <g key={share}>
+                    <line
+                      x1={0}
+                      x2={LINE_W}
+                      y1={y}
+                      y2={y}
+                      stroke={labeled ? "#333333" : "#222222"}
+                      strokeWidth={1}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </g>
+                );
+              })}
+              {monthTicks.map((tick) => (
+                <text
+                  key={`${tick.label}-${tick.x.toFixed(1)}`}
+                  x={tick.x}
+                  y={LINE_H - 6}
+                  fill="#737373"
+                  fontSize={10}
+                  fontFamily={FONT}
+                  textAnchor={tick.anchor}
+                >
+                  {tick.label}
+                </text>
+              ))}
+              <defs>
+                <clipPath id={lineClipId}>
+                  <rect data-race-plot="" x={0} y={0} width={0} height={LINE_H} />
+                </clipPath>
+              </defs>
+              <g opacity="0.28">
+                  {linePaths.map((path) => (
+                    <path
+                      key={`ghost-${path.id}`}
+                      d={path.d}
+                      fill="none"
+                      stroke={lineColor(path.id)}
+                      strokeWidth={1.5}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+                </g>
+                <g clipPath={`url(#${lineClipId})`}>
+                  {linePaths.map((path) => (
+                    <path
+                      key={path.id}
+                      d={path.d}
+                      fill="none"
+                      stroke={lineColor(path.id)}
+                      strokeWidth={1.75}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+                </g>
+              <line
+                data-race-cursor=""
+                x1={LINE_PAD_L}
+                x2={LINE_PAD_L}
+                y1={LINE_PAD_T}
+                y2={LINE_PAD_T + LINE_PLOT_H}
+                stroke="#A3A3A3"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+              {linePaths.map((path) => (
+                <circle
+                  key={`dot-${path.id}`}
+                  data-dot={path.id}
+                  cx={LINE_PAD_L}
+                  cy={lineY(poster.shares[path.id])}
+                  r={2.4}
+                  fill={lineColor(path.id)}
+                  stroke="#111111"
+                  strokeWidth={1}
+                />
+              ))}
+              {([0, 0.5, 1] as const).map((share) => (
+                <text
+                  key={`y-${share}`}
+                  x={4}
+                  y={lineY(share)}
+                  fill="#A3A3A3"
+                  fontSize={10}
+                  fontFamily={FONT}
+                  textAnchor="start"
+                  dominantBaseline="middle"
+                  stroke="#111111"
+                  strokeWidth={3}
+                  paintOrder="stroke"
+                >
+                  {`${Math.round(share * 100)}%`}
+                </text>
+              ))}
+            </svg>
+            </div>
+            <div
+              data-race-legend=""
+              className="grid grid-cols-2 gap-x-3 gap-y-1 px-3 pb-1 sm:grid-cols-5"
+            >
+              {MIX_SOURCE_IDS.map((id) => (
+                <span
+                  key={id}
+                  className="flex min-w-0 items-center gap-1.5 text-[11px] text-neutral-400"
+                >
+                  <span
+                    className="h-1.5 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: lineColor(id) }}
+                    aria-hidden
+                  />
+                  <span className="truncate">{MIX_SOURCE_META[id].label}</span>
+                  <span
+                    data-line-pct={id}
+                    className="ml-auto shrink-0 tabular-nums text-neutral-200"
+                  >
+                    {formatShare(poster.shares[id])}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </>
+        ) : (
         <svg
           data-race-bars=""
           viewBox={`0 0 ${W} ${H}`}
@@ -418,6 +698,7 @@ function MixShareRaceInner({ days }: { days: MixDayPoint[] }) {
             </g>
           ))}
         </svg>
+        )}
         <div className="px-3 pb-1">
           <div className="mt-1 flex items-center gap-3 text-[11px] text-neutral-500">
             <span className="inline-flex items-center gap-1.5">

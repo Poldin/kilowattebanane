@@ -23,10 +23,11 @@ import {
   type ZoneDay,
 } from "@/lib/day-ahead-core";
 import { fetchZoneHome, fetchZoneSlots } from "@/lib/zone-home-client";
-import type { ZoneHomePayload } from "@/lib/zone-home-types";
+import type { ZoneAvgSeries, ZoneHomePayload } from "@/lib/zone-home-types";
 import { MonthlyOutlookChart } from "@/components/MonthlyOutlookChart";
 import { DayShiftControls } from "@/components/DayShiftControls";
 import { GenerationMixChart } from "@/components/GenerationMixChart";
+import { DailyAvgTrend } from "@/components/DailyAvgTrend";
 import { MixShareRace } from "@/components/MixShareRace";
 import type { ItalyMixPayload, MixDayPoint } from "@/lib/generation/types";
 import { SignupSlot } from "@/components/SignupForm";
@@ -1749,6 +1750,7 @@ export function DailyInsight({
   initialHome,
   initialMix,
   initialMixDays = [],
+  initialZoneAvgs = [],
 }: {
   initialRegion?: ItalianRegion;
   initialZone?: MarketZoneId;
@@ -1756,6 +1758,7 @@ export function DailyInsight({
   initialHome?: ZoneHomePayload;
   initialMix?: ItalyMixPayload | null;
   initialMixDays?: MixDayPoint[];
+  initialZoneAvgs?: ZoneAvgSeries[];
 } = {}) {
   const [region, setRegion] = useState(initialRegion);
   const [tariff, setTariff] = useState<TariffPlanId>(DEFAULT_TARIFF_PLAN);
@@ -2100,6 +2103,10 @@ export function DailyInsight({
               disableNextDate={isNewest || dates.length === 0 || fetching}
             />
             <MixShareRace days={initialMixDays} />
+            <DailyAvgTrend
+              series={initialZoneAvgs}
+              activeZone={zone ?? initialZone}
+            />
             <div className="mt-6 flex w-full flex-col gap-3">
               <MarketLearnBanner />
               <PodBanner className="mt-0 sm:mt-0" />

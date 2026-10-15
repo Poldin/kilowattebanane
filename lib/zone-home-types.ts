@@ -14,6 +14,16 @@ export type ZoneHourlyPayload = {
   hours: (number | null)[];
 };
 
+export type ZoneDayAvgPoint = {
+  date: string;
+  avg: number;
+};
+
+export type ZoneAvgSeries = {
+  zone: MarketZoneId;
+  points: ZoneDayAvgPoint[];
+};
+
 export type ZoneHomePayload = {
   zone: MarketZoneId;
   date: string | null;
