@@ -1,4 +1,9 @@
-import { hourRangeToQuarters, toHourlyAverages, QUARTERS_PER_HOUR } from "@/lib/prices";
+import {
+  hourRangeToQuarters,
+  toHourlyAverages,
+  QUARTERS_PER_DAY,
+  QUARTERS_PER_HOUR,
+} from "@/lib/prices";
 
 export type PriceBand = {
   start: number;
@@ -36,48 +41,86 @@ export function formatEurocent(value: number, digits = 1) {
 }
 
 const HOUR_VALUE_EPS = 0.0005;
+const QUARTER_MINUTES = 60 / QUARTERS_PER_HOUR;
+const SPRING_DST_SLOTS = 23 * QUARTERS_PER_HOUR;
+const FALL_DST_SLOTS = 25 * QUARTERS_PER_HOUR;
+/** Europe/Rome moves at 02:00: spring omits that hour, autumn repeats it. */
+const DST_CHANGE_SLOT = 2 * QUARTERS_PER_HOUR;
 
 function hoursAtValue(pricesCent: number[], target: number) {
-  const hours: number[] = [];
-  for (let hour = 0; hour < pricesCent.length; hour++) {
-    if (Math.abs(pricesCent[hour] - target) <= HOUR_VALUE_EPS) hours.push(hour);
+  const slots: number[] = [];
+  for (let slot = 0; slot < pricesCent.length; slot++) {
+    if (Math.abs(pricesCent[slot] - target) <= HOUR_VALUE_EPS) slots.push(slot);
   }
-  return hours;
+  return slots;
 }
 
-export function formatHourClockSpans(hours: number[]) {
-  if (hours.length === 0) return "";
-  const sorted = [...new Set(hours)].sort((a, b) => a - b);
+function quarterStartMinute(index: number, slotCount: number) {
+  const linear = index * QUARTER_MINUTES;
+  if (slotCount === SPRING_DST_SLOTS && index >= DST_CHANGE_SLOT) return linear + 60;
+  if (slotCount === FALL_DST_SLOTS && index >= DST_CHANGE_SLOT + QUARTERS_PER_HOUR) {
+    const repeatStart = DST_CHANGE_SLOT + QUARTERS_PER_HOUR;
+    if (index < repeatStart + QUARTERS_PER_HOUR) {
+      return 2 * 60 + (index - repeatStart) * QUARTER_MINUTES;
+    }
+    return linear - 60;
+  }
+  return linear;
+}
+
+function formatMinuteClock(totalMinutes: number) {
+  if (totalMinutes === 24 * 60) return "24:00";
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function quarterSpanLabel(startSlot: number, endSlot: number, slotCount: number) {
+  const start = quarterStartMinute(startSlot, slotCount);
+  const end = quarterStartMinute(endSlot, slotCount) + QUARTER_MINUTES;
+  return `${formatMinuteClock(start)}–${formatMinuteClock(end)}`;
+}
+
+export function formatHourClockSpans(slots: number[], slotCount = QUARTERS_PER_DAY) {
+  if (slots.length === 0) return "";
+  const sorted = [...new Set(slots)].sort((a, b) => a - b);
   const parts: string[] = [];
   let start = sorted[0];
   let prev = sorted[0];
   for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] === prev + 1) {
-      prev = sorted[i];
+    const next = sorted[i];
+    const follows =
+      next === prev + 1 &&
+      quarterStartMinute(next, slotCount) ===
+        quarterStartMinute(prev, slotCount) + QUARTER_MINUTES;
+    if (follows) {
+      prev = next;
       continue;
     }
-    parts.push(`${start}–${prev + 1}`);
-    start = sorted[i];
-    prev = sorted[i];
+    parts.push(quarterSpanLabel(start, prev, slotCount));
+    start = next;
+    prev = next;
   }
-  parts.push(`${start}–${prev + 1}`);
+  parts.push(quarterSpanLabel(start, prev, slotCount));
   return parts.join(" · ");
 }
 
 export function dayHourlyCentStats(pricesEuroPerMwh: number[]) {
-  const pricesCent = toHourlyAverages(pricesEuroPerMwh).map(toEurocentPerKwh);
-  if (pricesCent.length === 0) {
+  const hourlyCent = toHourlyAverages(pricesEuroPerMwh).map(toEurocentPerKwh);
+  if (hourlyCent.length === 0) {
     return { min: 0, avg: 0, max: 0, minHours: "", maxHours: "" };
   }
-  const min = Math.min(...pricesCent);
-  const max = Math.max(...pricesCent);
-  const avg = pricesCent.reduce((sum, value) => sum + value, 0) / pricesCent.length;
+  const quarterCent = pricesEuroPerMwh.map(toEurocentPerKwh);
+  const min = Math.min(...quarterCent);
+  const max = Math.max(...quarterCent);
+  const avg = hourlyCent.reduce((sum, value) => sum + value, 0) / hourlyCent.length;
+  const slotCount = quarterCent.length;
   return {
     min,
     avg,
     max,
-    minHours: formatHourClockSpans(hoursAtValue(pricesCent, min)),
-    maxHours: formatHourClockSpans(hoursAtValue(pricesCent, max)),
+    minHours: formatHourClockSpans(hoursAtValue(quarterCent, min), slotCount),
+    maxHours: formatHourClockSpans(hoursAtValue(quarterCent, max), slotCount),
   };
 }
 
