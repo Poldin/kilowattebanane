@@ -27,6 +27,7 @@ import { POD_HELP_HREF } from "@/lib/cer/help";
 import { lookupPodOnGse } from "@/lib/cer/pod-gse";
 import { CerRoleFlowIcon, type CerRoleFlowKind } from "@/components/cer/CerRoleFlowIcon";
 import { CerShareBlock } from "@/components/cer/CerShareBlock";
+import type { CerDemoHit } from "@/lib/cer/belluno-demo";
 import {
   normalizePodInput,
   parsePod,
@@ -34,13 +35,25 @@ import {
   type PodCerHit,
 } from "@/lib/cer/pod-parse";
 
-type CerSignupDialogProps = {
-  open: boolean;
-  onClose: () => void;
+export const CER_SIGNUP_PAGE_ID = "cer-iscrizione";
+
+type CerSignupPrefillProps = {
   cabinaCodice?: string | null;
   cabinaGestore?: string | null;
   initialPod?: string | null;
   cers?: PodCerHit[];
+};
+
+type CerSignupDialogProps = CerSignupPrefillProps & {
+  open: boolean;
+  onClose: () => void;
+};
+
+type CerSignupFlowProps = CerSignupPrefillProps & {
+  variant?: "dialog" | "page";
+  open?: boolean;
+  onClose?: () => void;
+  demoCers?: CerDemoHit[];
 };
 
 type CabinaPreview = {
@@ -54,6 +67,7 @@ type DraftChoice = Omit<CerSignupChoice, "rank"> & {
   potenzaKw: number | null;
   nUtenze: number | null;
   inVetrina: boolean;
+  comune?: string | null;
 };
 type StepId = "soggetto" | "role" | "impianto" | "potenza" | "prosumer" | "pod" | "email" | "cers";
 
@@ -67,12 +81,12 @@ const SOGGETTO_OPTIONS: {
   {
     id: "privato",
     title: "Privato",
-    body: "Casa, famiglia o persona fisica. Con o senza pannelli.",
+    body: "Casa, famiglia o persona fisica.",
   },
   {
     id: "azienda",
     title: "Azienda",
-    body: "Impresa, ente o attività. Con o senza impianto.",
+    body: "Impresa, ente o attività.",
   },
 ];
 
@@ -137,20 +151,24 @@ const PROSUMER_OPTIONS: {
 
 function stepsFor(role: CerSignupRole | null): StepId[] {
   if (role === "produttore") {
-    return ["soggetto", "role", "impianto", "potenza", "prosumer", "pod", "email", "cers"];
+    return ["soggetto", "role", "impianto", "potenza", "prosumer", "pod", "cers", "email"];
   }
-  return ["soggetto", "role", "pod", "email", "cers"];
+  return ["soggetto", "role", "pod", "cers", "email"];
 }
 
-function buildInitialChoices(cers: CerCollaborazioneHit[]): DraftChoice[] {
+function buildInitialChoices(
+  cers: Array<CerCollaborazioneHit | CerDemoHit>,
+  enabled = true,
+): DraftChoice[] {
   return cers.map((cer) => ({
     id: cer.id,
     kind: "cer" as const,
     label: cer.denominazione,
-    enabled: true,
+    enabled,
     potenzaKw: cer.potenzaKw,
     nUtenze: cer.nUtenze,
     inVetrina: false,
+    comune: "comune" in cer ? cer.comune : null,
   }));
 }
 
@@ -219,10 +237,36 @@ function parsePotenzaInput(raw: string): { ok: true; value: number | null } | { 
 export function CerSignupDialog({
   open,
   onClose,
+  cabinaCodice,
+  cabinaGestore,
+  initialPod,
+  cers,
+}: CerSignupDialogProps) {
+  return (
+    <CerSignupFlow
+      variant="dialog"
+      open={open}
+      onClose={onClose}
+      cabinaCodice={cabinaCodice}
+      cabinaGestore={cabinaGestore}
+      initialPod={initialPod}
+      cers={cers}
+    />
+  );
+}
+
+export function CerSignupFlow({
+  variant = "page",
+  open = true,
+  onClose,
   cabinaCodice = null,
   cabinaGestore = null,
   initialPod = null,
-}: CerSignupDialogProps) {
+  demoCers,
+}: CerSignupFlowProps) {
+  const isDialog = variant === "dialog";
+  const active = !isDialog || open;
+  const demoMode = Boolean(demoCers?.length);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [stepIndex, setStepIndex] = useState(0);
@@ -231,7 +275,7 @@ export function CerSignupDialog({
   const [impianto, setImpianto] = useState<CerSignupImpianto | null>(null);
   const [potenza, setPotenza] = useState("");
   const [prosumer, setProsumer] = useState<boolean | null>(null);
-  const [pod, setPod] = useState("");
+  const [pod, setPod] = useState(initialPod ?? "");
   const [podCabina, setPodCabina] = useState<CabinaPreview | null>(null);
   const [podCabinaStatus, setPodCabinaStatus] = useState<CabinaStatus>("idle");
   const [email, setEmail] = useState("");
@@ -239,8 +283,10 @@ export function CerSignupDialog({
   const [otpSent, setOtpSent] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
-  const [choices, setChoices] = useState<DraftChoice[]>([]);
-  const [cersReady, setCersReady] = useState(true);
+  const [choices, setChoices] = useState<DraftChoice[]>(() =>
+    demoCers?.length ? buildInitialChoices(demoCers, false) : [],
+  );
+  const [cersReady, setCersReady] = useState(() => Boolean(demoCers?.length));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -248,12 +294,14 @@ export function CerSignupDialog({
 
   const steps = useMemo(() => {
     const base = stepsFor(role);
+    if (demoMode) return base;
     return cersReady && choices.length < 2 ? base.filter((id) => id !== "cers") : base;
-  }, [role, choices.length, cersReady]);
+  }, [role, choices.length, cersReady, demoMode]);
   const step = confirmed ? null : (steps[Math.min(stepIndex, steps.length - 1)] ?? "soggetto");
   const isLastStep = step != null && step === steps[steps.length - 1];
 
   useEffect(() => {
+    if (!isDialog) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open) {
@@ -281,10 +329,10 @@ export function CerSignupDialog({
       return;
     }
     if (dialog.open) dialog.close();
-  }, [open, initialPod]);
+  }, [isDialog, open, initialPod]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     const parsed = parsePod(pod);
     if (!pod.trim() || !parsed.ok) {
       setPodCabina(null);
@@ -324,10 +372,11 @@ export function CerSignupDialog({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [open, pod, initialPod, cabinaCodice, cabinaGestore]);
+  }, [active, pod, initialPod, cabinaCodice, cabinaGestore]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
+    if (demoMode) return;
     if (podCabinaStatus !== "ready" || !podCabina) {
       setChoices([]);
       setCersReady(podCabinaStatus !== "loading");
@@ -343,9 +392,10 @@ export function CerSignupDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, podCabina, podCabinaStatus]);
+  }, [active, demoMode, podCabina, podCabinaStatus]);
 
   function requestClose() {
+    if (!isDialog) return;
     dialogRef.current?.close();
   }
 
@@ -363,6 +413,14 @@ export function CerSignupDialog({
         choice.id === id ? { ...choice, enabled: !choice.enabled } : choice,
       ),
     );
+  }
+
+  function pickChoice(id: string) {
+    setChoices((prev) =>
+      prev.map((choice) => ({ ...choice, enabled: choice.id === id })),
+    );
+    setError(null);
+    setStepIndex((index) => index + 1);
   }
 
   function moveChoice(id: string, delta: -1 | 1) {
@@ -402,6 +460,12 @@ export function CerSignupDialog({
       return "Scegli se usi anche tu l’energia che produci.";
     }
     if (current === "pod") {
+      if (demoMode) {
+        if (!pod.trim()) return "Inserisci un POD valido.";
+        const parsed = parsePod(pod);
+        if (!parsed.ok) return parsed.error;
+        return null;
+      }
       if (!pod.trim()) {
         if (!cabinaCodice) return "Inserisci un POD valido per vedere la cabina primaria.";
       } else {
@@ -425,7 +489,7 @@ export function CerSignupDialog({
       }
     }
     if (current === "cers" && !choices.some((choice) => choice.enabled)) {
-      return "Attiva almeno una CER.";
+      return demoMode ? "Scegli una CER." : "Attiva almeno una CER.";
     }
     return null;
   }
@@ -625,34 +689,42 @@ export function CerSignupDialog({
           ? "Invia richiesta"
           : "Avanti";
 
-  return (
-    <dialog
-      ref={dialogRef}
-      aria-labelledby={titleId}
-      className="cer-signup-dialog"
-      onClose={onClose}
-      onCancel={(event) => {
+  const form = (
+    <form
+      className={
+        isDialog
+          ? "flex h-full min-h-0 w-full flex-1 flex-col"
+          : "flex w-full flex-col"
+      }
+      noValidate
+      aria-label="Iscriviti a una CER"
+      onSubmit={(event) => {
         event.preventDefault();
-        requestClose();
+        void goNext();
       }}
     >
-      <form
-        className="flex h-full min-h-0 w-full flex-1 flex-col"
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          void goNext();
-        }}
-      >
-        <div className="h-1 shrink-0 bg-neutral-200 dark:bg-neutral-800">
-          <div
-            className="h-full bg-[#165B44] transition-[width] duration-300 ease-out motion-reduce:transition-none"
-            style={{ width: `${Math.round(progress * 100)}%` }}
-          />
-        </div>
+      <div className="h-1 shrink-0 bg-neutral-200 dark:bg-neutral-800">
+        <div
+          className="h-full bg-[#165B44] transition-[width] duration-300 ease-out motion-reduce:transition-none"
+          style={{ width: `${Math.round(progress * 100)}%` }}
+        />
+      </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-10 sm:py-6">
-          <div className="mx-auto flex w-full max-w-2xl flex-col">
+      <div
+        className={
+          isDialog
+            ? "min-h-0 flex-1 overflow-y-auto px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-10 sm:py-6"
+            : "pt-6"
+        }
+      >
+        <div
+          className={
+            isDialog
+              ? "mx-auto flex w-full max-w-2xl flex-col"
+              : "flex w-full flex-col"
+          }
+        >
+          {isDialog ? (
             <div className="-mr-2 mb-6 flex items-center justify-between gap-4 sm:-mr-3">
               <h2
                 id={titleId}
@@ -669,8 +741,9 @@ export function CerSignupDialog({
                 <X aria-hidden className="h-5 w-5" strokeWidth={1.75} />
               </button>
             </div>
+          ) : null}
 
-            {confirmed ? (
+          {confirmed ? (
               <ConfirmedSummary
                 summary={cerSignupSummary({
                   email,
@@ -761,12 +834,16 @@ export function CerSignupDialog({
                   />
                 ) : null}
                 {step === "cers" ? (
-                  <CersStep
-                    choices={choices}
-                    onToggle={toggleChoice}
-                    onToggleAll={toggleAllChoices}
-                    onMove={moveChoice}
-                  />
+                  demoMode ? (
+                    <CerPickStep choices={choices} onPick={pickChoice} />
+                  ) : (
+                    <CersStep
+                      choices={choices}
+                      onToggle={toggleChoice}
+                      onToggleAll={toggleAllChoices}
+                      onMove={moveChoice}
+                    />
+                  )
                 ) : null}
               </div>
             )}
@@ -809,6 +886,32 @@ export function CerSignupDialog({
           </div>
         </div>
       </form>
+  );
+
+  if (!isDialog) {
+    return (
+      <section
+        id={CER_SIGNUP_PAGE_ID}
+        className="scroll-mt-20 sm:scroll-mt-24"
+        aria-label="Iscriviti a una CER"
+      >
+        {form}
+      </section>
+    );
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      className="cer-signup-dialog"
+      onClose={() => onClose?.()}
+      onCancel={(event) => {
+        event.preventDefault();
+        requestClose();
+      }}
+    >
+      {form}
     </dialog>
   );
 }
@@ -1106,6 +1209,77 @@ function formatKw(value: number) {
 
 function formatItInt(value: number) {
   return String(Math.trunc(Math.abs(value))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function CerPickStep({
+  choices,
+  onPick,
+}: {
+  choices: DraftChoice[];
+  onPick: (id: string) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="text-3xl font-bold tracking-tight sm:text-4xl">
+        A quale CER vuoi iscriverti?
+      </legend>
+      <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+        Puoi selezionarne solo una. In futuro potrai modificare la tua scelta.
+      </p>
+      <div role="radiogroup" aria-label="A quale CER vuoi iscriverti?" className="mt-8 flex flex-col gap-3">
+        {choices.map((choice) => {
+          const selected = choice.enabled;
+          return (
+            <button
+              key={choice.id}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => onPick(choice.id)}
+              className={`flex w-full items-start gap-4 rounded-lg border px-4 py-4 text-left transition-colors sm:px-5 sm:py-5 ${
+                selected
+                  ? "border-[#165B44] bg-[#165B44]/8 dark:border-[#F5D547] dark:bg-[#F5D547]/10"
+                  : "border-neutral-200 hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
+              }`}
+            >
+              <Flag checked={selected} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+                  <Users
+                    aria-hidden
+                    className="h-7 w-7 shrink-0 text-[#165B44] dark:text-[#F5D547]"
+                    strokeWidth={1.5}
+                  />
+                  <span>{choice.label}</span>
+                </span>
+                {choice.comune ? (
+                  <span className="mt-1.5 block text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+                    {choice.comune}
+                  </span>
+                ) : null}
+                {choice.potenzaKw != null || choice.nUtenze != null ? (
+                  <span className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-500 dark:text-neutral-400">
+                    {choice.potenzaKw != null ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Zap aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+                        {formatKw(choice.potenzaKw)}
+                      </span>
+                    ) : null}
+                    {choice.nUtenze != null ? (
+                      <span className="inline-flex items-center gap-1">
+                        <User aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+                        {formatItInt(choice.nUtenze)} utenze
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
 }
 
 function CersStep({

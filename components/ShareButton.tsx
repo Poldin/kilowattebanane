@@ -12,6 +12,7 @@ type ShareButtonProps = {
   title: string;
   text: string;
   ariaLabel: string;
+  className?: string;
 };
 
 export function ShareButton({
@@ -20,6 +21,7 @@ export function ShareButton({
   title,
   text,
   ariaLabel,
+  className = "",
 }: ShareButtonProps) {
   const [copied, setCopied] = useState(false);
 
@@ -51,12 +53,12 @@ export function ShareButton({
       type="button"
       onClick={share}
       aria-label={ariaLabel}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-foreground dark:border-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-200"
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-foreground dark:border-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-200${className ? ` ${className}` : ""}`}
     >
       <svg
         aria-hidden
         viewBox="0 0 16 16"
-        className="h-3.5 w-3.5"
+        className="h-4 w-4 shrink-0"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"

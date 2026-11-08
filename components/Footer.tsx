@@ -69,6 +69,11 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link href="/campagne" className={itemClass}>
+                campagne in corso
+              </Link>
+            </li>
+            <li>
               <Link href="/cer-stats" className={itemClass}>
                 statistiche CER
               </Link>

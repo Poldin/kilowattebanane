@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { publicSiteUrl } from "@/lib/app-url";
+import { campaignPath, listCampaigns } from "@/lib/crowd/campaigns";
 import { romeToday } from "@/lib/day-ahead-query";
 import { listLearnChapters } from "@/lib/learn/db";
 import { learnChapterPath } from "@/lib/learn/types";
@@ -30,6 +31,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.8,
     },
+    {
+      url: `${base}/campagne`,
+      lastModified: today,
+      changeFrequency: "weekly",
+      priority: 0.75,
+    },
+    ...listCampaigns().map((campaign) => ({
+      url: `${base}${campaignPath(campaign.slug)}`,
+      lastModified: today,
+      changeFrequency: "weekly" as const,
+      priority: 0.65,
+    })),
     {
       url: `${base}/cer-stats`,
       lastModified: today,

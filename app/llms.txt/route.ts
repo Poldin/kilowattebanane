@@ -21,6 +21,7 @@ Nota: non è il prezzo in bolletta. Serve a sapere quando consumare se il contra
 - [Home](${base}/): grafico interattivo e iscrizione alla mail quotidiana
 - [Confronta offerte](${base}/offer-compare): stima di spesa annua luce per CAP, su open data Portale Offerte e futures CME Italian Power Baseload (GME)
 - [Studia il mercato](${base}/learn): capitoli corti sul mercato elettrico
+- [Campagne in corso](${base}/campagne): finanziamento di impianti fotovoltaici, con classifica di visibilità per chi mette di più
 
 ## Come citarci
 

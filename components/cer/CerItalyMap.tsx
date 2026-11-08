@@ -33,7 +33,7 @@ export function CerItalyMap({
   const [selected, setSelected] = useState(defaultKey);
   const [hovered, setHovered] = useState<string | null>(null);
   const current = byKey.get(selected) ?? regions[0];
-  const hoveredRow = hovered ? byKey.get(hovered) : undefined;
+  const shown = (hovered ? byKey.get(hovered) : undefined) ?? current;
 
   function warm(key: string) {
     const photo = regionPhoto(key);
@@ -57,9 +57,6 @@ export function CerItalyMap({
       <h2 id="cer-mappa" className="text-xl font-semibold tracking-tight sm:text-2xl">
         Comunità energetiche in Italia
       </h2>
-      <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-        Clicca una regione.
-      </p>
 
       <div className="mt-6 grid items-start gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(10.5rem,14rem)] sm:gap-8">
         <div className="min-w-0">
@@ -124,19 +121,12 @@ export function CerItalyMap({
             />
             <span>molte</span>
           </p>
-          <p className="mt-1 min-h-5 text-center text-xs text-neutral-500 sm:text-left dark:text-neutral-400">
-            {hoveredRow ? (
-              <>
-                <span className="font-medium text-foreground">{hoveredRow.label}</span>
-                {` · ${formatIt(hoveredRow.total)}`}
-              </>
-            ) : null}
-          </p>
         </div>
 
-        {current ? (
+        {shown ? (
           <RegionCard
-            region={current}
+            region={shown}
+            highlighted={hovered === shown.key}
             cerItalia={cerItalia}
             potenzaItalia={potenzaItalia}
             utenzeItalia={utenzeItalia}
@@ -187,11 +177,14 @@ export function CerItalyMap({
           <tbody>
             {regions.map((region) => {
               const active = region.key === selected;
+              const hot = region.key === hovered;
               const pct = total > 0 ? (region.total / total) * 100 : 0;
               return (
                 <tr
                   key={region.key}
                   onClick={() => choose(region.key)}
+                  onMouseEnter={() => preview(region.key)}
+                  onMouseLeave={() => setHovered((value) => (value === region.key ? null : value))}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
@@ -201,9 +194,11 @@ export function CerItalyMap({
                   tabIndex={0}
                   aria-selected={active}
                   className={`cursor-pointer border-b border-neutral-200 last:border-b-0 dark:border-neutral-800 ${
-                    active
-                      ? "text-foreground"
-                      : "text-neutral-600 hover:text-foreground dark:text-neutral-400 dark:hover:text-neutral-200"
+                    hot
+                      ? "bg-[#F5D547] text-[#111111]"
+                      : active
+                        ? "text-foreground"
+                        : "text-neutral-600 hover:bg-neutral-100 hover:text-foreground dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-200"
                   }`}
                 >
                   <th
@@ -264,11 +259,13 @@ export function CerItalyMap({
 
 function RegionCard({
   region,
+  highlighted,
   cerItalia,
   potenzaItalia,
   utenzeItalia,
 }: {
   region: CerRegionStat;
+  highlighted: boolean;
   cerItalia: number;
   potenzaItalia: number;
   utenzeItalia: number;
@@ -277,7 +274,7 @@ function RegionCard({
   const photo = regionPhoto(region.key);
   return (
     <aside id="cer-regione" aria-live="polite" className="min-w-0 sm:justify-self-end">
-      <div key={region.key} className="cer-region-in">
+      <div className="cer-region-in">
         {photo ? (
           <img
             src={photo.src}
@@ -290,7 +287,13 @@ function RegionCard({
         ) : null}
         <p className={`${photo ? "mt-3" : ""} text-base font-medium tracking-tight`}>{region.label}</p>
         <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-          <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-1.5 rounded-full bg-neutral-900 px-2.5 py-1 text-white dark:bg-neutral-100 dark:text-neutral-900">
+          <span
+            className={`inline-flex max-w-full flex-wrap items-baseline gap-x-1.5 rounded-full px-2.5 py-1 transition-colors ${
+              highlighted
+                ? "bg-[#F5D547] text-[#111111]"
+                : "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+            }`}
+          >
             <span className="text-lg font-semibold tabular-nums leading-none">
               {formatIt(region.cer)} CER
             </span>
