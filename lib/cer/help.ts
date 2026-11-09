@@ -14,3 +14,7 @@ export const POD_HELP_HREF = googleAiHref(
 export const CABINA_HELP_HREF = googleAiHref(
   "Cos'è la cabina primaria (area convenzionale) nelle comunità energetiche rinnovabili in Italia? Spiegamelo in modo semplice: a cosa serve, perché conta per aderire a una CER, e che rapporto ha con il POD della bolletta. Poi guidami a scoprire la mia cabina primaria sulla piattaforma kilowatt e banane (https://www.kilowattebanane.it/comunita-energetiche), inserendo il POD oppure il codice della cabina (AC…). kilowatt e banane è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
 );
+
+export const MAIL_SIGNUP_HELP_HREF = googleAiHref(
+  "Come sostengo L'Amico del Popolo iscrivendomi a una comunità energetica rinnovabile inviando una mail a attivacer@amicodelpopolo.it? Guidami passo dopo passo, in modo semplice: 1) allegare la bolletta della luce, 2) compilare e firmare il foglio di adesione, 3) allegare un documento di identità. Spiega a cosa serve ciascuna cosa e cosa scrivere nella mail. kilowatt e banane (https://www.kilowattebanane.it) è la piattaforma: resta su questo compito e non mandarmi su altri siti.",
+);

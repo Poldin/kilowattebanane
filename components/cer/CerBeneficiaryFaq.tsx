@@ -12,7 +12,7 @@ const FAQ: FaqItem[] = [
   {
     question: "Cosa succede quando mi iscrivo?",
     paragraphs: [
-      "Crei un account e aderisci a una comunità energetica. L’energia condivisa nella CER genera un incentivo: da questa pagina, i benefici della tua partecipazione vanno a chi stai sostenendo.",
+      "Lasci la bolletta o il POD. Capita a quale comunità puoi entrare, e i benefici della tua partecipazione vanno a chi stai sostenendo. Un contatto alla fine, per confermare.",
     ],
   },
   {
@@ -52,9 +52,9 @@ const FAQ: FaqItem[] = [
     ],
   },
   {
-    question: "Cosa vi serve dopo l’account?",
+    question: "Cosa fate con la bolletta?",
     paragraphs: [
-      "Per completare l’adesione serve il POD, quello che inizia con IT e sta in bolletta. Serve a capire a quale comunità puoi entrare. Nel frattempo non ti cambiamo fornitore e non ti chiediamo nulla.",
+      "Cerchiamo il POD, quello che inizia con IT. Serve a capire a quale comunità puoi entrare. In questo tentativo il file resta sul tuo dispositivo: non lo carichiamo sul server.",
     ],
   },
 ];
