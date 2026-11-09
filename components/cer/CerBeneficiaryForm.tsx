@@ -22,50 +22,52 @@ export function CerBeneficiaryForm() {
 
   return (
     <div id="cer-iscrizione" className="mt-6 w-full">
-      <p className="text-pretty text-base font-bold leading-relaxed sm:text-lg">
-        Segui le istruzioni per supportarci.
-      </p>
-      <div className="mt-4 rounded-xl border-[3px] border-dashed border-neutral-400 px-4 py-5 sm:px-5 dark:border-neutral-500">
-        <p className="text-pretty text-base leading-relaxed sm:text-lg">
-          Scrivici una mail a{" "}
-          <a
-            href={MAILTO}
-            className="font-semibold text-foreground underline decoration-neutral-400 underline-offset-2 hover:decoration-foreground"
-          >
-            {SUPPORT_MAIL}
-          </a>
+      <div className="rounded-xl border border-neutral-200 bg-white px-4 py-5 text-neutral-800 sm:px-5">
+        <p className="text-pretty text-base font-bold leading-relaxed text-neutral-900 sm:text-lg">
+          Segui le istruzioni per supportarci.
         </p>
-        <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-neutral-600 sm:text-base dark:text-neutral-400">
-          {STEPS.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-neutral-100 px-3 py-1 text-sm leading-relaxed text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-            Hai dubbi?
-          </span>
-          <p className="text-sm leading-relaxed text-neutral-600 sm:text-base dark:text-neutral-400">
-            segui questa guida
+        <div className="mt-4 rounded-xl border-[3px] border-dashed border-neutral-400 px-4 py-5 sm:px-5">
+          <p className="text-pretty text-base leading-relaxed text-neutral-800 sm:text-lg">
+            Scrivici una mail a{" "}
+            <a
+              href={MAILTO}
+              className="font-semibold text-neutral-900 underline decoration-neutral-400 underline-offset-2 hover:decoration-neutral-900"
+            >
+              {SUPPORT_MAIL}
+            </a>
           </p>
-          <a
-            href={MAIL_SIGNUP_HELP_HREF}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-sm font-medium text-foreground hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
-            Apri guida
-            <ArrowUpRight aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-          </a>
+          <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-neutral-600 sm:text-base">
+            {STEPS.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full bg-neutral-100 px-3 py-1 text-sm leading-relaxed text-neutral-600">
+              Hai dubbi?
+            </span>
+            <p className="text-sm leading-relaxed text-neutral-600 sm:text-base">
+              segui questa guida
+            </p>
+            <a
+              href={MAIL_SIGNUP_HELP_HREF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-100"
+            >
+              Apri guida
+              <ArrowUpRight aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            </a>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setDigital(true)}
+          className="mt-4 w-full rounded-md border border-neutral-200 px-4 py-3 text-left text-sm leading-relaxed text-neutral-600 transition-colors hover:bg-neutral-50 sm:text-base"
+        >
+          Vuoi iscriverti digitalmente? Clicca qui e procedi
+        </button>
+        {digital ? <DigitalSignup /> : null}
       </div>
-      <button
-        type="button"
-        onClick={() => setDigital(true)}
-        className="mt-4 w-full rounded-md border border-neutral-200 px-4 py-3 text-left text-sm leading-relaxed text-neutral-600 transition-colors hover:bg-neutral-50 sm:text-base dark:border-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-900"
-      >
-        Vuoi iscriverti digitalmente? Clicca qui e procedi
-      </button>
-      {digital ? <DigitalSignup /> : null}
     </div>
   );
 }
