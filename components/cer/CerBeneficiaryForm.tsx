@@ -63,6 +63,17 @@ export function CerBeneficiaryForm() {
         >
           Vuoi iscriverti digitalmente? Clicca qui e procedi
         </button>
+        <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+          si applicano{" "}
+          <a
+            href="/termini"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-neutral-700 underline decoration-neutral-300 underline-offset-2 hover:decoration-neutral-500"
+          >
+            termini e condizioni
+          </a>
+        </p>
         {digital ? <DigitalSignup /> : null}
       </div>
     </div>
