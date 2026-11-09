@@ -45,16 +45,13 @@ export function CerBeneficiaryForm() {
             <span className="inline-flex items-center rounded-full bg-neutral-100 px-3 py-1 text-sm leading-relaxed text-neutral-600">
               Hai dubbi?
             </span>
-            <p className="text-sm leading-relaxed text-neutral-600 sm:text-base">
-              segui questa guida
-            </p>
             <a
               href={MAIL_SIGNUP_HELP_HREF}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-100"
             >
-              Apri guida
+              segui la guida operativa
               <ArrowUpRight aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             </a>
           </div>
